@@ -1,0 +1,15 @@
+*.pyc
+*~
+*#
+*.pid
+*.db
+*.log
+dtable-events.log.*
+run.sh
+restart.sh
+*.conf
+cscope.*
+stats-logs/
+*.cnf
+/.idea
+.DS_Store
