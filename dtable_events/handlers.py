@@ -29,7 +29,7 @@ class MessageHandler(Thread):
         self._finished = Event()
         self._redis_connection = _redis_connection(config)
         self._subscriber = self._redis_connection.pubsub(ignore_subscribe_messages=True)
-        self._subscriber.subscribe('dtable_activities')
+        self._subscriber.subscribe('table-events')
 
     def run(self):
         logger.info('Starting handle message...')
