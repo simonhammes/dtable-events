@@ -5,7 +5,7 @@ import json
 from threading import Thread, Event
 
 from dtable_events.event_redis import event_redis
-from dtable_events.utils import save_user_activities
+from dtable_events.utils import save_or_update_or_delete
 from dtable_events.db import init_db_session_class
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class EventHandler(Thread):
 
                     session = self._db_session_class()
                     try:
-                        save_user_activities(session, event)
+                        save_or_update_or_delete(session, event)
                     except Exception as e:
                         logger.error(e)
                     finally:
