@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-import time
 import json
 import logging
+from datetime import datetime, timedelta
 
 from sqlalchemy import desc
 from seaserv import ccnet_api
@@ -28,6 +28,60 @@ class UserActivityDetail(object):
         return self.__dict__[key]
 
 
+def save_or_update_or_delete(session, event):
+    if event['op_type'] == 'modify_row':
+        op_time = datetime.fromtimestamp(event['op_time'])
+        _timestamp = op_time - timedelta(minutes=5)
+        # If a table was edited many times by same user in 5 minutes, just update record.
+        q = session.query(Activities)
+        q = q.filter(
+            Activities.row_id == event['row_id'],
+            Activities.op_user == event['op_user'],
+            Activities.op_time > _timestamp
+        )
+        row = q.first()
+        if row:
+            # Update cell's `value` and keep `old_value` unchanged.
+            cell_old_values = dict()
+            detail = json.loads(row.detail)
+
+            for i in detail['row_data']:
+                cell_old_values[i['column_key']] = i['old_value']
+
+            for i in event['row_data']:
+                if cell_old_values[i['column_key']]:
+                    i['old_value'] = cell_old_values[i['column_key']]
+
+            detail['row_data'] = event['row_data']
+            detail = json.dumps(detail)
+            update_user_activity_timestamp(session, row.id, op_time, detail)
+        else:
+            save_user_activities(session, event)
+    elif event['op_type'] == 'delete_row':
+        q = session.query(Activities).filter(
+            Activities.row_id == event['row_id'],
+            Activities.op_user == event['op_user']
+        ).order_by(desc(Activities.id))
+        row = q.first()
+        if row and row.op_type == 'insert_row':
+            session.query(Activities).filter(Activities.id == row.id).delete()
+            session.query(UserActivities).filter(UserActivities.activity_id == row.id).delete()
+            session.commit()
+        else:
+            save_user_activities(session, event)
+    else:
+        save_user_activities(session, event)
+
+
+def update_user_activity_timestamp(session, activity_id, op_time, detail):
+    activity = session.query(Activities).filter(Activities.id == activity_id)
+    activity.update({"op_time": op_time, "detail": detail})
+    user_activities = session.query(UserActivities).\
+        filter(UserActivities.activity_id == activity_id)
+    user_activities.update({"timestamp": op_time})
+    session.commit()
+
+
 def get_user_activities(session, username, start, limit):
     if start < 0:
         logger.error('start must be non-negative')
@@ -41,7 +95,7 @@ def get_user_activities(session, username, start, limit):
     try:
         q = session.query(Activities).filter(UserActivities.username == username)
         q = q.filter(UserActivities.activity_id == Activities.id)
-        activities = q.order_by(desc(UserActivities.id)).slice(start, start + limit).all()
+        activities = q.order_by(desc(UserActivities.timestamp)).slice(start, start + limit).all()
     except Exception as e:
         logger.error(e)
 
@@ -53,9 +107,7 @@ def save_user_activities(session, event):
     row_id = event['row_id']
     op_user = event['op_user']
     op_type = event['op_type']
-
-    local_time = time.localtime(int(event['op_time']) / 1000)
-    op_time = time.strftime('%Y-%m-%d %H:%M:%S', local_time)
+    op_time = datetime.fromtimestamp(event['op_time'])
 
     table_id = event['table_id']
     table_name = event['table_name']
