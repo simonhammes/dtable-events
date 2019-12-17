@@ -41,18 +41,20 @@ def save_or_update_or_delete(session, event):
         )
         row = q.first()
         if row:
-            activity_id = row.id
-            # update row_data
-            row_data_values = dict()
+            # Update cell's `value` and keep `old_value` unchanged.
+            cell_old_values = dict()
+            detail = json.loads(row.detail)
+
+            for i in detail['row_data']:
+                cell_old_values[i['column_key']] = i['old_value']
+
             for i in event['row_data']:
-                row_data_values[i['column_key']] = i['value']
+                if cell_old_values[i['column_key']]:
+                    i['old_value'] = cell_old_values[i['column_key']]
 
-            activity_detail = json.loads(row.detail)
-            for i in activity_detail['row_data']:
-                i['value'] = row_data_values[i['column_key']]
-
-            detail = json.dumps(activity_detail)
-            update_user_activity_timestamp(session, activity_id, op_time, detail)
+            detail['row_data'] = event['row_data']
+            detail = json.dumps(detail)
+            update_user_activity_timestamp(session, row.id, op_time, detail)
         else:
             save_user_activities(session, event)
     elif event['op_type'] == 'delete_row':
