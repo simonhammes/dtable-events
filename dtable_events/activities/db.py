@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import desc
 from seaserv import ccnet_api
 
-from dtable_events.models import Activities, UserActivities
+from dtable_events.activities.models import Activities, UserActivities
 
 logger = logging.getLogger(__name__)
 

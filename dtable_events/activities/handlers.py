@@ -4,8 +4,8 @@ import time
 import json
 from threading import Thread, Event
 
-from dtable_events.event_redis import event_redis
-from dtable_events.utils import save_or_update_or_delete
+from dtable_events.app.event_redis import event_redis
+from dtable_events.activities.db import save_or_update_or_delete
 from dtable_events.db import init_db_session_class
 
 logger = logging.getLogger(__name__)
@@ -28,39 +28,17 @@ class MessageHandler(Thread):
         Thread.__init__(self)
         self._finished = Event()
         self._redis_connection = _redis_connection(config)
+        self._db_session_class = init_db_session_class(config)
         self._subscriber = self._redis_connection.pubsub(ignore_subscribe_messages=True)
         self._subscriber.subscribe('table-events')
 
     def run(self):
-        logger.info('Starting handle message...')
+        logger.info('Starting handle table activities...')
         while not self._finished.is_set():
             try:
                 message = self._subscriber.get_message()
                 if message is not None:
-                    event = message['data']
-                    self._redis_connection.rpush('table_event_queue', event)
-                else:
-                    time.sleep(0.5)
-            except Exception as e:
-                logger.error('Failed get message from redis: %s' % e)
-
-
-class EventHandler(Thread):
-    def __init__(self, config):
-        Thread.__init__(self)
-        self._finished = Event()
-        self._redis_connection = _redis_connection(config)
-        self._db_session_class = init_db_session_class(config)
-
-    def run(self):
-        logger.info('Starting handle event...')
-        while not self._finished.is_set():
-            try:
-                event_tuple = self._redis_connection.blpop('table_event_queue', 1)
-                if event_tuple is not None:
-                    key, value = event_tuple
-                    event = json.loads(value)
-
+                    event = json.loads(message['data'])
                     session = self._db_session_class()
                     try:
                         save_or_update_or_delete(session, event)
@@ -68,5 +46,7 @@ class EventHandler(Thread):
                         logger.error(e)
                     finally:
                         session.close()
+                else:
+                    time.sleep(0.5)
             except Exception as e:
-                logger.error('Failed handle message: %s' % e)
+                logger.error('Failed get message from redis: %s' % e)

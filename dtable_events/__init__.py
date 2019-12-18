@@ -1,2 +1,2 @@
-from dtable_events.utils import get_user_activities
+from dtable_events.activities.db import get_user_activities
 from dtable_events.db import init_db_session_class
