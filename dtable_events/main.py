@@ -3,10 +3,10 @@ import os
 import argparse
 import logging
 
-from dtable_events.config import get_config, is_syslog_enabled
 from dtable_events.db import create_db_tables
-from dtable_events.app import App
-from dtable_events.logger import LogConfigurator
+from dtable_events.app.app import App
+from dtable_events.app.log import LogConfigurator
+from dtable_events.app.config import get_config, is_syslog_enabled
 
 
 def main():
