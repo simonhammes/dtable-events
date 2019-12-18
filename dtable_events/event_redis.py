@@ -20,7 +20,7 @@ class EventRedis(object):
             self._password = config.get('REDIS', 'password')
 
     def get_connection(self, config):
-        # self._parse_config(config)
+        self._parse_config(config)
 
         redis_pool = redis.ConnectionPool(
             host=self._host, port=self._port, password=self._password
