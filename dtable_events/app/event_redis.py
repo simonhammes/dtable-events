@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import time
+import logging
 import redis
 
 
@@ -32,3 +34,15 @@ class EventRedis(object):
 
 
 event_redis = EventRedis()
+
+
+def redis_connection(config):
+    while True:
+        try:
+            connection = event_redis.get_connection(config)
+            connection.ping()
+        except Exception as e:
+            logging.error('redis error: %s, reconnecting', e)
+            time.sleep(5)
+        else:
+            return connection

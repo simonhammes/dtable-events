@@ -4,30 +4,18 @@ import time
 import json
 from threading import Thread, Event
 
-from dtable_events.app.event_redis import event_redis
+from dtable_events.app.event_redis import redis_connection
 from dtable_events.activities.db import save_or_update_or_delete
 from dtable_events.db import init_db_session_class
 
 logger = logging.getLogger(__name__)
 
 
-def _redis_connection(config):
-    while True:
-        try:
-            connection = event_redis.get_connection(config)
-            connection.ping()
-        except Exception as e:
-            logger.error('redis error: %s, reconnecting', e)
-            time.sleep(5)
-        else:
-            return connection
-
-
 class MessageHandler(Thread):
     def __init__(self, config):
         Thread.__init__(self)
         self._finished = Event()
-        self._redis_connection = _redis_connection(config)
+        self._redis_connection = redis_connection(config)
         self._db_session_class = init_db_session_class(config)
         self._subscriber = self._redis_connection.pubsub(ignore_subscribe_messages=True)
         self._subscriber.subscribe('table-events')
