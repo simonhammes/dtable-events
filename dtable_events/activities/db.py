@@ -49,7 +49,7 @@ def save_or_update_or_delete(session, event):
                 cell_old_values[i['column_key']] = i['old_value']
 
             for i in event['row_data']:
-                if cell_old_values[i['column_key']]:
+                if (i['column_key'] in cell_old_values) and cell_old_values[i['column_key']]:
                     i['old_value'] = cell_old_values[i['column_key']]
 
             detail['row_data'] = event['row_data']
