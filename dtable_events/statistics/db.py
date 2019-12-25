@@ -35,7 +35,7 @@ def get_user_activity_stats_by_day(session, start, end, offset='+00:00'):
     try:
         q = session.query(
             func.date(func.convert_tz(UserActivityStatistics.timestamp, '+00:00', offset)).label("timestamp"),
-            func.count(distinct(UserActivityStatistics.username)).label("number")
+            func.count(UserActivityStatistics.user_time_md5).label("number")
         )
         q = q.filter(UserActivityStatistics.timestamp.between(
             func.convert_tz(start_at_0, offset, '+00:00'), func.convert_tz(end_at_23, offset, '+00:00')
