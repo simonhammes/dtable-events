@@ -4,7 +4,6 @@ from hashlib import md5
 from datetime import datetime
 
 from sqlalchemy import func
-from sqlalchemy import distinct
 
 from dtable_events.statistics.models import UserActivityStatistics
 
@@ -28,7 +27,6 @@ def save_user_activity_stat(session, msg):
 def get_user_activity_stats_by_day(session, start, end, offset='+00:00'):
     start_str = start.strftime('%Y-%m-%d 00:00:00')
     end_str = end.strftime('%Y-%m-%d 23:59:59')
-
     start_at_0 = datetime.strptime(start_str, '%Y-%m-%d %H:%M:%S')
     end_at_23 = datetime.strptime(end_str, '%Y-%m-%d %H:%M:%S')
 
