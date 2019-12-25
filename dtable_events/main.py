@@ -23,8 +23,8 @@ def main():
     try:
         create_db_tables(config)
     except Exception as e:
-        logging.error('Failed create tables, error:', e)
-        raise RuntimeError('Failed create tables.')
+        logging.error('Failed create tables, error: %s' % e)
+        raise RuntimeError('Failed create tables, error: %s' % e)
 
     if is_syslog_enabled(config):
         app_logger.add_syslog_handler()

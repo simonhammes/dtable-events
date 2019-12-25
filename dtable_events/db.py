@@ -60,8 +60,8 @@ def init_db_session_class(config):
     try:
         engine = create_engine_from_conf(config)
     except (configparser.NoOptionError, configparser.NoSectionError) as e:
-        logger.error("Init db session class error:", e)
-        raise RuntimeError("Init db session class error:", e)
+        logger.error("Init db session class error: %s" % e)
+        raise RuntimeError("Init db session class error: %s" % e)
 
     session = sessionmaker(bind=engine)
     return session
@@ -72,8 +72,8 @@ def create_db_tables(config):
     try:
         engine = create_engine_from_conf(config)
     except (configparser.NoOptionError, configparser.NoSectionError) as e:
-        logger.error("Create tables error:", e)
-        raise RuntimeError("Create tables error:", e)
+        logger.error("Create tables error: %s" % e)
+        raise RuntimeError("Create tables error: %s" % e)
 
     Base.metadata.create_all(engine)
 

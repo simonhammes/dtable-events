@@ -42,7 +42,7 @@ def redis_connection(config):
             connection = event_redis.get_connection(config)
             connection.ping()
         except Exception as e:
-            logging.error('redis error: %s, reconnecting', e)
+            logging.error('redis error: %s, reconnecting' % e)
             time.sleep(5)
         else:
             return connection
