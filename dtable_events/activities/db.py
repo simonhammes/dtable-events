@@ -32,35 +32,47 @@ def save_or_update_or_delete(session, event):
     if event['op_type'] == 'modify_row':
         op_time = datetime.fromtimestamp(event['op_time'])
         _timestamp = op_time - timedelta(minutes=5)
-        # If a table was edited many times by same user in 5 minutes, just update record.
-        q = session.query(Activities)
-        q = q.filter(
+        # If a row was edited many times by same user in 5 minutes, just update record.
+        q = session.query(Activities).filter(
             Activities.row_id == event['row_id'],
             Activities.op_user == event['op_user'],
             Activities.op_time > _timestamp
-        )
+        ).order_by(desc(Activities.id))
         row = q.first()
         if row:
-            # Update cell's `value` and keep `old_value` unchanged.
-            cell_old_values = dict()
-            detail = json.loads(row.detail)
+            if row.op_type == 'insert_row':
+                detail = json.loads(row.detail)
+                cell_data = event['row_data'][0]
+                # Update cell's value.
+                for i in detail['row_data']:
+                    if i['column_key'] == cell_data['column_key']:
+                        i['value'] = cell_data['value']
+                detail['row_name'] = event['row_name']
+            else:
+                detail = json.loads(row.detail)
+                cell_data = event['row_data'][0]
+                # Update cell's `value` and keep `old_value` unchanged.
+                for i in detail['row_data']:
+                    if i['column_key'] == cell_data['column_key']:
+                        i['value'] = cell_data['value']
+                        i['old_value'] = i['old_value'] if i['old_value'] else cell_data['old_value']
+                        break
+                else:
+                    detail['row_data'].append(cell_data)
+                detail['row_name'] = event['row_name']
 
-            for i in detail['row_data']:
-                cell_old_values[i['column_key']] = i['old_value']
-
-            for i in event['row_data']:
-                if (i['column_key'] in cell_old_values) and cell_old_values[i['column_key']]:
-                    i['old_value'] = cell_old_values[i['column_key']]
-
-            detail['row_data'] = event['row_data']
             detail = json.dumps(detail)
             update_user_activity_timestamp(session, row.id, op_time, detail)
         else:
             save_user_activities(session, event)
     elif event['op_type'] == 'delete_row':
+        op_time = datetime.fromtimestamp(event['op_time'])
+        _timestamp = op_time - timedelta(minutes=5)
+        # If a row was inserted by same user in 5 minutes, just delete this record.
         q = session.query(Activities).filter(
             Activities.row_id == event['row_id'],
-            Activities.op_user == event['op_user']
+            Activities.op_user == event['op_user'],
+            Activities.op_time > _timestamp
         ).order_by(desc(Activities.id))
         row = q.first()
         if row and row.op_type == 'insert_row':
@@ -111,11 +123,13 @@ def save_user_activities(session, event):
 
     table_id = event['table_id']
     table_name = event['table_name']
+    row_name = event['row_name']
     row_data = event['row_data']
 
     detail_dict = dict()
     detail_dict["table_id"] = table_id
     detail_dict["table_name"] = table_name
+    detail_dict["row_name"] = row_name
     detail_dict["row_data"] = row_data
     detail = json.dumps(detail_dict)
 
