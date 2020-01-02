@@ -47,6 +47,10 @@ def save_or_update_or_delete(session, event):
                 for i in detail['row_data']:
                     if i['column_key'] == cell_data['column_key']:
                         i['value'] = cell_data['value']
+                        break
+                else:
+                    del cell_data['old_value']
+                    detail['row_data'].append(cell_data)
                 detail['row_name'] = event['row_name']
             else:
                 detail = json.loads(row.detail)
