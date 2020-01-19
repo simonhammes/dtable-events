@@ -30,7 +30,7 @@ class UserActivityDetail(object):
 
 def save_or_update_or_delete(session, event):
     if event['op_type'] == 'modify_row':
-        op_time = datetime.fromtimestamp(event['op_time'])
+        op_time = datetime.utcfromtimestamp(event['op_time'])
         _timestamp = op_time - timedelta(minutes=5)
         # If a row was edited many times by same user in 5 minutes, just update record.
         q = session.query(Activities).filter(
@@ -70,7 +70,7 @@ def save_or_update_or_delete(session, event):
         else:
             save_user_activities(session, event)
     elif event['op_type'] == 'delete_row':
-        op_time = datetime.fromtimestamp(event['op_time'])
+        op_time = datetime.utcfromtimestamp(event['op_time'])
         _timestamp = op_time - timedelta(minutes=5)
         # If a row was inserted by same user in 5 minutes, just delete this record.
         q = session.query(Activities).filter(
@@ -123,7 +123,7 @@ def save_user_activities(session, event):
     row_id = event['row_id']
     op_user = event['op_user']
     op_type = event['op_type']
-    op_time = datetime.fromtimestamp(event['op_time'])
+    op_time = datetime.utcfromtimestamp(event['op_time'])
 
     table_id = event['table_id']
     table_name = event['table_name']
