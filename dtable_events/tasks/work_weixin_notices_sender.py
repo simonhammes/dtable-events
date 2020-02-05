@@ -33,7 +33,7 @@ class WorkWinxinNoticeSender(object):
         self._prepare_logfile()
 
     def _prepare_logfile(self):
-        log_dir = os.path.join(os.environ.get('SEAFEVENTS_LOG_DIR', ''))
+        log_dir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
         self._logfile = os.path.join(log_dir, 'work_weixin_notice_sender.log')
 
     def _parse_config(self, config):
