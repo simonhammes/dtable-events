@@ -7,8 +7,17 @@ from threading import Thread, Event
 from dtable_events.utils import get_python_executable, parse_bool, \
      parse_interval, get_opt_from_conf_or_env, run
 
-seahub_dir = os.environ.get('SEAHUB_DIR', '')
-sys.path.insert(0, seahub_dir)
+
+# DTABLE_WEB_DIR
+dtable_web_dir = os.environ.get('DTABLE_WEB_DIR', '')
+if not dtable_web_dir:
+    logging.critical('dtable_web_dir is not set')
+    raise RuntimeError('dtable_web_dir is not set')
+if not os.path.exists(dtable_web_dir):
+    logging.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
+    raise RuntimeError('dtable_web_dir does not exist')
+
+sys.path.insert(0, dtable_web_dir)
 try:
     from seahub.settings import ENABLE_WORK_WEIXIN
 except ImportError as err:
@@ -25,10 +34,7 @@ class WorkWinxinNoticeSender(object):
     def __init__(self, config):
         self._enabled = False
         self._interval = None
-        self._seahub_dir = None
         self._logfile = None
-        self._timer = None
-
         self._parse_config(config)
         self._prepare_logfile()
 
@@ -42,14 +48,6 @@ class WorkWinxinNoticeSender(object):
         section_name = 'WORK WEIXIN'
         key_interval = 'interval'
         default_interval = 60  # 1min
-
-        # seahub_dir
-        if not seahub_dir:
-            logging.critical('seahub_dir is not set')
-            raise RuntimeError('seahub_dir is not set')
-        if not os.path.exists(seahub_dir):
-            logging.critical('seahub_dir %s does not exist' % seahub_dir)
-            raise RuntimeError('seahub_dir does not exist')
 
         # enabled
         enabled = ENABLE_WORK_WEIXIN
@@ -67,7 +65,6 @@ class WorkWinxinNoticeSender(object):
             interval = default_interval
 
         self._interval = interval
-        self._seahub_dir = seahub_dir
 
     def start(self):
         if not self.is_enabled():
@@ -76,7 +73,7 @@ class WorkWinxinNoticeSender(object):
 
         logging.info('Start work weixin notice sender, interval = %s sec', self._interval)
 
-        WorkWeixinNoticeSenderTimer(self._interval, self._seahub_dir, self._logfile).start()
+        WorkWeixinNoticeSenderTimer(self._interval, self._logfile).start()
 
     def is_enabled(self):
         return self._enabled
@@ -84,10 +81,9 @@ class WorkWinxinNoticeSender(object):
 
 class WorkWeixinNoticeSenderTimer(Thread):
 
-    def __init__(self, interval, seahubdir, logfile):
+    def __init__(self, interval, logfile):
         Thread.__init__(self)
         self._interval = interval
-        self._seahub_dir = seahubdir
         self._logfile = logfile
         self.finished = Event()
 
@@ -98,7 +94,7 @@ class WorkWeixinNoticeSenderTimer(Thread):
                 logging.info('Start to send work weixin notices..')
                 try:
                     python_exec = get_python_executable()
-                    manage_py = os.path.join(self._seahub_dir, 'manage.py')
+                    manage_py = os.path.join(dtable_web_dir, 'manage.py')
                     cmd = [
                         python_exec,
                         manage_py,
@@ -106,7 +102,7 @@ class WorkWeixinNoticeSenderTimer(Thread):
                     ]
 
                     with open(self._logfile, 'a') as fp:
-                        run(cmd, cwd=self._seahub_dir, output=fp)
+                        run(cmd, cwd=dtable_web_dir, output=fp)
                 except Exception as e:
                     logging.exception('send work weixin notices error: %s', e)
 

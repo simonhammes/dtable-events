@@ -5,7 +5,15 @@ from threading import Thread, Event
 
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool, get_python_executable, run
 
-seahub_dir = os.environ.get('SEAHUB_DIR', '')
+
+# DTABLE_WEB_DIR
+dtable_web_dir = os.environ.get('DTABLE_WEB_DIR', '')
+if not dtable_web_dir:
+    logging.critical('dtable_web_dir is not set')
+    raise RuntimeError('dtable_web_dir is not set')
+if not os.path.exists(dtable_web_dir):
+    logging.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
+    raise RuntimeError('dtable_web_dir does not exist')
 
 __all__ = [
     'EmailNoticesSender',
@@ -17,10 +25,10 @@ class EmailNoticesSender(object):
         self._enabled = False
         self._logfile = None
         self._interval = 30 * 60  # 30min
-        self._prepare_logdir()
+        self._prepare_logfile()
         self._parse_config(config)
 
-    def _prepare_logdir(self):
+    def _prepare_logfile(self):
         logdir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
         self._logfile = os.path.join(logdir, 'email_notices_sender.log')
 
@@ -39,14 +47,6 @@ class EmailNoticesSender(object):
         if not enabled:
             return
         self._enabled = True
-
-        # seahub_dir
-        if not seahub_dir:
-            logging.critical('seahub_dir is not set')
-            raise RuntimeError('seahub_dir is not set')
-        if not os.path.exists(seahub_dir):
-            logging.critical('seahub_dir %s does not exist' % seahub_dir)
-            raise RuntimeError('seahub_dir does not exist')
 
     def start(self):
         if not self.is_enabled():
@@ -76,7 +76,7 @@ class SendSeahubEmailTimer(Thread):
                 logging.info('Starts to send email...')
                 try:
                     python_exec = get_python_executable()
-                    manage_py = os.path.join(seahub_dir, 'manage.py')
+                    manage_py = os.path.join(dtable_web_dir, 'manage.py')
 
                     cmd = [
                         python_exec,
@@ -84,7 +84,7 @@ class SendSeahubEmailTimer(Thread):
                         'send_notices',
                     ]
                     with open(self._logfile, 'a') as fp:
-                        run(cmd, cwd=seahub_dir, output=fp)
+                        run(cmd, cwd=dtable_web_dir, output=fp)
 
                     cmd = [
                         python_exec,
@@ -92,7 +92,7 @@ class SendSeahubEmailTimer(Thread):
                         'send_queued_mail',
                     ]
                     with open(self._logfile, 'a') as fp:
-                        run(cmd, cwd=seahub_dir, output=fp)
+                        run(cmd, cwd=dtable_web_dir, output=fp)
                 except Exception as e:
                     logging.exception('error when send email: %s', e)
 
