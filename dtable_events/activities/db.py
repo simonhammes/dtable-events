@@ -42,27 +42,28 @@ def save_or_update_or_delete(session, event):
         if row:
             if row.op_type == 'insert_row':
                 detail = json.loads(row.detail)
-                cell_data = event['row_data'][0]
-                # Update cell's value.
-                for i in detail['row_data']:
-                    if i['column_key'] == cell_data['column_key']:
-                        i['value'] = cell_data['value']
-                        break
-                else:
-                    del cell_data['old_value']
-                    detail['row_data'].append(cell_data)
+                cells_data = event['row_data']
+                # Update cells values.
+                for cell_data in cells_data:
+                    for i in detail['row_data']:
+                        if i['column_key'] == cell_data['column_key']:
+                            i['value'] = cell_data['value']
+                            break
+                    else:
+                        del cell_data['old_value']
+                        detail['row_data'].append(cell_data)
                 detail['row_name'] = event['row_name']
             else:
                 detail = json.loads(row.detail)
-                cell_data = event['row_data'][0]
-                # Update cell's `value` and keep `old_value` unchanged.
-                for i in detail['row_data']:
-                    if i['column_key'] == cell_data['column_key']:
-                        i['value'] = cell_data['value']
-                        i['old_value'] = i['old_value'] if i['old_value'] else cell_data['old_value']
-                        break
-                else:
-                    detail['row_data'].append(cell_data)
+                cells_data = event['row_data']
+                # Update cells values and keep old_values unchanged.
+                for cell_data in cells_data:
+                    for i in detail['row_data']:
+                        if i['column_key'] == cell_data['column_key']:
+                            i['value'] = cell_data['value']
+                            break
+                    else:
+                        detail['row_data'].append(cell_data)
                 detail['row_name'] = event['row_name']
 
             detail = json.dumps(detail)
