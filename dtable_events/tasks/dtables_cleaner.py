@@ -22,9 +22,9 @@ __all__ = [
 class DTablesCleaner(object):
 
     def __init__(self, config):
-        self._enabled = False
+        self._enabled = True
         self._logfile = None
-        self._interval = 60
+        self._interval = 60 * 60 * 24
         self._prepare_logfile()
         self._parse_config(config)
 
@@ -33,29 +33,7 @@ class DTablesCleaner(object):
         self._logfile = os.path.join(logdir, 'dtables_cleaner.log')
 
     def _parse_config(self, config):
-        """parse dtables cleaner related options from config file
-        """
-        section_name = 'DTABLES-CLEANER'
-        key_enabled = 'enabled'
-        key_trash_interval = 'trash_interval'
-
-        if not config.has_section(section_name):
-            return
-
-        # enabled
-        enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=False)
-        if not enabled:
-            return
-        self._enabled = True
-
-        # clean_interval
-        clean_interval = get_opt_from_conf_or_env(config, section_name, key_trash_interval, default=60*60*24*30)
-        try:
-            clean_interval = int(clean_interval)
-        except:
-            logging.warning('clean_interval value: %s is invalid.' % clean_interval)
-            clean_interval = 60 * 60 * 24 * 30
-        self._clean_interval = clean_interval
+        self._clean_interval = 60 * 60 * 24 * 30
 
     def start(self):
         if not self.is_enabled():
