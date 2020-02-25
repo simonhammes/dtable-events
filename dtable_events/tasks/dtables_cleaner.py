@@ -33,7 +33,7 @@ class DTablesCleaner(object):
         self._logfile = os.path.join(logdir, 'dtables_cleaner.log')
 
     def _parse_config(self, config):
-        self._clean_interval = 60 * 60 * 24 * 30
+        self._expire_seconds = 60 * 60 * 24 * 30
 
     def start(self):
         if not self.is_enabled():
@@ -42,7 +42,7 @@ class DTablesCleaner(object):
 
         logging.info('Start dtables cleaner, interval = %s sec', self._interval)
 
-        DTablesCleanerTimer(self._interval, self._logfile, self._clean_interval).start()
+        DTablesCleanerTimer(self._interval, self._logfile, self._expire_seconds).start()
 
     def is_enabled(self):
         return self._enabled
@@ -51,11 +51,11 @@ class DTablesCleaner(object):
 class DTablesCleanerTimer(Thread):
 
     def __init__(self, interval, logfile, 
-                clean_interval=30*60):
+                expire_seconds=30*60):
         super(DTablesCleanerTimer, self).__init__()
         self._interval = interval
         self._logfile = logfile
-        self._clean_interval = clean_interval
+        self._expire_seconds = expire_seconds
 
         self.finished = Event()
 
@@ -71,7 +71,7 @@ class DTablesCleanerTimer(Thread):
                         python_exec,
                         manage_py,
                         'clean_trash_dtables',
-                        self._clean_interval,
+                        self._expire_seconds,
                     ]
                     with open(self._logfile, 'a') as fp:
                         run(cmd, cwd=dtable_web_dir, output=fp)
