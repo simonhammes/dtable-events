@@ -13,7 +13,6 @@ class TaskManager:
     def is_valid_task_id(self, task_id):
         return task_id in self._future_pool.keys()
 
-
     def add_export_task(self, username, table_name, repo_id, dtable_id, dtable_file_dir_id, asset_dir_id=None):
         future = self._executor.submit(get_dtable_export_content, username, table_name, repo_id, dtable_id, dtable_file_dir_id, asset_dir_id=asset_dir_id)
         future_id = str(int(time.time()*1000))
@@ -46,7 +45,6 @@ class TaskManager:
         res = future.result()
 
         return res
-
 
 
 task_manager = TaskManager()
