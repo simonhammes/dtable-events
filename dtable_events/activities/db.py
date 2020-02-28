@@ -48,6 +48,9 @@ def save_or_update_or_delete(session, event):
                     for i in detail['row_data']:
                         if i['column_key'] == cell_data['column_key']:
                             i['value'] = cell_data['value']
+                            if i['column_type'] != cell_data['column_type']:
+                                i['column_type'] = cell_data['column_type']
+                                i['column_data'] = cell_data['column_data']
                             break
                     else:
                         del cell_data['old_value']
@@ -61,6 +64,10 @@ def save_or_update_or_delete(session, event):
                     for i in detail['row_data']:
                         if i['column_key'] == cell_data['column_key']:
                             i['value'] = cell_data['value']
+                            if i['column_type'] != cell_data['column_type']:
+                                i['column_type'] = cell_data['column_type']
+                                i['column_data'] = cell_data['column_data']
+                                i['old_value'] = cell_data['old_value']
                             break
                     else:
                         detail['row_data'].append(cell_data)
