@@ -3,12 +3,15 @@ import logging
 import configparser
 
 logger = logging.getLogger(__name__)
+global_conf = object
 
 
 def get_config(config_file):
     config = configparser.ConfigParser()
     try:
         config.read(config_file)
+        global global_conf
+        global_conf = config
     except Exception as e:
         logger.critical("Failed to read config file %s: %s" % (config_file, e))
         raise RuntimeError("Failed to read config file %s: %s" % (config_file, e))
