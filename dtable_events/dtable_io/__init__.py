@@ -44,10 +44,10 @@ def get_dtable_export_content(username, table_name, repo_id, dtable_id, dtable_f
     notice than make_archive will auto add .zip suffix to /tmp/<dtable_id>/zip_file
     """
     shutil.make_archive('/tmp/' + str(dtable_id) +  '/zip_file', "zip", root_dir=TMP_FILE_PATH)
-    with open(TMP_ZIP_PATH, 'rb') as f:
-        zip_stream = f.read()
-    clear_tmp_files_and_dirs(TMP_FILE_PATH, TMP_ZIP_PATH)
-    return zip_stream
+
+    # only rm TMP_FILE_PATH here, we remove TMP_ZIP_PATH in dtable web api
+    if os.path.exists(TMP_FILE_PATH):
+        shutil.rmtree(TMP_FILE_PATH)
 
 
 def post_dtable_import_files(username, repo_id, workspace_id, dtable_id, dtable_uuid, dtable_file_name, uploaded_temp_path):

@@ -26,25 +26,12 @@ class TaskManager:
         self._future_pool[future_id] = future
         return future_id
 
-    def query_status(self, task_id, remove_task_from_pool_when_done=False):
-
+    def query_status(self, task_id):
         future = self._future_pool[task_id]
 
         if future.done():
-            # clear_pool_if_done: used when query import status
-            # when export dtable, we clear pool is get_export_content
-            if remove_task_from_pool_when_done:
-
-                self._future_pool.pop(task_id, None)
+            self._future_pool.pop(task_id, None)
             return True
         return False
-
-    def get_export_content(self, task_id):
-        future = self._future_pool[task_id]
-        self._future_pool.pop(task_id, None)
-        res = future.result()
-
-        return res
-
 
 task_manager = TaskManager()

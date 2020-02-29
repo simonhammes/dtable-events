@@ -80,33 +80,17 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
         elif path == '/query-status':
             task_id = arguments['task_id'][0]
-            remove_task_from_pool_when_done = False
-            if 'remove_task_from_pool_when_done' in arguments.keys():
-                remove_task_from_pool_when_done = True if arguments['remove_task_from_pool_when_done'][0] == 'true' else False
-
 
             if not task_manager.is_valid_task_id(task_id):
                 self.send_error(400, 'task_id invalid.')
 
-            is_finished = task_manager.query_status(task_id, remove_task_from_pool_when_done)
+            is_finished = task_manager.query_status(task_id)
 
             self.send_response(200)
             self.end_headers()
             resp = {}
             resp['is_finished'] = is_finished
             self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/export-content':
-            task_id = arguments['task_id'][0]
-
-            if not task_manager.is_valid_task_id(task_id):
-                self.send_error(400, 'task_id invalid.')
-
-            resp = task_manager.get_export_content(task_id)
-
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(resp)
 
         else:
             self.send_error(400, 'path %s invalid.' % path)
