@@ -19,6 +19,7 @@ class UserActivityDetail(object):
         self.op_user = activity.op_user
         self.op_type = activity.op_type
         self.op_time = activity.op_time
+        self.is_app = activity.is_app
 
         detail_dict = json.loads(activity.detail)
         for key in detail_dict:
@@ -132,6 +133,7 @@ def save_user_activities(session, event):
     op_user = event['op_user']
     op_type = event['op_type']
     op_time = datetime.utcfromtimestamp(event['op_time'])
+    is_app = event.pop('is_app', False)
 
     table_id = event['table_id']
     table_name = event['table_name']
@@ -145,7 +147,7 @@ def save_user_activities(session, event):
     detail_dict["row_data"] = row_data
     detail = json.dumps(detail_dict)
 
-    activity = Activities(dtable_uuid, row_id, op_user, op_type, op_time, detail)
+    activity = Activities(dtable_uuid, row_id, op_user, op_type, op_time, detail, is_app)
     session.add(activity)
     session.commit()
 
@@ -156,7 +158,7 @@ def save_user_activities(session, event):
     owner = [res[r'owner'] for res in session.execute(cmd, {"dtable_uuid": dtable_uuid})][0]
 
     if '@seafile_group' not in owner:
-        user_list.append(op_user)
+        user_list.append(owner)
     else:
         group_id = int(owner.split('@')[0])
         members = ccnet_api.get_group_members(group_id)

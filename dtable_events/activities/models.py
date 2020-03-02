@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Boolean
 
 from dtable_events.db import Base
 
@@ -14,14 +14,16 @@ class Activities(Base):
     op_type = Column(String(length=128), nullable=False)
     op_time = Column(DateTime, nullable=False, index=True)
     detail = Column(Text, nullable=False)
+    is_app = Column(Boolean, nullable=False, default=False)
 
-    def __init__(self, dtable_uuid, row_id, op_user, op_type, op_time, detail):
+    def __init__(self, dtable_uuid, row_id, op_user, op_type, op_time, detail, is_app):
         self.dtable_uuid = dtable_uuid
         self.row_id = row_id
         self.op_user = op_user
         self.op_type = op_type
         self.op_time = op_time
         self.detail = detail
+        self.is_app = is_app
 
 
 class UserActivities(Base):
