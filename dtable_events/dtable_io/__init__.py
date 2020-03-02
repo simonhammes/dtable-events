@@ -6,12 +6,12 @@ from dtable_events.dtable_io.utils import prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files
 
 
-def clear_tmp_files_and_dirs(TMP_FILE_PATH, TMP_ZIP_PATH):
+def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     # delete tmp files/dirs
-    if os.path.exists(TMP_FILE_PATH):
-        shutil.rmtree(TMP_FILE_PATH)
-    if os.path.exists(TMP_ZIP_PATH):
-        os.remove(TMP_ZIP_PATH)
+    if os.path.exists(tmp_file_path):
+        shutil.rmtree(tmp_file_path)
+    if os.path.exists(tmp_zip_path):
+        os.remove(tmp_zip_path)
 
 
 def get_dtable_export_content(username, table_name, repo_id, dtable_id, dtable_file_dir_id, asset_dir_id=None):

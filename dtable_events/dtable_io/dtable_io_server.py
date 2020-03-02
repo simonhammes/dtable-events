@@ -17,9 +17,13 @@ class DTableIOServer(object):
     def _parse_config(self, config):
         if config.has_option('DTABLE-IO', 'host'):
             self._host = config.get('DTABLE-IO', 'host')
+        else:
+            self._host = '127.0.0.1'
 
         if config.has_option('DTABLE-IO', 'port'):
             self._port = config.getint('DTABLE-IO', 'port')
+        else:
+            self._port = '6000'
 
         if config.has_option('DTABLE-IO', 'workers'):
             self._workers = config.getint('DTABLE-IO', 'workers')
