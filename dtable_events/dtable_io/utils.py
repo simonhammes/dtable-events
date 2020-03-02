@@ -144,8 +144,10 @@ def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtabl
 
     # handle different url in settings.py
     from dtable_events.app.config import global_conf
-    dtable_web_service_url = global_conf.get('DTABLE-IO', 'dtable_web_service_url')
-    dtable_web_service_url.rstrip('/')
+
+    from dtable_events.app.config import global_dtable_server_conf
+    dtable_web_service_url = global_dtable_server_conf.get('dtable_web_service_url', '').rstrip('/')
+
     for table in tables:
         rows = table.get('rows', [])
         for idx, row in enumerate(rows):

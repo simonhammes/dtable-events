@@ -16,11 +16,10 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         token = auth[1]
         if not token:
             self.send_error(403, 'Token invalid.')
-        from dtable_events.app.config import global_conf
-
-        DTABLE_PRIVATE_KEY = global_conf.get('DTABLE-IO', 'dtable_private_key')
+        from dtable_events.app.config import global_dtable_server_conf
+        private_key = global_dtable_server_conf.get('private_key','')
         try:
-            jwt.decode(token, DTABLE_PRIVATE_KEY, algorithms=['HS256'])
+            jwt.decode(token, private_key, algorithms=['HS256'])
         except (jwt.ExpiredSignatureError, jwt.InvalidSignatureError) as e:
             self.send_error(403, e)
 
