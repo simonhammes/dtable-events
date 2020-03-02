@@ -27,21 +27,17 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         arguments = parse.parse_qs(arguments)
         if path == '/add-export-task':
             username = arguments['username'][0]
-            table_name = arguments['table_name'][0]
             repo_id = arguments['repo_id'][0]
+            table_name = arguments['table_name'][0]
             dtable_id = arguments['dtable_id'][0]
-            dtable_file_dir_id = arguments['dtable_file_dir_id'][0]
-            asset_dir_id = None
-            if 'asset_dir_id' in arguments.keys():
-                asset_dir_id = arguments['asset_dir_id'][0]
+            dtable_uuid = arguments['dtable_uuid'][0]
 
             task_id = task_manager.add_export_task(
                 username,
-                table_name,
                 repo_id,
                 dtable_id,
-                dtable_file_dir_id,
-                asset_dir_id
+                dtable_uuid,
+                table_name,
             )
 
             self.send_response(200)
