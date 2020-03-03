@@ -2,22 +2,21 @@ import json
 import jwt
 from urllib import parse
 from http.server import SimpleHTTPRequestHandler
-from dtable_events.dtable_io.TaskManager import task_manager
-
+from dtable_events.dtable_io.task_manager import task_manager
 
 
 class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
-
         auth = self.headers['Authorization'].split()
         if not auth or auth[0].lower() != 'token' or len(auth) != 2:
             self.send_error(403, 'Token invalid.')
         token = auth[1]
         if not token:
             self.send_error(403, 'Token invalid.')
-        from dtable_events.app.config import global_dtable_server_conf
-        private_key = global_dtable_server_conf.get('private_key','')
+        # from dtable_events.app.config import global_dtable_server_conf
+        # private_key = global_dtable_server_conf.get('private_key','')
+        private_key = task_manager.conf['dtable_private_key']
         try:
             jwt.decode(token, private_key, algorithms=['HS256'])
         except (jwt.ExpiredSignatureError, jwt.InvalidSignatureError) as e:
@@ -29,13 +28,11 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             username = arguments['username'][0]
             repo_id = arguments['repo_id'][0]
             table_name = arguments['table_name'][0]
-            dtable_id = arguments['dtable_id'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
 
             task_id = task_manager.add_export_task(
                 username,
                 repo_id,
-                dtable_id,
                 dtable_uuid,
                 table_name,
             )
@@ -51,7 +48,6 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             username = arguments['username'][0]
             repo_id = arguments['repo_id'][0]
             workspace_id = arguments['workspace_id'][0]
-            dtable_id = arguments['dtable_id'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
             dtable_file_name = arguments['dtable_file_name'][0]
             uploaded_temp_path = arguments['uploaded_temp_path'][0]
@@ -60,7 +56,6 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                 username,
                 repo_id,
                 workspace_id,
-                dtable_id,
                 dtable_uuid,
                 dtable_file_name,
                 uploaded_temp_path

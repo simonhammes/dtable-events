@@ -10,15 +10,16 @@ from rest_framework import status
 from django.utils.http import urlquote
 from seaserv import seafile_api
 
+from dtable_events.dtable_io.task_manager import task_manager
+
 # this two prefix used in exported zip file
 FILE_URL_PREFIX = 'file://dtable-bundle/asset/files/'
 IMG_URL_PREFIX = 'file://dtable-bundle/asset/images/'
 
 
 def gen_inner_file_get_url(token, filename):
-    from dtable_events.app.config import global_conf
-    FILE_SERVER_PORT = global_conf.get('DTABLE-IO', 'file_server_port')
-    INNER_FILE_SERVER_ROOT = 'http://127.0.0.1:' + FILE_SERVER_PORT
+    FILE_SERVER_PORT = task_manager.conf['file_server_port']
+    INNER_FILE_SERVER_ROOT = 'http://127.0.0.1:' + str(FILE_SERVER_PORT)
     return '%s/files/%s/%s' % (INNER_FILE_SERVER_ROOT, token,
                                urlquote(filename))
 
@@ -28,9 +29,8 @@ def gen_dir_zip_download_url(token):
     Generate fileserver file url.
     Format: http://<domain:port>/files/<token>/<filename>
     """
-    from dtable_events.app.config import global_conf
-    FILE_SERVER_PORT = global_conf.get('DTABLE-IO', 'file_server_port')
-    INNER_FILE_SERVER_ROOT = 'http://127.0.0.1:' + FILE_SERVER_PORT
+    FILE_SERVER_PORT = task_manager.conf['file_server_port']
+    INNER_FILE_SERVER_ROOT = 'http://127.0.0.1:' + str(FILE_SERVER_PORT)
     return '%s/zip/%s' % (INNER_FILE_SERVER_ROOT, token)
 
 
@@ -59,11 +59,11 @@ def convert_dtable_export_file_and_image_url(dtable_content):
     return dtable_content
 
 
-def prepare_dtable_json(repo_id, dtable_id, table_name, dtable_file_dir_id):
+def prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id):
     """
     used in export dtable
-    create dtable json file at /tmp/<dtable_id>/dtable_asset/content.json,
-    so that we can zip /tmp/<dtable_id>/dtable_asset
+    create dtable json file at /tmp/<dtable_uuid>/dtable_asset/content.json,
+    so that we can zip /tmp/<dtable_uuid>/dtable_asset
 
     :param repo_id:            repo of this dtable
     :param table_name:         name of dtable
@@ -84,20 +84,20 @@ def prepare_dtable_json(repo_id, dtable_id, table_name, dtable_file_dir_id):
     else:
         dtable_content = ''
     content_json = json.dumps(dtable_content).encode('utf-8')
-    path = os.path.join('/tmp', dtable_id, 'dtable_asset', 'content.json')
+    path = os.path.join('/tmp', dtable_uuid, 'dtable_asset', 'content.json')
 
     with open(path, 'wb') as f:
        f.write(content_json)
 
 
-def prepare_asset_file_folder(username, repo_id, dtable_id, asset_dir_id):
+def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
     """
     used in export dtable
-    create asset folder at /tmp/<dtable_id>/dtable_asset
+    create asset folder at /tmp/<dtable_uuid>/dtable_asset
     notice that create_dtable_json and this function create file at same directory
 
     1. get asset zip from file_server
-    2. unzip it at /tmp/<dtable_id>/dtable_asset/
+    2. unzip it at /tmp/<dtable_uuid>/dtable_asset/
 
     :param username:
     :param repo_id:
@@ -128,7 +128,7 @@ def prepare_asset_file_folder(username, repo_id, dtable_id, asset_dir_id):
     file_obj = io.BytesIO(resp.content)
     if is_zipfile(file_obj):
         with ZipFile(file_obj) as zp:
-            zp.extractall(os.path.join('/tmp', str(dtable_id), 'dtable_asset'))
+            zp.extractall(os.path.join('/tmp', dtable_uuid, 'dtable_asset'))
 
 
 def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtable_uuid):
@@ -143,10 +143,7 @@ def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtabl
     tables = dtable_content.get('tables', [])
 
     # handle different url in settings.py
-    from dtable_events.app.config import global_conf
-
-    from dtable_events.app.config import global_dtable_server_conf
-    dtable_web_service_url = global_dtable_server_conf.get('dtable_web_service_url', '').rstrip('/')
+    dtable_web_service_url = task_manager.conf['dtable_web_service_url'].rstrip('/')
 
     for table in tables:
         rows = table.get('rows', [])
@@ -172,7 +169,7 @@ def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtabl
     return dtable_content
 
 
-def post_dtable_json(username, repo_id, workspace_id, dtable_id, dtable_uuid, dtable_file_name):
+def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_name):
     """
     used to import dtable
     prepare dtable json file and post it at file server
@@ -184,7 +181,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_id, dtable_uuid, dt
     :return:
     """
     # change url in content json, then save it at file server
-    content_json_file_path = os.path.join('/tmp', str(dtable_id), 'dtable_zip_extracted/', 'content.json')
+    content_json_file_path = os.path.join('/tmp', dtable_uuid, 'dtable_zip_extracted/', 'content.json')
     with open(content_json_file_path, 'r') as f:
         content_json = f.read()
     content_json = convert_dtable_import_file_and_image_url(json.loads(content_json), workspace_id, dtable_uuid)
@@ -197,21 +194,21 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_id, dtable_uuid, dt
         raise status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
-def post_asset_files(repo_id, dtable_id, dtable_uuid, username):
+def post_asset_files(repo_id, dtable_uuid, username):
     """
     used to import dtable
-    post asset files in  /tmp/<dtable_id>/dtable_zip_extracted/ to file server
+    post asset files in  /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
 
     :return:
     """
     asset_root_path = os.path.join('/asset', dtable_uuid)
 
-    TMP_EXTRACTED_PATH = os.path.join('/tmp', str(dtable_id), 'dtable_zip_extracted/')
-    for root, dirs, files in os.walk(TMP_EXTRACTED_PATH):
+    tmp_extracted_path = os.path.join('/tmp', dtable_uuid, 'dtable_zip_extracted/')
+    for root, dirs, files in os.walk(tmp_extracted_path):
         for file_name in files:
             if file_name == 'content.json':
                 continue
-            inner_path = root[len(TMP_EXTRACTED_PATH)+6:]  # path inside zip
+            inner_path = root[len(tmp_extracted_path)+6:]  # path inside zip
             tmp_file_path = os.path.join(root, file_name)
             cur_file_parent_path = os.path.join(asset_root_path, inner_path)
             # check current file's parent path before post file

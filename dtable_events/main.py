@@ -24,7 +24,7 @@ def main():
     with open(dtable_server_config_path) as f:
         dtable_server_config = json.load(f)
 
-    config = get_config(args.config_file, dtable_server_config)
+    config = get_config(args.config_file)
     try:
         create_db_tables(config)
     except Exception as e:
@@ -34,7 +34,7 @@ def main():
     if is_syslog_enabled(config):
         app_logger.add_syslog_handler()
 
-    app = App(config)
+    app = App(config, dtable_server_config)
     app.serve_forever()
 
 

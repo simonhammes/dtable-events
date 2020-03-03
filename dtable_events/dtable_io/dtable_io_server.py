@@ -1,20 +1,19 @@
 from http.server import HTTPServer
 
 from dtable_events.dtable_io.request_handler import DTableIORequestHandler
-from dtable_events.dtable_io.TaskManager import task_manager
+from dtable_events.dtable_io.task_manager import task_manager
 
 
 class DTableIOServer(object):
 
-    def __init__(self, config):
-        self._parse_config(config)
-        self._server= HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
+    def __init__(self, config, dtable_server_config):
+        self._parse_config(config, dtable_server_config)
         task_manager.init(
-            workers=self._workers
+            self._workers, self._dtable_private_key, self._dtable_web_service_url, self._file_server_port
         )
+        self._server= HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
 
-
-    def _parse_config(self, config):
+    def _parse_config(self, config, dtable_server_config):
         if config.has_option('DTABLE-IO', 'host'):
             self._host = config.get('DTABLE-IO', 'host')
         else:
@@ -29,9 +28,10 @@ class DTableIOServer(object):
             self._workers = config.getint('DTABLE-IO', 'workers')
         else:
             self._workers = 3
-
+        self._file_server_port = config.getint('DTABLE-IO', 'file_server_port')
+        self._dtable_private_key = dtable_server_config['private_key']
+        self._dtable_web_service_url = dtable_server_config['dtable_web_service_url']
 
     def start(self):
         self._server.serve_forever()
-
 
