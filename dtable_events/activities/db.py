@@ -19,7 +19,7 @@ class UserActivityDetail(object):
         self.op_user = activity.op_user
         self.op_type = activity.op_type
         self.op_time = activity.op_time
-        self.is_app = activity.is_app
+        self.op_app = activity.op_app
 
         detail_dict = json.loads(activity.detail)
         for key in detail_dict:
@@ -133,7 +133,7 @@ def save_user_activities(session, event):
     op_user = event['op_user']
     op_type = event['op_type']
     op_time = datetime.utcfromtimestamp(event['op_time'])
-    is_app = event.pop('is_app', False)
+    op_app = event.get('op_app')
 
     table_id = event['table_id']
     table_name = event['table_name']
@@ -147,7 +147,7 @@ def save_user_activities(session, event):
     detail_dict["row_data"] = row_data
     detail = json.dumps(detail_dict)
 
-    activity = Activities(dtable_uuid, row_id, op_user, op_type, op_time, detail, is_app)
+    activity = Activities(dtable_uuid, row_id, op_user, op_type, op_time, detail, op_app)
     session.add(activity)
     session.commit()
 
