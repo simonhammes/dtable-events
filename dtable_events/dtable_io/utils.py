@@ -5,8 +5,6 @@ import time
 import io
 from zipfile import ZipFile, is_zipfile
 
-from rest_framework import status
-
 from django.utils.http import urlquote
 from seaserv import seafile_api
 
@@ -116,7 +114,7 @@ def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
             repo_id, json.dumps(fake_obj_id), 'download-dir', username, use_onetime=False
     )
     except Exception:
-        raise status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise Exception
 
     progress = {'zipped': 0, 'total': 1}
     while progress['zipped'] != progress['total']:
@@ -124,7 +122,7 @@ def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
         try:
             progress = json.loads(seafile_api.query_zip_progress(token))
         except Exception:
-            raise status.HTTP_500_INTERNAL_SERVER_ERROR
+            raise Exception
 
     asset_url = gen_dir_zip_download_url(token)
     resp = requests.get(asset_url)
@@ -194,7 +192,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     try:
         seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
     except Exception as e:
-        raise status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise Exception
 
 
 def post_asset_files(repo_id, dtable_uuid, username):
