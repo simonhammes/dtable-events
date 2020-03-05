@@ -14,8 +14,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         token = auth[1]
         if not token:
             self.send_error(403, 'Token invalid.')
-        # from dtable_events.app.config import global_dtable_server_conf
-        # private_key = global_dtable_server_conf.get('private_key','')
+
         private_key = task_manager.conf['dtable_private_key']
         try:
             jwt.decode(token, private_key, algorithms=['HS256'])
@@ -73,8 +72,11 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
             if not task_manager.is_valid_task_id(task_id):
                 self.send_error(400, 'task_id invalid.')
-
-            is_finished = task_manager.query_status(task_id)
+            is_finished = False
+            try:
+                is_finished = task_manager.query_status(task_id)
+            except Exception:
+                self.send_error(500)
 
             self.send_response(200)
             self.end_headers()
