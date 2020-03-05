@@ -45,8 +45,9 @@ class TaskManager:
 
         if future.done():
             self._future_pool.pop(task_id, None)
-            future.cancel()
-            if future._exception is not None:
+            try:
+                future.result(timeout=None)
+            except Exception:
                 raise Exception
             return True
         return False
