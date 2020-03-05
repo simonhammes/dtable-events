@@ -62,8 +62,8 @@ def convert_dtable_export_file_and_image_url(dtable_content):
 def prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id):
     """
     used in export dtable
-    create dtable json file at /tmp/<dtable_uuid>/dtable_asset/content.json,
-    so that we can zip /tmp/<dtable_uuid>/dtable_asset
+    create dtable json file at /tmp/dtable-io/<dtable_uuid>/dtable_asset/content.json,
+    so that we can zip /tmp/dtable-io/<dtable_uuid>/dtable_asset
 
     :param repo_id:            repo of this dtable
     :param table_name:         name of dtable
@@ -84,7 +84,7 @@ def prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id):
     else:
         dtable_content = ''
     content_json = json.dumps(dtable_content).encode('utf-8')
-    path = os.path.join('/tmp', dtable_uuid, 'dtable_asset', 'content.json')
+    path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_asset', 'content.json')
 
     with open(path, 'wb') as f:
        f.write(content_json)
@@ -93,11 +93,11 @@ def prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id):
 def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
     """
     used in export dtable
-    create asset folder at /tmp/<dtable_uuid>/dtable_asset
+    create asset folder at /tmp/dtable-io/<dtable_uuid>/dtable_asset
     notice that create_dtable_json and this function create file at same directory
 
     1. get asset zip from file_server
-    2. unzip it at /tmp/<dtable_uuid>/dtable_asset/
+    2. unzip it at /tmp/dtable-io/<dtable_uuid>/dtable_asset/
 
     :param username:
     :param repo_id:
@@ -121,14 +121,17 @@ def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
     progress = {'zipped': 0, 'total': 1}
     while progress['zipped'] != progress['total']:
         time.sleep(0.5)   # sleep 0.5 second
-        progress = json.loads(seafile_api.query_zip_progress(token))
+        try:
+            progress = json.loads(seafile_api.query_zip_progress(token))
+        except Exception:
+            raise status.HTTP_500_INTERNAL_SERVER_ERROR
 
     asset_url = gen_dir_zip_download_url(token)
     resp = requests.get(asset_url)
     file_obj = io.BytesIO(resp.content)
     if is_zipfile(file_obj):
         with ZipFile(file_obj) as zp:
-            zp.extractall(os.path.join('/tmp', dtable_uuid, 'dtable_asset'))
+            zp.extractall(os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_asset'))
 
 
 def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtable_uuid):
@@ -181,7 +184,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     :return:
     """
     # change url in content json, then save it at file server
-    content_json_file_path = os.path.join('/tmp', dtable_uuid, 'dtable_zip_extracted/', 'content.json')
+    content_json_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/', 'content.json')
     with open(content_json_file_path, 'r') as f:
         content_json = f.read()
     content_json = convert_dtable_import_file_and_image_url(json.loads(content_json), workspace_id, dtable_uuid)
@@ -197,13 +200,13 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
 def post_asset_files(repo_id, dtable_uuid, username):
     """
     used to import dtable
-    post asset files in  /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
+    post asset files in  /tmp/dtable-io/<dtable_uuid>/dtable_zip_extracted/ to file server
 
     :return:
     """
     asset_root_path = os.path.join('/asset', dtable_uuid)
 
-    tmp_extracted_path = os.path.join('/tmp', dtable_uuid, 'dtable_zip_extracted/')
+    tmp_extracted_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/')
     for root, dirs, files in os.walk(tmp_extracted_path):
         for file_name in files:
             if file_name == 'content.json':
