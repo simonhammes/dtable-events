@@ -14,14 +14,16 @@ class Activities(Base):
     op_type = Column(String(length=128), nullable=False)
     op_time = Column(DateTime, nullable=False, index=True)
     detail = Column(Text, nullable=False)
+    op_app = Column(String(length=255))
 
-    def __init__(self, dtable_uuid, row_id, op_user, op_type, op_time, detail):
+    def __init__(self, dtable_uuid, row_id, op_user, op_type, op_time, detail, op_app):
         self.dtable_uuid = dtable_uuid
         self.row_id = row_id
         self.op_user = op_user
         self.op_type = op_type
         self.op_time = op_time
         self.detail = detail
+        self.op_app = op_app
 
 
 class UserActivities(Base):
