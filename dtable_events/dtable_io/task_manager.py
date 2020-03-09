@@ -7,13 +7,14 @@ from seaserv import seafile_api
 
 class TaskManager:
 
-    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port):
+    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, io_task_timeout):
         self._future_pool = {}
         self._executor = ThreadPoolExecutor(max_workers=workers)
         self.conf = {
             'dtable_private_key': dtable_private_key,
             'dtable_web_service_url': dtable_web_service_url,
             'file_server_port': file_server_port,
+            'io_task_timeout': io_task_timeout,
         }
 
     def is_valid_task_id(self, task_id):
@@ -43,10 +44,11 @@ class TaskManager:
     def query_status(self, task_id):
         future = self._future_pool[task_id]
 
+        # if future state is not running, done will return true
         if future.done():
             self._future_pool.pop(task_id, None)
             try:
-                future.result(timeout=None)
+                future.result(timeout=self.conf['io_task_timeout'])
             except Exception:
                 raise Exception
             return True
