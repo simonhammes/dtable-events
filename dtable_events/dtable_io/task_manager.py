@@ -15,10 +15,14 @@ class TaskManager:
             'dtable_web_service_url': dtable_web_service_url,
             'file_server_port': file_server_port,
             'io_task_timeout': io_task_timeout,
+            'workers': workers,
         }
 
     def is_valid_task_id(self, task_id):
         return task_id in self._future_pool.keys()
+
+    def is_workers_maxed(self):
+        return len(self._future_pool) >= self.conf['workers']
 
     def add_export_task(self, username, repo_id, dtable_uuid, dtable_name):
         from dtable_events.dtable_io import get_dtable_export_content

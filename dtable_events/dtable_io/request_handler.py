@@ -24,6 +24,11 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         path, arguments = parse.splitquery(self.path)
         arguments = parse.parse_qs(arguments)
         if path == '/add-export-task':
+
+            if task_manager.is_workers_maxed():
+                self.send_error(400, 'dtable io server bussy.')
+                return
+
             username = arguments['username'][0]
             repo_id = arguments['repo_id'][0]
             table_name = arguments['table_name'][0]
@@ -43,6 +48,10 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
         elif path == '/add-import-task':
+
+            if task_manager.is_workers_maxed():
+                self.send_error(400, 'dtable io server bussy.')
+                return
 
             username = arguments['username'][0]
             repo_id = arguments['repo_id'][0]
