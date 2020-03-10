@@ -35,7 +35,11 @@ class DTableIOServer(object):
         else:
             self._io_task_timeout = 3600
 
-        self._file_server_port = config.getint('DTABLE-IO', 'file_server_port')
+        if config.has_option('DTABLE-IO', 'file_server_port'):
+            self._file_server_port = config.getint('DTABLE-IO', 'file_server_port')
+        else:
+            self._file_server_port = 8082
+
         self._dtable_private_key = dtable_server_config['private_key']
         self._dtable_web_service_url = dtable_server_config['dtable_web_service_url']
 
