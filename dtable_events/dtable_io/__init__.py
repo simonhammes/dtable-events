@@ -64,3 +64,4 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
 
     # remove extracted tmp file
     shutil.rmtree(tmp_extracted_path)
+
