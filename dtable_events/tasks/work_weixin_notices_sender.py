@@ -91,7 +91,7 @@ class WorkWeixinNoticeSenderTimer(Thread):
         while not self.finished.is_set():
             self.finished.wait(self._interval)
             if not self.finished.is_set():
-                logging.info('Start to send work weixin notices..')
+                # logging.info('Start to send work weixin notices..')
                 try:
                     python_exec = get_python_executable()
                     manage_py = os.path.join(dtable_web_dir, 'manage.py')

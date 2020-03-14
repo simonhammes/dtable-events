@@ -113,10 +113,10 @@ def run(argv, cwd=None, env=None, suppress_stdout=False, suppress_stderr=False, 
         return ' '.join(['"%s"' % arg for arg in args])
 
     cmdline = quote(argv)
-    if cwd:
-        logger.debug('Running command: %s, cwd = %s', cmdline, cwd)
-    else:
-        logger.debug('Running command: %s', cmdline)
+    # if cwd:
+    #     logger.debug('Running command: %s, cwd = %s', cmdline, cwd)
+    # else:
+    #     logger.debug('Running command: %s', cmdline)
 
     with open(os.devnull, 'w') as devnull:
         kwargs = dict(cwd=cwd, env=env, shell=True)
