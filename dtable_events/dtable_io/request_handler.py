@@ -100,7 +100,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                 self.send_error(400, 'task_id invalid.')
             try:
                 task_manager.cancel_task(task_id)
-            except Exception:
+            except Exception as e:
                 self.send_error(500)
 
             self.send_response(200)
