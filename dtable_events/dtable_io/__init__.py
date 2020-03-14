@@ -45,9 +45,7 @@ def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable
     """
     shutil.make_archive('/tmp/dtable-io/' + dtable_uuid +  '/zip_file', "zip", root_dir=tmp_file_path)
 
-    # only rm tmp_file_path here, we remove tmp_zip_path in dtable web api
-    if os.path.exists(tmp_file_path):
-        shutil.rmtree(tmp_file_path)
+    # we remove '/tmp/dtable-io/<dtable_uuid>' in dtable web api
 
 
 def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path):
@@ -63,4 +61,5 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
     post_asset_files(repo_id, dtable_uuid, username)
 
     # remove extracted tmp file
-    shutil.rmtree(tmp_extracted_path)
+    shutil.rmtree(os.path.join('/tmp/dtable-io', dtable_uuid))
+

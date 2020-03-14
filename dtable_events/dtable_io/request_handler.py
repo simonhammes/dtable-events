@@ -93,5 +93,20 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['is_finished'] = is_finished
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
+        elif path == '/cancel-task':
+            task_id = arguments['task_id'][0]
+
+            if not task_manager.is_valid_task_id(task_id):
+                self.send_error(400, 'task_id invalid.')
+            try:
+                task_manager.cancel_task(task_id)
+            except Exception as e:
+                self.send_error(500)
+
+            self.send_response(200)
+            self.end_headers()
+            resp = {'success': True}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
         else:
             self.send_error(400, 'path %s invalid.' % path)
