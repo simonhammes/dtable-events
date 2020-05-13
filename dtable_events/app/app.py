@@ -6,6 +6,7 @@ from dtable_events.tasks.work_weixin_notices_sender import WorkWinxinNoticeSende
 from dtable_events.tasks.email_notices_sender import EmailNoticesSender
 from dtable_events.tasks.dtables_cleaner import DTablesCleaner
 from dtable_events.tasks.dtable_updates_sender import DTableUpdatesSender
+from dtable_events.tasks.dtable_notification_rules_scanner import DTableNofiticationRulesScanner
 
 
 class App(object):
@@ -17,6 +18,7 @@ class App(object):
         self._dtables_cleaner = DTablesCleaner(config)
         self._dtable_io_server = DTableIOServer(config, dtable_server_config)
         self._dtable_updates_sender = DTableUpdatesSender()
+        self._dtable_notification_rules_scanner = DTableNofiticationRulesScanner(config)
 
     def serve_forever(self):
         self._message_handler.start()
@@ -26,3 +28,4 @@ class App(object):
         self._dtables_cleaner.start()
         self._dtable_io_server.start()
         self._dtable_updates_sender.start()
+        self._dtable_notification_rules_scanner.start()
