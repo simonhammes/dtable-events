@@ -77,7 +77,7 @@ class DTableNofiticationRulesScannerTimer(Thread):
         while not self.finished.is_set():
             self.finished.wait(self._interval)
             if not self.finished.is_set():
-                logging.info('Starts to clean trash dtables...')
+                logging.info('Starts to scan notification rules...')
                 try:
                     python_exec = get_python_executable()
                     manage_py = os.path.join(dtable_web_dir, 'manage.py')
