@@ -2,7 +2,7 @@ import os
 import logging
 from threading import Thread, Event
 
-from dtable_events.utils import get_opt_from_conf_or_env, get_python_executable, run
+from dtable_events.utils import get_opt_from_conf_or_env, get_python_executable, run, parse_bool
 
 
 # DTABLE_WEB_DIR
@@ -26,10 +26,22 @@ class DTableRowsCounter(object):
         self._logfile = None
         self._interval = 24 * 60 * 60
         self._prepare_logfile()
+        self._prepara_config(config)
 
     def _prepare_logfile(self):
         logdir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
         self._logfile = os.path.join(logdir, 'dtable_rows_counter.log')
+
+    def _prepara_config(self, config):
+        section_name = 'ROWS-COUNTER'
+        key_enabled = 'enabled'
+
+        if not config.has_section(section_name):
+            return
+
+        # enabled
+        enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=True)
+        self._enabled = parse_bool(enabled)
 
     def start(self):
         if not self.is_enabled():
