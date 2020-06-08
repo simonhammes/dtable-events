@@ -2,6 +2,7 @@ import json
 import requests
 import os
 import time
+import logging
 import io
 from zipfile import ZipFile, is_zipfile
 
@@ -13,6 +14,20 @@ from dtable_events.dtable_io.task_manager import task_manager
 # this two prefix used in exported zip file
 FILE_URL_PREFIX = 'file://dtable-bundle/asset/files/'
 IMG_URL_PREFIX = 'file://dtable-bundle/asset/images/'
+
+
+def setup_logger(name):
+    """To setup as many loggers as you want"""
+    logdir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
+    log_file = os.path.join(logdir, 'dtable_events_io.log')
+    handler = logging.FileHandler(log_file)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s, %(module)s.%(funcName)s](%(name)s)[Line:%(lineno)d] %(message)s')
+    handler.setFormatter(formatter)
+
+    logger = logging.getLogger(name)
+    logger.addHandler(handler)
+
+    return logger
 
 
 def gen_inner_file_get_url(token, filename):
@@ -70,7 +85,7 @@ def prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id):
     """
     try:
         token = seafile_api.get_fileserver_access_token(
-            repo_id, dtable_file_dir_id, 'view', '', use_onetime=False
+            repo_id, dtable_file_dir_id, 'download', '', use_onetime=False
         )
     except Exception as e:
         raise e
@@ -113,8 +128,8 @@ def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
         token = seafile_api.get_fileserver_access_token(
             repo_id, json.dumps(fake_obj_id), 'download-dir', username, use_onetime=False
     )
-    except Exception:
-        raise Exception
+    except Exception as e:
+        raise e
 
     progress = {'zipped': 0, 'total': 1}
     while progress['zipped'] != progress['total']:

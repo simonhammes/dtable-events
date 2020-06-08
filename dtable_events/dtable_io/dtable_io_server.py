@@ -1,3 +1,5 @@
+import os
+import logging
 from http.server import HTTPServer
 from threading import Thread
 

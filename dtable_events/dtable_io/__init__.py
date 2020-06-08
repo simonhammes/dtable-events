@@ -1,7 +1,7 @@
 import shutil
 import os
 from zipfile import ZipFile
-
+import traceback
 from dtable_events.dtable_io.utils import prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files
 
@@ -13,8 +13,7 @@ def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     if os.path.exists(tmp_zip_path):
         os.remove(tmp_zip_path)
 
-
-def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable_file_dir_id, asset_dir_id):
+def get_dtable_export_content_action(username, repo_id, table_name, dtable_uuid, dtable_file_dir_id, asset_dir_id):
     """
     1. prepare file content at /tmp/dtable-io/<dtable_id>/dtable_asset/...
     2. make zip file
@@ -47,8 +46,16 @@ def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable
 
     # we remove '/tmp/dtable-io/<dtable_uuid>' in dtable web api
 
+def get_dtable_export_content(*args):
+    from dtable_events.dtable_io.utils import setup_logger
+    logger = setup_logger(__name__)
+    try:
+        get_dtable_export_content_action(*args)
+    except Exception as e:
+        logger.error(traceback.format_exc())
 
-def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path):
+
+def post_dtable_import_files_action(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path):
     """
     post files at /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
     """
@@ -63,3 +70,11 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
     # remove extracted tmp file
     shutil.rmtree(os.path.join('/tmp/dtable-io', dtable_uuid))
 
+
+def post_dtable_import_files(*args):
+    from dtable_events.dtable_io.utils import setup_logger
+    logger = setup_logger(__name__)
+    try:
+        post_dtable_import_files_action(*args)
+    except Exception as e:
+        logger.error(traceback.format_exc())

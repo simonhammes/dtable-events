@@ -1,13 +1,16 @@
 import json
 import jwt
+import traceback
 from urllib import parse
 from http.server import SimpleHTTPRequestHandler
 from dtable_events.dtable_io.task_manager import task_manager
+from dtable_events.dtable_io.utils import setup_logger
 
 
 class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
+        self.logger = setup_logger(__name__)
         auth = self.headers['Authorization'].split()
         if not auth or auth[0].lower() != 'token' or len(auth) != 2:
             self.send_error(403, 'Token invalid.')
@@ -34,12 +37,17 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             table_name = arguments['table_name'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
 
-            task_id = task_manager.add_export_task(
-                username,
-                repo_id,
-                dtable_uuid,
-                table_name,
-            )
+            try:
+                task_id = task_manager.add_export_task(
+                    username,
+                    repo_id,
+                    dtable_uuid,
+                    table_name,
+                )
+            except Exception as e:
+                self.logger.error(traceback.format_exc())
+                self.send_error(500)
+                return
 
             self.send_response(200)
             self.send_header("Content-type", "application/json")
@@ -60,14 +68,19 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             dtable_file_name = arguments['dtable_file_name'][0]
             uploaded_temp_path = arguments['uploaded_temp_path'][0]
 
-            task_id = task_manager.add_import_task(
-                username,
-                repo_id,
-                workspace_id,
-                dtable_uuid,
-                dtable_file_name,
-                uploaded_temp_path
-            )
+            try:
+                task_id = task_manager.add_import_task(
+                    username,
+                    repo_id,
+                    workspace_id,
+                    dtable_uuid,
+                    dtable_file_name,
+                    uploaded_temp_path
+                )
+            except Exception as e:
+                self.logger.error(traceback.format_exc())
+                self.send_error(500)
+                return
 
             self.send_response(200)
             self.send_header("Content-type", "application/json")
@@ -84,8 +97,10 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             is_finished = False
             try:
                 is_finished = task_manager.query_status(task_id)
-            except Exception:
+            except Exception as e:
+                self.logger.error(traceback.format_exc())
                 self.send_error(500)
+                return
 
             self.send_response(200)
             self.end_headers()
@@ -101,7 +116,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             try:
                 task_manager.cancel_task(task_id)
             except Exception as e:
+                self.logger.error(traceback.format_exc())
                 self.send_error(500)
+                return
 
             self.send_response(200)
             self.end_headers()
