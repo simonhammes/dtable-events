@@ -17,7 +17,9 @@ IMG_URL_PREFIX = 'file://dtable-bundle/asset/images/'
 
 
 def setup_logger(name):
-    """To setup as many loggers as you want"""
+    """
+    setup logger for dtable io
+    """
     logdir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
     log_file = os.path.join(logdir, 'dtable_events_io.log')
     handler = logging.FileHandler(log_file)
@@ -207,7 +209,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     try:
         seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
     except Exception as e:
-        raise Exception
+        raise e
 
 
 def post_asset_files(repo_id, dtable_uuid, username):

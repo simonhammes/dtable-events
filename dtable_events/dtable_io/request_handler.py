@@ -1,16 +1,16 @@
 import json
 import jwt
-import traceback
+import logging
 from urllib import parse
 from http.server import SimpleHTTPRequestHandler
 from dtable_events.dtable_io.task_manager import task_manager
-from dtable_events.dtable_io.utils import setup_logger
+
+logger = logging.getLogger(__name__)
 
 
 class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
-        self.logger = setup_logger(__name__)
         auth = self.headers['Authorization'].split()
         if not auth or auth[0].lower() != 'token' or len(auth) != 2:
             self.send_error(403, 'Token invalid.')
@@ -45,7 +45,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                     table_name,
                 )
             except Exception as e:
-                self.logger.error(traceback.format_exc())
+                logger.error(e)
                 self.send_error(500)
                 return
 
@@ -78,7 +78,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                     uploaded_temp_path
                 )
             except Exception as e:
-                self.logger.error(traceback.format_exc())
+                logger.error(e)
                 self.send_error(500)
                 return
 
@@ -98,7 +98,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             try:
                 is_finished = task_manager.query_status(task_id)
             except Exception as e:
-                self.logger.error(traceback.format_exc())
+                logger.error(e)
                 self.send_error(500)
                 return
 
@@ -116,7 +116,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             try:
                 task_manager.cancel_task(task_id)
             except Exception as e:
-                self.logger.error(traceback.format_exc())
+                logger.error(e)
                 self.send_error(500)
                 return
 
