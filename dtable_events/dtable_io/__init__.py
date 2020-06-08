@@ -12,12 +12,14 @@ def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     if os.path.exists(tmp_zip_path):
         os.remove(tmp_zip_path)
 
-def get_dtable_export_content_action(username, repo_id, table_name, dtable_uuid, dtable_file_dir_id, asset_dir_id, logger):
+def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable_file_dir_id, asset_dir_id):
     """
     1. prepare file content at /tmp/dtable-io/<dtable_id>/dtable_asset/...
     2. make zip file
     3. return zip file's content
     """
+    from dtable_events.dtable_io.utils import setup_logger
+    logger = setup_logger(__name__)
     logger.info('Start prepare /tmp/dtable-io/{}/zip_file.zip for export DTable.'.format(dtable_uuid))
 
     tmp_file_path = os.path.join('/tmp/dtable-io', dtable_uuid,
@@ -36,16 +38,13 @@ def get_dtable_export_content_action(username, repo_id, table_name, dtable_uuid,
     except Exception as e:
         logger.error(e)
 
-
     # 2. get asset file folder, asset could be empty
-
     if asset_dir_id:
         logger.info('Create asset dir.')
         try:
             prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id)
         except Exception as e:
             logger.error(e)
-
 
     """
     /tmp/dtable-io/<dtable_uuid>/dtable_asset/
@@ -64,19 +63,13 @@ def get_dtable_export_content_action(username, repo_id, table_name, dtable_uuid,
     logger.info('Create /tmp/dtable-io/{}/zip_file.zip success!'.format(dtable_uuid))
     # we remove '/tmp/dtable-io/<dtable_uuid>' in dtable web api
 
-def get_dtable_export_content(*args):
-    from dtable_events.dtable_io.utils import setup_logger
-    logger = setup_logger(__name__)
-    try:
-        get_dtable_export_content_action(*args, logger)
-    except Exception as e:
-        logger.error(e)
 
-
-def post_dtable_import_files_action(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path, logger):
+def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path):
     """
     post files at /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
     """
+    from dtable_events.dtable_io.utils import setup_logger
+    logger = setup_logger(__name__)
     logger.info('Start import DTable: {}.'.format(dtable_uuid))
     tmp_extracted_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/')
 
@@ -99,21 +92,11 @@ def post_dtable_import_files_action(username, repo_id, workspace_id, dtable_uuid
     except Exception as e:
         logger.error(e)
 
-
     # remove extracted tmp file
     logger.info('Remove extracted tmp file.')
     try:
         shutil.rmtree(os.path.join('/tmp/dtable-io', dtable_uuid))
     except Exception as e:
-        logger.error(e)
+        logger.info(e)
 
     logger.info('Import DTable: {} success!'.format(dtable_uuid))
-
-
-def post_dtable_import_files(*args):
-    from dtable_events.dtable_io.utils import setup_logger
-    logger = setup_logger(__name__)
-    try:
-        post_dtable_import_files_action(*args, logger)
-    except Exception as e:
-        logger.error(e)
