@@ -30,22 +30,23 @@ class TaskManager:
     def add_export_task(self, username, repo_id, dtable_uuid, dtable_name):
         from dtable_events.dtable_io import get_dtable_export_content
 
-        dtable_file_dir_id = seafile_api.get_file_id_by_path(repo_id, '/' + dtable_name + '.dtable/')
+        dtable_file_id = seafile_api.get_file_id_by_path(repo_id, '/' + dtable_name + '.dtable')
         asset_dir_path = os.path.join('/asset', dtable_uuid)
         asset_dir_id = seafile_api.get_dir_id_by_path(repo_id, asset_dir_path)
 
-        task = multiprocessing.Process(target=get_dtable_export_content, args=(username, repo_id, dtable_name, dtable_uuid,
-                                                                          dtable_file_dir_id, asset_dir_id))
+        task = multiprocessing.Process(target=get_dtable_export_content,
+                                                 args=(username, repo_id, dtable_name, dtable_uuid,
+                                                 dtable_file_id, asset_dir_id))
         task.start()
         task_id = str(int(time.time()*1000))
         self.task_pool[task_id] = task
 
         return task_id
 
-    def add_import_task(self, username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path):
+    def add_import_task(self, username, repo_id, workspace_id, dtable_uuid, dtable_file_name):
         from dtable_events.dtable_io import post_dtable_import_files
 
-        task = multiprocessing.Process(target=post_dtable_import_files, args=(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path))
+        task = multiprocessing.Process(target=post_dtable_import_files, args=(username, repo_id, workspace_id, dtable_uuid, dtable_file_name))
         task.start()
         task_id = str(int(time.time()*1000))
         self.task_pool[task_id] = task
