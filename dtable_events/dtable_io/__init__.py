@@ -1,6 +1,5 @@
 import shutil
 import os
-from zipfile import ZipFile
 from dtable_events.dtable_io.utils import prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files
 
@@ -64,21 +63,14 @@ def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable
     # we remove '/tmp/dtable-io/<dtable_uuid>' in dtable web api
 
 
-def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path):
+def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtable_file_name):
     """
     post files at /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
+    unzip django uploaded tmp file is suppose to be done in dtable-web api.
     """
     from dtable_events.dtable_io.utils import setup_logger
     logger = setup_logger(__name__)
     logger.info('Start import DTable: {}.'.format(dtable_uuid))
-    tmp_extracted_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/')
-
-    logger.info('Extract all from uploaded tmp path: {}'.format(uploaded_temp_path))
-    try:
-        with ZipFile(uploaded_temp_path, 'r') as zip_file:
-            zip_file.extractall(tmp_extracted_path)
-    except Exception as e:
-        logger.error(e)
 
     logger.info('Prepare dtable json file and post it at file server.')
     try:
@@ -86,7 +78,7 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
     except Exception as e:
         logger.error(e)
 
-    logger.info('Post asset files in tmp path to filesercer.')
+    logger.info('Post asset files in tmp path to file server.')
     try:
         post_asset_files(repo_id, dtable_uuid, username)
     except Exception as e:

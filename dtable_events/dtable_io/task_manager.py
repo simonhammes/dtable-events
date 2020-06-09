@@ -43,10 +43,10 @@ class TaskManager:
 
         return task_id
 
-    def add_import_task(self, username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path):
+    def add_import_task(self, username, repo_id, workspace_id, dtable_uuid, dtable_file_name):
         from dtable_events.dtable_io import post_dtable_import_files
 
-        task = multiprocessing.Process(target=post_dtable_import_files, args=(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, uploaded_temp_path))
+        task = multiprocessing.Process(target=post_dtable_import_files, args=(username, repo_id, workspace_id, dtable_uuid, dtable_file_name))
         task.start()
         task_id = str(int(time.time()*1000))
         self.task_pool[task_id] = task

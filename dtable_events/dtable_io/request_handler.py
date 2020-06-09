@@ -66,7 +66,6 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             workspace_id = arguments['workspace_id'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
             dtable_file_name = arguments['dtable_file_name'][0]
-            uploaded_temp_path = arguments['uploaded_temp_path'][0]
 
             try:
                 task_id = task_manager.add_import_task(
@@ -75,7 +74,6 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                     workspace_id,
                     dtable_uuid,
                     dtable_file_name,
-                    uploaded_temp_path
                 )
             except Exception as e:
                 logger.error(e)
