@@ -123,5 +123,33 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp = {'success': True}
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
+        elif path == '/dtable-asset-files':
+            if task_manager.is_workers_maxed():
+                self.send_error(400, 'dtable io server bussy.')
+                return
+
+            username = arguments['username'][0]
+            repo_id = arguments['repo_id'][0]
+            dtable_uuid = arguments['dtable_uuid'][0]
+            files = arguments['file']
+
+            try:
+                task_id = task_manager.add_export_dtable_asset_files_task(
+                    username,
+                    repo_id,
+                    dtable_uuid,
+                    files,
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {'task_id': task_id}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
         else:
             self.send_error(400, 'path %s invalid.' % path)

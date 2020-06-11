@@ -53,6 +53,15 @@ class TaskManager:
 
         return task_id
 
+    def add_export_dtable_asset_files_task(self, username, repo_id, dtable_uuid, files):
+        from dtable_events.dtable_io import get_dtable_export_asset_files
+        task_id = str(int(time.time()*1000))
+        task = multiprocessing.Process(target=get_dtable_export_asset_files, args=(username, repo_id, dtable_uuid, files, task_id))
+        task.start()
+        self.task_pool[task_id] = task
+
+        return task_id
+
     def query_status(self, task_id):
         task = self.task_pool[task_id]
         if not task.is_alive():

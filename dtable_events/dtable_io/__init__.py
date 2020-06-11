@@ -1,7 +1,8 @@
 import shutil
 import os
 from dtable_events.dtable_io.utils import prepare_dtable_json, \
-    prepare_asset_file_folder, post_dtable_json, post_asset_files
+    prepare_asset_file_folder, post_dtable_json, post_asset_files, \
+    download_files_to_path
 
 
 def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
@@ -92,3 +93,28 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
         logger.info(e)
 
     logger.info('Import DTable: {} success!'.format(dtable_uuid))
+
+def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id):
+    """
+    export asset files from dtable
+    """
+    from dtable_events.dtable_io.utils import setup_logger
+    logger = setup_logger(__name__)
+    files = [f.strip() for f in files]
+    tmp_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'asset-files', 
+                                 str(task_id))           # used to store files
+    tmp_zip_path  = os.path.join('/tmp/dtable-io', dtable_uuid, 'asset-files',
+                                 str(task_id)) + '.zip'  # zip those files
+
+    clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path)
+    os.makedirs(tmp_file_path, exist_ok=True)
+
+    try:
+        # 1. download files to tmp_file_path
+        download_files_to_path(username, repo_id, dtable_uuid, files, tmp_file_path)
+        # 2. zip those files to tmp_zip_path
+        shutil.make_archive(tmp_zip_path.split('.')[0], 'zip', root_dir=tmp_file_path)
+    except Exception as e:
+        logger.error(e)
+    else:
+        logger.info('export files from dtable: %s success!', dtable_uuid)
