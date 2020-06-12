@@ -274,6 +274,7 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
 
     # gen zip token func
     def _zip_token():
+        nonlocal error
         while not task_event.is_set():
             try:
                 group = group_queue.get(timeout=0.5)
@@ -293,7 +294,6 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
                 query_queue.put(zip_token)
             except Exception as e:
                 # record error and stop loop to finish thread
-                nonlocal error
                 with error_lock:
                     if not error and not task_event.is_set():
                         error = e
@@ -301,6 +301,7 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
 
     # query token download and extract func
     def _query_token():
+        nonlocal count, error
         while not task_event.is_set():
             try:
                 zip_token = query_queue.get(timeout=0.5)
@@ -311,7 +312,6 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
             except Exception as e:
                 # record error and stop loop to finish thread
                 with error_lock:
-                    nonlocal error
                     if not error and not task_event.is_set():
                         error = e
                         task_event.set()
@@ -330,7 +330,6 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
             except Exception as e:
                 # record error and stop loop to finish thread
                 with error_lock:
-                    nonlocal error
                     if not error and not task_event.is_set():
                         error = e
                         task_event.set()
@@ -342,7 +341,6 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
                 with ZipFile(file_obj) as zp:
                     zp.extractall(path)
                 with count_lock:
-                    nonlocal count
                     count += 1
                     if count == len(groups):
                         task_event.set()

@@ -131,7 +131,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             username = arguments['username'][0]
             repo_id = arguments['repo_id'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
-            files = arguments['file']
+            files = arguments['files']
 
             try:
                 task_id = task_manager.add_export_dtable_asset_files_task(
