@@ -315,7 +315,7 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
                     if not error and not task_event.is_set():
                         error = e
                         task_event.set()
-                    break
+                        break
             finally:
                 # avoid unexpected error
                 time.sleep(0.2)
@@ -333,7 +333,7 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
                     if not error and not task_event.is_set():
                         error = e
                         task_event.set()
-                    break
+                        break
 
             # extract zip to path and count success num if all groups down set event to finish thread
             file_obj = io.BytesIO(resp.content)
@@ -345,9 +345,9 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
                     if count == len(groups):
                         task_event.set()
 
-    # 2 threads to gen zip-token
+    # threads to gen zip-token
     tds = [Thread(target=_zip_token) for _ in range(2)]
-    # 2 threads to query zip-token download and extract
+    # threads to query zip-token download and extract
     tds.extend([Thread(target=_query_token) for _ in range(2)])
     [t.start() for t in tds]
     # main process loops till event done

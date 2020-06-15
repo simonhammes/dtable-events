@@ -100,7 +100,7 @@ def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id
     """
     from dtable_events.dtable_io.utils import setup_logger
     logger = setup_logger(__name__)
-    files = [f.strip() for f in files]
+    files = [f.strip().strip('/') for f in files]
     tmp_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'asset-files', 
                                  str(task_id))           # used to store files
     tmp_zip_path  = os.path.join('/tmp/dtable-io', dtable_uuid, 'asset-files',
