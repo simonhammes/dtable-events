@@ -4,7 +4,6 @@ import os
 import time
 import logging
 import io
-import operator
 from zipfile import ZipFile, is_zipfile
 
 from django.utils.http import urlquote
