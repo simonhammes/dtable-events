@@ -242,46 +242,22 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
     """
     download dtable's asset files to path
     """
-    # download files by groups in which files have common path
-    # use groups to decrease io with seafile
-    # grouping algorithm perhaps not perfect, gradually improve it
-    files = [f.split('/') for f in files]
+    valid_file_obj_ids = []
     base_path = os.path.join('/asset', dtable_uuid)
-    new_files = []
-    for file in files:  # remove invalid file
-        full_dirent_path = os.path.join(base_path, os.path.join(*file))
-        if seafile_api.get_dirent_by_path(repo_id, full_dirent_path):
-            new_files.append(file)
-    files = sorted(new_files)
-    groups = [[files[0]]]
-    for f in files[1:]:
-        g = groups[-1]
-        # if such file path == last group file path, append it or new group
-        if operator.eq(g[0][:-1], f[:-1]):
-            groups[-1].append(f)
-        else:
-            groups.append([f])
+    for file in files:
+        full_path = os.path.join(base_path, *file.split('/'))
+        obj_id = seafile_api.get_file_id_by_path(repo_id, full_path)
+        if not obj_id:
+            continue
+        valid_file_obj_ids.append((file, obj_id))
 
-    for group in groups:
-        parent_dir = os.path.join(base_path, os.path.join(*group[0][:-1]))
-        file_list = [f[-1] for f in group]
-        fake_obj_id = {
-            'parent_dir': parent_dir,
-            'file_list': file_list,
-            'is_windows': False
-        }
-        zip_token = seafile_api.get_fileserver_access_token(
-            repo_id, json.dumps(fake_obj_id), 'download-multi', username,
+    for file, obj_id in valid_file_obj_ids:
+        token = seafile_api.get_fileserver_access_token(
+            repo_id, obj_id, 'download', username,
             use_onetime=False
         )
-        while True:
-            progress = json.loads(seafile_api.query_zip_progress(zip_token))
-            if progress['zipped'] == progress['total']:
-                break
-            time.sleep(0.5)
-        asset_url = gen_dir_zip_download_url(zip_token)
-        resp = requests.get(asset_url)
-        file_obj = io.BytesIO(resp.content)
-        if is_zipfile(file_obj):
-            with ZipFile(file_obj) as zp:
-                zp.extractall(path)
+        file_name = os.path.basename(file)
+        file_url = gen_inner_file_get_url(token, file_name)
+        content = requests.get(file_url).content
+        with open(os.path.join(path, file_name), 'wb') as f:
+            f.write(content)
