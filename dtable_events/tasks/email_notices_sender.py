@@ -81,15 +81,7 @@ class SendSeahubEmailTimer(Thread):
                     cmd = [
                         python_exec,
                         manage_py,
-                        'send_notices',
-                    ]
-                    with open(self._logfile, 'a') as fp:
-                        run(cmd, cwd=dtable_web_dir, output=fp)
-
-                    cmd = [
-                        python_exec,
-                        manage_py,
-                        'send_queued_mail',
+                        'send_email_notices',
                     ]
                     with open(self._logfile, 'a') as fp:
                         run(cmd, cwd=dtable_web_dir, output=fp)

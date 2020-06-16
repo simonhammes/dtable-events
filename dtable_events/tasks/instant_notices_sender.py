@@ -19,17 +19,19 @@ if not os.path.exists(dtable_web_dir):
 
 sys.path.insert(0, dtable_web_dir)
 try:
+    from seahub.settings import ENABLE_WEIXIN
     from seahub.settings import ENABLE_WORK_WEIXIN
 except ImportError as err:
+    ENABLE_WEIXIN = False
     ENABLE_WORK_WEIXIN = False
     logging.warning('Can not import seahub.settings: %s.' % err)
 
 __all__ = [
-    'WorkWinxinNoticeSender',
+    'InstantNoticeSender',
 ]
 
 
-class WorkWinxinNoticeSender(object):
+class InstantNoticeSender(object):
 
     def __init__(self, config):
         self._enabled = False
@@ -40,17 +42,17 @@ class WorkWinxinNoticeSender(object):
 
     def _prepare_logfile(self):
         log_dir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
-        self._logfile = os.path.join(log_dir, 'work_weixin_notice_sender.log')
+        self._logfile = os.path.join(log_dir, 'instant_notice_sender.log')
 
     def _parse_config(self, config):
-        """parse work weixin related options from config file
+        """parse instant related options from config file
         """
-        section_name = 'WORK WEIXIN'
+        section_name = 'INSTANT SENDER'
         key_interval = 'interval'
         default_interval = 60  # 1min
 
         # enabled
-        enabled = ENABLE_WORK_WEIXIN
+        enabled = ENABLE_WEIXIN or ENABLE_WORK_WEIXIN
         enabled = parse_bool(enabled)
         if not enabled:
             return
@@ -68,18 +70,18 @@ class WorkWinxinNoticeSender(object):
 
     def start(self):
         if not self.is_enabled():
-            logging.warning('Can not start work weixin notice sender: it is not enabled!')
+            logging.warning('Can not start instant notice sender: it is not enabled!')
             return
 
-        logging.info('Start work weixin notice sender, interval = %s sec', self._interval)
+        logging.info('Start instant notice sender, interval = %s sec', self._interval)
 
-        WorkWeixinNoticeSenderTimer(self._interval, self._logfile).start()
+        InstantNoticeSenderTimer(self._interval, self._logfile).start()
 
     def is_enabled(self):
         return self._enabled
 
 
-class WorkWeixinNoticeSenderTimer(Thread):
+class InstantNoticeSenderTimer(Thread):
 
     def __init__(self, interval, logfile):
         Thread.__init__(self)
@@ -91,20 +93,20 @@ class WorkWeixinNoticeSenderTimer(Thread):
         while not self.finished.is_set():
             self.finished.wait(self._interval)
             if not self.finished.is_set():
-                # logging.info('Start to send work weixin notices..')
+                # logging.info('Start to send instant notices..')
                 try:
                     python_exec = get_python_executable()
                     manage_py = os.path.join(dtable_web_dir, 'manage.py')
                     cmd = [
                         python_exec,
                         manage_py,
-                        'send_row_comment_notices',
+                        'send_instant_notices',
                     ]
 
                     with open(self._logfile, 'a') as fp:
                         run(cmd, cwd=dtable_web_dir, output=fp)
                 except Exception as e:
-                    logging.exception('send work weixin notices error: %s', e)
+                    logging.exception('send instant notices error: %s', e)
 
     def cancel(self):
         self.finished.set()
