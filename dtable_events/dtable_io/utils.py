@@ -5,8 +5,6 @@ import time
 import logging
 import io
 import operator
-from queue import Queue, Empty
-from threading import Thread, Event, Lock
 from zipfile import ZipFile, is_zipfile
 
 from django.utils.http import urlquote
@@ -244,115 +242,46 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
     """
     download dtable's asset files to path
     """
-    # download files by groups in which files have common path in multi threads
-    # use groups and threads for high performance
+    # download files by groups in which files have common path
+    # use groups to decrease io with seafile
     # grouping algorithm perhaps not perfect, gradually improve it
     files = [f.split('/') for f in files]
     base_path = os.path.join('/asset', dtable_uuid)
     new_files = []
-    # remove invalid file
-    for file in files:
+    for file in files:  # remove invalid file
         full_dirent_path = os.path.join(base_path, os.path.join(*file))
         if seafile_api.get_dirent_by_path(repo_id, full_dirent_path):
             new_files.append(file)
-    files = new_files
-    files = sorted(files)
+    files = sorted(new_files)
     groups = [[files[0]]]
     for f in files[1:]:
         g = groups[-1]
-        # if such file path == last group file path append it or new group
+        # if such file path == last group file path, append it or new group
         if operator.eq(g[0][:-1], f[:-1]):
             groups[-1].append(f)
         else:
             groups.append([f])
 
-    group_queue, query_queue = Queue(), Queue()
-    task_event, error_lock, error = Event(), Lock(), None
-    count, count_lock = 0, Lock()
-    # put group to queue
-    [group_queue.put(group) for group in groups]
-
-    # gen zip token func
-    def _zip_token():
-        nonlocal error
-        while not task_event.is_set():
-            try:
-                group = group_queue.get(timeout=0.5)
-            except Empty:
-                continue
-            parent_dir = os.path.join(base_path, os.path.join(*group[0][:-1]))
-            fake_obj_id = {
-                'parent_dir': parent_dir,
-                'file_list': [f[-1] for f in group],
-                'is_windows': False
-            }
-            try:
-                zip_token = seafile_api.get_fileserver_access_token(
-                    repo_id, json.dumps(fake_obj_id), 'download-multi', username,
-                    use_onetime=False
-                )
-                query_queue.put(zip_token)
-            except Exception as e:
-                # record error and stop loop to finish thread
-                with error_lock:
-                    if not error and not task_event.is_set():
-                        error = e
-                        task_event.set()
-
-    # query token download and extract func
-    def _query_token():
-        nonlocal count, error
-        while not task_event.is_set():
-            try:
-                zip_token = query_queue.get(timeout=0.5)
-            except Empty:
-                continue
-            try:
-                progress = json.loads(seafile_api.query_zip_progress(zip_token))
-            except Exception as e:
-                # record error and stop loop to finish thread
-                with error_lock:
-                    if not error and not task_event.is_set():
-                        error = e
-                        task_event.set()
-                        break
-            finally:
-                # avoid unexpected error
-                time.sleep(0.2)
-            if progress['zipped'] != progress['total']:
-                query_queue.put(zip_token)
-                continue
-
-            # download zip
-            asset_url = gen_dir_zip_download_url(zip_token)
-            try:
-                resp = requests.get(asset_url)
-            except Exception as e:
-                # record error and stop loop to finish thread
-                with error_lock:
-                    if not error and not task_event.is_set():
-                        error = e
-                        task_event.set()
-                        break
-
-            # extract zip to path and count success num if all groups down set event to finish thread
-            file_obj = io.BytesIO(resp.content)
-            if is_zipfile(file_obj):
-                with ZipFile(file_obj) as zp:
-                    zp.extractall(path)
-                with count_lock:
-                    count += 1
-                    if count == len(groups):
-                        task_event.set()
-
-    # threads to gen zip-token
-    tds = [Thread(target=_zip_token) for _ in range(2)]
-    # threads to query zip-token download and extract
-    tds.extend([Thread(target=_query_token) for _ in range(2)])
-    [t.start() for t in tds]
-    # main process loops till event done
-    while not task_event.is_set():
-        time.sleep(0.5)
-    # raise error in threads
-    if error:
-        raise error
+    for group in groups:
+        parent_dir = os.path.join(base_path, os.path.join(*group[0][:-1]))
+        file_list = [f[-1] for f in group]
+        fake_obj_id = {
+            'parent_dir': parent_dir,
+            'file_list': file_list,
+            'is_windows': False
+        }
+        zip_token = seafile_api.get_fileserver_access_token(
+            repo_id, json.dumps(fake_obj_id), 'download-multi', username,
+            use_onetime=False
+        )
+        while True:
+            progress = json.loads(seafile_api.query_zip_progress(zip_token))
+            if progress['zipped'] == progress['total']:
+                break
+            time.sleep(0.5)
+        asset_url = gen_dir_zip_download_url(zip_token)
+        resp = requests.get(asset_url)
+        file_obj = io.BytesIO(resp.content)
+        if is_zipfile(file_obj):
+            with ZipFile(file_obj) as zp:
+                zp.extractall(path)
