@@ -235,3 +235,28 @@ def post_asset_files(repo_id, dtable_uuid, username):
                 seafile_api.mkdir_with_parents(repo_id, '/', cur_file_parent_path[1:], username)
 
             seafile_api.post_file(repo_id, tmp_file_path, cur_file_parent_path, file_name, username)
+
+
+def download_files_to_path(username, repo_id, dtable_uuid, files, path):
+    """
+    download dtable's asset files to path
+    """
+    valid_file_obj_ids = []
+    base_path = os.path.join('/asset', dtable_uuid)
+    for file in files:
+        full_path = os.path.join(base_path, *file.split('/'))
+        obj_id = seafile_api.get_file_id_by_path(repo_id, full_path)
+        if not obj_id:
+            continue
+        valid_file_obj_ids.append((file, obj_id))
+
+    for file, obj_id in valid_file_obj_ids:
+        token = seafile_api.get_fileserver_access_token(
+            repo_id, obj_id, 'download', username,
+            use_onetime=False
+        )
+        file_name = os.path.basename(file)
+        file_url = gen_inner_file_get_url(token, file_name)
+        content = requests.get(file_url).content
+        with open(os.path.join(path, file_name), 'wb') as f:
+            f.write(content)

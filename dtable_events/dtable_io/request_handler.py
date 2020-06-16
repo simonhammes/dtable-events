@@ -1,3 +1,4 @@
+import cgi
 import json
 import jwt
 import logging
@@ -121,6 +122,54 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.end_headers()
             resp = {'success': True}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
+        else:
+            self.send_error(400, 'path %s invalid.' % path)
+
+    def do_POST(self):
+        auth = self.headers['Authorization'].split()
+        if not auth or auth[0].lower() != 'token' or len(auth) != 2:
+            self.send_error(403, 'Token invalid.')
+        token = auth[1]
+        if not token:
+            self.send_error(403, 'Token invalid.')
+
+        private_key = task_manager.conf['dtable_private_key']
+        try:
+            jwt.decode(token, private_key, algorithms=['HS256'])
+        except (jwt.ExpiredSignatureError, jwt.InvalidSignatureError) as e:
+            self.send_error(403, e)
+
+        path, _ = parse.splitquery(self.path)
+        datasets = cgi.FieldStorage(fp = self.rfile,headers = self.headers,environ = {'REQUEST_METHOD': 'POST'})
+
+        if path == '/dtable-asset-files':
+            if task_manager.is_workers_maxed():
+                self.send_error(400, 'dtable io server bussy.')
+                return
+
+            username = datasets.getvalue('username')
+            repo_id = datasets.getvalue('repo_id')
+            dtable_uuid = datasets.getvalue('dtable_uuid')
+            files = datasets.getvalue('files')
+
+            try:
+                task_id = task_manager.add_export_dtable_asset_files_task(
+                    username,
+                    repo_id,
+                    dtable_uuid,
+                    files,
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {'task_id': task_id}
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
         else:
