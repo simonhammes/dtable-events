@@ -8,6 +8,7 @@ from dtable_events.tasks.dtables_cleaner import DTablesCleaner
 from dtable_events.tasks.dtable_updates_sender import DTableUpdatesSender
 from dtable_events.tasks.dtable_notification_rules_scanner import DTableNofiticationRulesScanner
 from dtable_events.tasks.dtable_rows_counter import DTableRowsCounter
+from dtable_events.tasks.dtable_real_time_rows_counter import DTableRealTimeRowsCounter
 
 
 class App(object):
@@ -21,6 +22,7 @@ class App(object):
         self._dtable_updates_sender = DTableUpdatesSender()
         self._dtable_notification_rules_scanner = DTableNofiticationRulesScanner(config)
         self._dtable_rows_counter = DTableRowsCounter(config)
+        self._dtable_real_time_rows_counter = DTableRealTimeRowsCounter(config)
 
     def serve_forever(self):
         self._message_handler.start()
@@ -32,3 +34,4 @@ class App(object):
         self._dtable_updates_sender.start()
         self._dtable_notification_rules_scanner.start()
         self._dtable_rows_counter.start()
+        self._dtable_real_time_rows_counter.start()
