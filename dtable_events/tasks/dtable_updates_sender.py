@@ -3,7 +3,7 @@ import os
 import logging
 from threading import Thread, Event
 
-from dtable_events.utils import get_python_executable, run
+from dtable_events.utils import get_opt_from_conf_or_env, parse_bool, get_python_executable, run
 
 
 # DTABLE_WEB_DIR
@@ -22,19 +22,42 @@ __all__ = [
 
 class DTableUpdatesSender(object):
 
-    def __init__(self):
-        self._interval = 60
+    def __init__(self, config):
+        self._enabled = True
         self._logfile = None
-
+        self._interval = 60
         self._prepare_logfile()
+        self._parse_config(config)
 
     def _prepare_logfile(self):
         log_dir = os.environ.get('DTABLE_EVENTS_LOG_DIR', '')
         self._logfile = os.path.join(log_dir, 'dtable_updates_sender.log')
 
+    def _parse_config(self, config):
+        """parse send email related options from config file
+        """
+        section_name = 'EMAIL SENDER'
+        key_enabled = 'enabled'
+
+        if not config.has_section(section_name):
+            return
+
+        # enabled
+        enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=True)
+        enabled = parse_bool(enabled)
+        self._enabled = enabled
+
     def start(self):
+        if not self.is_enabled():
+            logging.warning('Can not start dtable updates sender: it is not enabled!')
+            return
+
         logging.info('Start dtable updates sender, interval = %s sec', self._interval)
+
         DTableUpdatesSenderTimer(self._interval, self._logfile).start()
+
+    def is_enabled(self):
+        return self._enabled
 
 
 class DTableUpdatesSenderTimer(Thread):

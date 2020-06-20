@@ -22,7 +22,7 @@ __all__ = [
 
 class EmailNoticesSender(object):
     def __init__(self, config):
-        self._enabled = False
+        self._enabled = True
         self._logfile = None
         self._interval = 30 * 60  # 30min
         self._prepare_logfile()
@@ -42,11 +42,9 @@ class EmailNoticesSender(object):
             return
 
         # enabled
-        enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=False)
+        enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=True)
         enabled = parse_bool(enabled)
-        if not enabled:
-            return
-        self._enabled = True
+        self._enabled = enabled
 
     def start(self):
         if not self.is_enabled():

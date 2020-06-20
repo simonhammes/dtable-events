@@ -19,7 +19,7 @@ class App(object):
         self._email_notices_sender = EmailNoticesSender(config)
         self._dtables_cleaner = DTablesCleaner(config)
         self._dtable_io_server = DTableIOServer(config, dtable_server_config)
-        self._dtable_updates_sender = DTableUpdatesSender()
+        self._dtable_updates_sender = DTableUpdatesSender(config)
         self._dtable_notification_rules_scanner = DTableNofiticationRulesScanner(config)
         self._dtable_rows_counter = DTableRowsCounter(config)
         self._dtable_real_time_rows_counter = DTableRealTimeRowsCounter(config)
