@@ -23,10 +23,11 @@ def setup_logger(name):
     logdir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
     log_file = os.path.join(logdir, 'dtable_events_io.log')
     handler = logging.FileHandler(log_file)
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s, %(module)s.%(funcName)s](%(name)s)[Line:%(lineno)d] %(message)s')
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     handler.setFormatter(formatter)
 
     logger = logging.getLogger(name)
+    logging.root.handlers = []  # remove logging handlers inherited from parent process
     logger.addHandler(handler)
 
     return logger
