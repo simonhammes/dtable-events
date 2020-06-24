@@ -43,7 +43,10 @@ class DTableIOServer(Thread):
             self._file_server_port = 8082
 
         self._dtable_private_key = dtable_server_config['private_key']
-        self._dtable_web_service_url = dtable_server_config['dtable_web_service_url']
+        try:
+            self._dtable_web_service_url = dtable_server_config['dtable_web_service_url']
+        except KeyError:
+            self._dtable_web_service_url = "http://127.0.0.1:8000"
 
     def run(self):
         self._server.serve_forever()
