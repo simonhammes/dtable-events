@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Index
 
 from dtable_events.db import Base
 
@@ -33,6 +33,8 @@ class UserActivities(Base):
     activity_id = Column(Integer, ForeignKey('activities.id', ondelete='CASCADE'))
     username = Column(String(length=255), nullable=False)
     timestamp = Column(DateTime, nullable=False, index=True)
+
+    __table_args__ = (Index('user_activities_username_timestamp', 'username', 'timestamp'),)
 
     def __init__(self, activity_id, username, timestamp):
         self.activity_id = activity_id
