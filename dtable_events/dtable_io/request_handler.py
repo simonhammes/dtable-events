@@ -153,6 +153,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             repo_id = datasets.getvalue('repo_id')
             dtable_uuid = datasets.getvalue('dtable_uuid')
             files = datasets.getvalue('files')
+            if not isinstance(files, list):
+                files = [files]
 
             try:
                 task_id = task_manager.add_export_dtable_asset_files_task(
