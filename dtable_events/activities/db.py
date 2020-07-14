@@ -124,7 +124,15 @@ def get_user_activities(session, username, start, limit):
     except Exception as e:
         logger.error('Get activities failed: %s' % e)
 
-    return [UserActivityDetail(activity) for activity in activities]
+    user_activities = list()
+    for activity in activities:
+        try:
+            user_activity = UserActivityDetail(activity)
+            user_activities.append(user_activity)
+        except Exception as e:
+            logger.warning(e)
+            continue
+    return user_activities
 
 
 def save_user_activities(session, event):
