@@ -1,4 +1,4 @@
 from dtable_events.db import init_db_session_class
 from dtable_events.activities.db import get_user_activities
 from dtable_events.app.event_redis import redis_connection
-from dtable_events.statistics.db import get_user_activity_stats_by_day
+from dtable_events.statistics.db import get_user_activity_stats_by_day, get_daily_active_users
