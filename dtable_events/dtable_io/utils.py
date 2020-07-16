@@ -58,6 +58,7 @@ def convert_dtable_export_file_and_image_url(dtable_content):
     tables = dtable_content.get('tables', [])
     for table in tables:
         rows = table.get('rows', [])
+        long_text_cols = {col['key'] for col in table.get('columns', []) if col['type'] == 'long-text'}
         for row in rows:
             for k, v in row.items():
                 if isinstance(v, list):
@@ -72,6 +73,13 @@ def convert_dtable_export_file_and_image_url(dtable_content):
                                 if k == 'url':
                                     file_name = '/'.join(v.split('/')[-2:]) # e.g. 2020-01/README.md
                                     item[k] = FILE_URL_PREFIX + file_name
+                # long-text with images
+                if k in long_text_cols and isinstance(v, dict) and v.get('text') and v.get('images'):
+                    for idx, item in enumerate(v['images']):
+                        if isinstance(item, str) and 'http' in item and 'images' in item:
+                            img_name = '/'.join(item.split('/')[-2:])
+                            v['images'][idx] = IMG_URL_PREFIX + img_name
+                            v['text'] = v['text'].replace(item, v['images'][idx])
     return dtable_content
 
 
@@ -166,6 +174,7 @@ def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtabl
 
     for table in tables:
         rows = table.get('rows', [])
+        long_text_cols = {col['key'] for col in table.get('columns', []) if col['type'] == 'long-text'}
         for idx, row in enumerate(rows):
             for k, v in row.items():
                 if isinstance(v, list):
@@ -185,6 +194,15 @@ def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtabl
                                                        dtable_uuid, 'files', file_name])
 
                                     item[k] = new_url
+                # long-text with images
+                if k in long_text_cols and isinstance(v, dict) and v.get('text') and v.get('images'):
+                    for idx, item in enumerate(v['images']):
+                        if isinstance(item, str) and item.startswith(IMG_URL_PREFIX):
+                            img_name = '/'.join(item.split('/')[-2:])
+                            new_url = '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
+                                               dtable_uuid, 'images', img_name])
+                            v['images'][idx] = new_url
+                            v['text'] = v['text'].replace(item, v['images'][idx])
     return dtable_content
 
 
