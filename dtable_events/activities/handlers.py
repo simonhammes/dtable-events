@@ -7,6 +7,7 @@ from threading import Thread, Event
 from dtable_events.app.event_redis import redis_connection
 from dtable_events.activities.db import save_or_update_or_delete
 from dtable_events.db import init_db_session_class
+from dtable_events.activities.notification_rules_per_update_utils import scan_notifications_rules_per_update
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,11 @@ class MessageHandler(Thread):
                 message = self._subscriber.get_message()
                 if message is not None:
                     event = json.loads(message['data'])
+                    row_id = event.get('row_id', '')
                     session = self._db_session_class()
                     try:
                         save_or_update_or_delete(session, event)
+                        scan_notifications_rules_per_update(row_id, db_session=session)
                     except Exception as e:
                         logger.error('Handle activities message failed: %s' % e)
                     finally:
