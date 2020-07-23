@@ -7,18 +7,27 @@ import datetime
 from datetime import date, timedelta, datetime
 import requests
 import jwt
-
-dtable_server_config_path = os.path.join(os.environ['CONF_PATH'], 'dtable_web_settings.py')
 import sys
-sys.path.insert(0, dtable_server_config_path)
-from dtable_web_settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
+
+logger = logging.getLogger(__name__)
+
+central_conf_dir = os.environ['SEAFILE_CENTRAL_CONF_DIR'] if 'SEAFILE_CENTRAL_CONF_DIR' in os.environ else ''
+local_settings_path = os.path.join(os.environ['DTABLE_WEB_DIR'], 'seahub', 'local_settings.py')
+sys.path.insert(0, local_settings_path)
+dtable_web_settings_path = os.path.join(central_conf_dir, 'dtable_web_settings.py')
+sys.path.insert(0, dtable_web_settings_path)
+
+try:
+    from dtable_web_settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
+except ImportError:
+    from local_settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
+except Exception as e:
+    logger.error("import dtable_web settings error: %s" % e)
 
 
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_VIEW_NOT_EMPTY = 'view_not_empty'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
-
-logger = logging.getLogger(__name__)
 
 
 def is_trigger_time_satisfy(last_trigger_time):
