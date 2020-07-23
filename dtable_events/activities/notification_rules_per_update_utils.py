@@ -21,7 +21,7 @@ CONDITION_NEAR_DEADLINE = 'near_deadline'
 logger = logging.getLogger(__name__)
 
 
-def is_trigger_time_satisft(last_trigger_time):
+def is_trigger_time_satisfy(last_trigger_time):
     if (datetime.utcnow() - last_trigger_time).total_seconds() >= 60 * 5:
         return True
 
@@ -132,7 +132,7 @@ def check_notification_rule(rule, row_id='', db_session=None):
     last_trigger_time = rule[4]
     dtable_id = rule[5]
 
-    if not is_trigger_time_satisft(last_trigger_time):
+    if not is_trigger_time_satisfy(last_trigger_time):
         return
 
     dtable_uuid = get_dtable_uuid_by_id(dtable_id, db_session)
