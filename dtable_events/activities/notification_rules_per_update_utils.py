@@ -11,18 +11,22 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-central_conf_dir = os.environ['SEAFILE_CENTRAL_CONF_DIR'] if 'SEAFILE_CENTRAL_CONF_DIR' in os.environ else ''
-local_settings_path = os.path.join(os.environ['DTABLE_WEB_DIR'], 'seahub', 'local_settings.py')
-sys.path.insert(0, local_settings_path)
-dtable_web_settings_path = os.path.join(central_conf_dir, 'dtable_web_settings.py')
-sys.path.insert(0, dtable_web_settings_path)
 
+# DTABLE_WEB_DIR
+dtable_web_dir = os.environ.get('DTABLE_WEB_DIR', '')
+if not dtable_web_dir:
+    logging.critical('dtable_web_dir is not set')
+    raise RuntimeError('dtable_web_dir is not set')
+if not os.path.exists(dtable_web_dir):
+    logging.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
+    raise RuntimeError('dtable_web_dir does not exist')
+
+sys.path.insert(0, dtable_web_dir)
 try:
-    from dtable_web_settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
-except ImportError:
-    from local_settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
-except Exception as e:
-    logger.error("import dtable_web settings error: %s" % e)
+    from seahub.settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
+except ImportError as e:
+    logger.critical("Can not import dtable_web settings: %s." % e)
+    raise RuntimeError("Can not import dtable_web settings: %s" % e)
 
 
 CONDITION_ROWS_MODIFIED = 'rows_modified'
