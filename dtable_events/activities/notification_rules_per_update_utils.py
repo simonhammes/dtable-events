@@ -35,26 +35,39 @@ def is_trigger_time_satisfy(last_trigger_time):
         return True
 
 
-def get_dtable_uuid_by_id(dtable_id, db_session):
-    cmd = "SELECT `uuid` FROM dtables WHERE id=:dtable_id"
-    results = db_session.execute(cmd, {'dtable_id': dtable_id})
-    if not results:
-        logger.error('get_dtable_uuid_by_id get data from database failed.')
-    for res in results:
-        return res[0]
-
-
 def update_rule_last_trigger_time(rule_id, db_session):
 
     cmd = "UPDATE dtable_notification_rules SET last_trigger_time=:new_time WHERE id=:rule_id"
     db_session.execute(cmd, {'new_time': datetime.utcnow(), 'rule_id': rule_id})
 
 
-def scan_notifications_rules_per_update(row_id, db_session):
-    sql = "SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_id` FROM dtable_notification_rules WHERE run_condition='per_update'"
-    rules = db_session.execute(sql)
+def list_views_by_row_id(row_id, dtable_uuid, table_id):
+    access_token = get_dtable_server_token(dtable_uuid)
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/rows/' + row_id + '/views/'
+    headers = {'Authorization': 'Token ' + access_token.decode('utf-8')}
+    res = requests.get(url, headers=headers)
+
+    if res.status_code != 200:
+        logger.error(res)
+    views = json.loads(res.content).get('views', [])
+    return views
+
+
+def scan_notifications_rules_per_update(event_data, db_session):
+    row_id = event_data.get('row_id', '')
+    message_dtable_uuid = event_data.get('dtable_uuid', '')
+    table_id = event_data.get('table_id', '')
+
+    sql = "SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules WHERE run_condition='per_update'" \
+          "AND dtable_uuid=:dtable_uuid"
+    rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid})
+
+    views = list_views_by_row_id(row_id, message_dtable_uuid, table_id)
+
     for rule in rules:
-        check_notification_rule(rule, row_id, db_session)
+        for view in views:
+            view_id = view.get('_id', '0000')
+            check_notification_rule(rule, message_dtable_uuid, table_id, view_id, row_id, db_session)
     db_session.commit()
 
 
@@ -133,33 +146,38 @@ def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, al
     return rows_near_deadline
 
 
-def check_notification_rule(rule, row_id='', db_session=None):
+def check_notification_rule(rule, message_dtable_uuid, message_table_id, message_view_id, row_id='', db_session=None):
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
     creator = rule[3]
     last_trigger_time = rule[4]
-    dtable_id = rule[5]
+    dtable_uuid = rule[5]
 
     if not is_trigger_time_satisfy(last_trigger_time):
         return
 
-    dtable_uuid = get_dtable_uuid_by_id(dtable_id, db_session)
+    if message_dtable_uuid != dtable_uuid:
+        return
 
     trigger = json.loads(trigger)
     action = json.loads(action)
     users = action.get('users', [])
     msg = action.get('default_msg', '')
     rule_name = trigger.get('rule_name', '')
+    table_id = trigger['table_id']
+    view_id = trigger['view_id']
+
+    if message_table_id != table_id:
+        return
+
+    if message_view_id != view_id:
+        return
 
     # send notification
     if trigger['condition'] == CONDITION_ROWS_MODIFIED:
         if not row_id:
             return
-
-        table_id = trigger['table_id']
-        view_id = trigger['view_id']
-
         detail = {
             'table_id': table_id,
             'view_id': view_id,
@@ -173,8 +191,6 @@ def check_notification_rule(rule, row_id='', db_session=None):
             send_notification(dtable_uuid, user, detail)
 
     elif trigger['condition'] == CONDITION_VIEW_NOT_EMPTY:
-        table_id = trigger['table_id']
-        view_id = trigger['view_id']
         if is_view_not_empty(dtable_uuid, table_id, view_id):
             detail = {
                 'table_id': table_id,
@@ -190,8 +206,6 @@ def check_notification_rule(rule, row_id='', db_session=None):
     elif trigger['condition'] == CONDITION_NEAR_DEADLINE:
         date_column_name = trigger['date_column_name']
         alarm_days = trigger['alarm_days']
-        table_id = trigger['table_id']
-        view_id = trigger['view_id']
         rows_near_deadline = list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days)
         if not rows_near_deadline:
             return
