@@ -28,11 +28,10 @@ class MessageHandler(Thread):
                 message = self._subscriber.get_message()
                 if message is not None:
                     event = json.loads(message['data'])
-                    row_id = event.get('row_id', '')
                     session = self._db_session_class()
                     try:
                         save_or_update_or_delete(session, event)
-                        scan_notifications_rules_per_update(row_id, db_session=session)
+                        scan_notifications_rules_per_update(event, db_session=session)
                     except Exception as e:
                         logger.error('Handle activities message failed: %s' % e)
                     finally:
