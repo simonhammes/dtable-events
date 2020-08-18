@@ -35,6 +35,8 @@ CONDITION_NEAR_DEADLINE = 'near_deadline'
 
 
 def is_trigger_time_satisfy(last_trigger_time):
+    if last_trigger_time == None:
+        return True
     if (datetime.utcnow() - last_trigger_time).total_seconds() >= 60 * 5:
         return True
 
