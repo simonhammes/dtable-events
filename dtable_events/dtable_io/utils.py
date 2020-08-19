@@ -221,7 +221,16 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     content_json_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/', 'content.json')
     with open(content_json_file_path, 'r') as f:
         content_json = f.read()
-    content_json = convert_dtable_import_file_and_image_url(json.loads(content_json), workspace_id, dtable_uuid)
+
+    try:
+        content = json.loads(content_json)
+    except:
+        content = ''
+    if not content:
+        seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
+        return
+
+    content_json = convert_dtable_import_file_and_image_url(content, workspace_id, dtable_uuid)
     with open(content_json_file_path, 'w') as f:
         f.write(json.dumps(content_json))
 
