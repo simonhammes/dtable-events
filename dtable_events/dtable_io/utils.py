@@ -4,6 +4,7 @@ import os
 import time
 import logging
 import io
+import multiprocessing
 from zipfile import ZipFile, is_zipfile
 
 from django.utils.http import urlquote
@@ -16,7 +17,7 @@ FILE_URL_PREFIX = 'file://dtable-bundle/asset/files/'
 IMG_URL_PREFIX = 'file://dtable-bundle/asset/images/'
 
 
-def setup_logger(name):
+def setup_logger():
     """
     setup logger for dtable io
     """
@@ -26,7 +27,7 @@ def setup_logger(name):
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     handler.setFormatter(formatter)
 
-    logger = logging.getLogger(name)
+    logger = multiprocessing.get_logger()
     logging.root.handlers = []  # remove logging handlers inherited from parent process
     logger.addHandler(handler)
 
