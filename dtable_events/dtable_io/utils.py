@@ -28,7 +28,6 @@ def setup_logger():
     handler.setFormatter(formatter)
 
     logger = multiprocessing.get_logger()
-    logging.root.handlers = []  # remove logging handlers inherited from parent process
     logger.addHandler(handler)
 
     return logger
