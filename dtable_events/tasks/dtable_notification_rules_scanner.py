@@ -40,7 +40,9 @@ class DTableNofiticationRulesScanner(object):
         key_interval = 'interval'
 
         if not config.has_section(section_name):
-            return
+            section_name = 'NOTIFY SCANNER'
+            if not config.has_section(section_name):
+                return
 
         # enabled
         enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=False)
