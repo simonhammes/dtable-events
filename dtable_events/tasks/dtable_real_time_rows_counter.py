@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from threading import Thread, Event
 
-from dtable_events.app.event_redis import redis_connection
+from dtable_events.app.event_redis import RedisClient
 from dtable_events.db import init_db_session_class
 
 logger = logging.getLogger(__name__)
@@ -58,16 +58,16 @@ class DTableRealTimeRowsCounter(Thread):
     def __init__(self, config):
         Thread.__init__(self)
         self._finished = Event()
-        self._redis_connection = redis_connection(config)
         self._db_session_class = init_db_session_class(config)
-        self._subscriber = self._redis_connection.pubsub(ignore_subscribe_messages=True)
-        self._subscriber.subscribe('count-rows')
+        self._redis_client = RedisClient(config)
+
 
     def run(self):
         logger.info('Starting handle table rows count...')
+        subscriber = self._redis_client.get_subscriber('count-rows')
         while not self._finished.is_set():
             try:
-                message = self._subscriber.get_message()
+                message = subscriber.get_message(timeout=self._redis_client.get_msg_timeout)
                 if message is not None:
                     dtable_uuids = json.loads(message['data'])
                     session = self._db_session_class()
@@ -81,3 +81,4 @@ class DTableRealTimeRowsCounter(Thread):
                     time.sleep(0.5)
             except Exception as e:
                 logger.error('Failed get message from redis: %s' % e)
+                subscriber = self._redis_client.get_subscriber('count-rows')

@@ -5,7 +5,7 @@ import logging
 from threading import Thread, Event
 
 from dtable_events.db import init_db_session_class
-from dtable_events.app.event_redis import redis_connection
+from dtable_events.app.event_redis import RedisClient
 from dtable_events.statistics.db import save_user_activity_stat
 
 logger = logging.getLogger(__name__)
@@ -15,16 +15,16 @@ class UserActivityCounter(Thread):
     def __init__(self, config):
         Thread.__init__(self)
         self._finished = Event()
-        self._redis_connection = redis_connection(config)
         self._db_session_class = init_db_session_class(config)
-        self._subscriber = self._redis_connection.pubsub(ignore_subscribe_messages=True)
-        self._subscriber.subscribe('user-activity-statistic')
+        self._redis_client = RedisClient(config)
 
     def run(self):
         logger.info('Starting count user activity...')
+        subscriber = self._redis_client.get_subscriber('user-activity-statistic')
+
         while not self._finished.is_set():
             try:
-                message = self._subscriber.get_message()
+                message = subscriber.get_message(timeout=self._redis_client.get_msg_timeout)
                 if message is not None:
                     msg = json.loads(message['data'])
                     session = self._db_session_class()
@@ -38,3 +38,4 @@ class UserActivityCounter(Thread):
                     time.sleep(0.5)
             except Exception as e:
                 logger.error('Failed get message from redis: %s' % e)
+                subscriber = self._redis_client.get_subscriber('user-activity-statistic')

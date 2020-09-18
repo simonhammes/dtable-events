@@ -13,3 +13,4 @@ stats-logs/
 *.cnf
 /.idea
 .DS_Store
+/.vscode
