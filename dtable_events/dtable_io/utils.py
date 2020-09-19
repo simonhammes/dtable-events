@@ -163,6 +163,8 @@ def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
 
 
 def copy_src_forms_to_json(dtable_uuid, tmp_file_path, db_session):
+    if not db_session:
+        return
     sql = "SELECT `username`, `form_config`, `share_type` FROM dtable_forms WHERE dtable_uuid=:dtable_uuid"
     src_forms = db_session.execute(sql, {'dtable_uuid': ''.join(dtable_uuid.split('-'))})
     src_forms_json = []
@@ -314,6 +316,8 @@ def add_a_form_to_db(form, workspace_id, dtable_uuid, db_session):
 
 
 def create_forms_from_src_dtable(workspace_id, dtable_uuid, db_session):
+    if not db_session:
+        return
     forms_json_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/', 'forms.json')
     if not os.path.exists(forms_json_path):
         return
