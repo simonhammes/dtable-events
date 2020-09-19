@@ -7,14 +7,10 @@ logger = logging.getLogger(__name__)
 
 class RedisClient(object):
 
-    def __init__(self, config):
+    def __init__(self, config, socket_connect_timeout=30, socket_timeout=None):
         self._host = '127.0.0.1'
         self._port = 6379
         self._password = None
-        self._socket_timeout = 20
-        self._socket_connect_timeout = 20
-
-        self.get_msg_timeout = 20
         self._parse_config(config)
 
         """
@@ -23,7 +19,7 @@ class RedisClient(object):
         """
         self.connection = redis.Redis(
             host=self._host, port=self._port, password=self._password,
-            socket_timeout=self._socket_timeout, socket_connect_timeout=self._socket_connect_timeout
+            socket_timeout=socket_timeout, socket_connect_timeout=socket_connect_timeout
             )
 
 
@@ -36,15 +32,6 @@ class RedisClient(object):
 
         if config.has_option('REDIS', 'password'):
             self._password = config.get('REDIS', 'password')
-
-        if config.has_option('REDIS', 'socket_timeout'):
-            self._socket_timeout = config.get('REDIS', 'socket_timeout')
-
-        if config.has_option('REDIS', 'socket_connect_timeout'):
-            self._socket_connect_timeout = config.get('REDIS', 'socket_connect_timeout')
-
-        if config.has_option('REDIS', 'get_msg_timeout'):
-            self.get_msg_timeout = config.get('REDIS', 'get_msg_timeout')
 
 
     def get_subscriber(self, channel_name):

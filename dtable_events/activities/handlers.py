@@ -25,7 +25,7 @@ class MessageHandler(Thread):
         
         while not self._finished.is_set():
             try:
-                message = subscriber.get_message(timeout=self._redis_client.get_msg_timeout)
+                message = subscriber.get_message()
                 if message is not None:
                     event = json.loads(message['data'])
                     session = self._db_session_class()
