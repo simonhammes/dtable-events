@@ -3,7 +3,7 @@ import os
 from dtable_events.dtable_io.utils import prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json
-
+from dtable_events.db import init_db_session_class
 
 def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     # delete tmp files/dirs
@@ -12,7 +12,7 @@ def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     if os.path.exists(tmp_zip_path):
         os.remove(tmp_zip_path)
 
-def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable_file_dir_id, asset_dir_id, db_session_class):
+def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable_file_dir_id, asset_dir_id, config):
     """
     1. prepare file content at /tmp/dtable-io/<dtable_id>/dtable_asset/...
     2. make zip file
@@ -26,7 +26,7 @@ def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable
                                  'dtable_asset/')  # used to store asset files and json from file_server
     tmp_zip_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'zip_file') + '.zip'  # zip path of zipped xxx.dtable
     try:
-        db_session = db_session_class()
+        db_session = init_db_session_class(config)()
     except Exception as e:
         db_session = None
         dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
@@ -76,7 +76,7 @@ def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable
     # we remove '/tmp/dtable-io/<dtable_uuid>' in dtable web api
 
 
-def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, db_session_class):
+def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, config):
     """
     post files at /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
     unzip django uploaded tmp file is suppose to be done in dtable-web api.
@@ -86,7 +86,7 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
     dtable_io_logger.info('Start import DTable: {}.'.format(dtable_uuid))
 
     try:
-        db_session = db_session_class()
+        db_session = init_db_session_class(config)()
     except Exception as e:
         db_session = None
         dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))

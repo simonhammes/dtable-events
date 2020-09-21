@@ -7,7 +7,7 @@ from seaserv import seafile_api
 
 class TaskManager:
 
-    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, io_task_timeout, db_session_class):
+    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, io_task_timeout, config):
         self.task_pool = {}
         self.conf = {
             'dtable_private_key': dtable_private_key,
@@ -16,7 +16,7 @@ class TaskManager:
             'io_task_timeout': io_task_timeout,
             'workers': workers,
         }
-        self.db_session_class = db_session_class
+        self.config = config
 
     def is_valid_task_id(self, task_id):
         return task_id in self.task_pool.keys()
@@ -37,7 +37,7 @@ class TaskManager:
 
         task = multiprocessing.Process(target=get_dtable_export_content,
                                                  args=(username, repo_id, dtable_name, dtable_uuid,
-                                                 dtable_file_id, asset_dir_id, self.db_session_class))
+                                                 dtable_file_id, asset_dir_id, self.config))
         task.start()
         task_id = str(int(time.time()*1000))
         self.task_pool[task_id] = task
@@ -48,7 +48,7 @@ class TaskManager:
         from dtable_events.dtable_io import post_dtable_import_files
 
         task = multiprocessing.Process(target=post_dtable_import_files, args=(username, repo_id, 
-                                                workspace_id, dtable_uuid, dtable_file_name, self.db_session_class))
+                                                workspace_id, dtable_uuid, dtable_file_name, self.config))
         task.start()
         task_id = str(int(time.time()*1000))
         self.task_pool[task_id] = task
