@@ -4,7 +4,11 @@ import os
 import time
 import logging
 import io
+import uuid
 import multiprocessing
+import datetime
+import random
+import string
 from zipfile import ZipFile, is_zipfile
 
 from django.utils.http import urlquote
@@ -158,6 +162,25 @@ def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
             zp.extractall(os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_asset'))
 
 
+def copy_src_forms_to_json(dtable_uuid, tmp_file_path, db_session):
+    if not db_session:
+        return
+    sql = "SELECT `username`, `form_config`, `share_type` FROM dtable_forms WHERE dtable_uuid=:dtable_uuid"
+    src_forms = db_session.execute(sql, {'dtable_uuid': ''.join(dtable_uuid.split('-'))})
+    src_forms_json = []
+    for src_form in src_forms:
+        form = {
+            'username': src_form[0],
+            'form_config': src_form[1],
+            'share_type': src_form[2],
+        }
+        src_forms_json.append(form)
+    if src_forms_json:
+        # os.makedirs(os.path.join(tmp_file_path, 'forms.json'))
+        with open(os.path.join(tmp_file_path, 'forms.json'), 'w+') as fp:
+            fp.write(json.dumps(src_forms_json))
+
+
 def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtable_uuid):
     """ notice that this function receive a python dict and return a python dict
         json related operations are excluded
@@ -252,7 +275,7 @@ def post_asset_files(repo_id, dtable_uuid, username):
     tmp_extracted_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/')
     for root, dirs, files in os.walk(tmp_extracted_path):
         for file_name in files:
-            if file_name == 'content.json':
+            if file_name in ['content.json', 'forms.json']:
                 continue
             inner_path = root[len(tmp_extracted_path)+6:]  # path inside zip
             tmp_file_path = os.path.join(root, file_name)
@@ -263,6 +286,49 @@ def post_asset_files(repo_id, dtable_uuid, username):
                 seafile_api.mkdir_with_parents(repo_id, '/', cur_file_parent_path[1:], username)
 
             seafile_api.post_file(repo_id, tmp_file_path, cur_file_parent_path, file_name, username)
+
+
+def gen_form_id(length=4):
+    return ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(length))
+
+
+def add_a_form_to_db(form, workspace_id, dtable_uuid, db_session):
+    # check form id
+    form_id = gen_form_id()
+    sql_check_form_id = 'SELECT `id` FROM dtable_forms WHERE form_id=:form_id'
+    while db_session.execute(sql_check_form_id, {'form_id': form_id}).rowcount > 0:
+        form_id = gen_form_id()
+
+    sql = "INSERT INTO dtable_forms (`username`, `workspace_id`, `dtable_uuid`, `form_id`, `form_config`, `token`, `share_type`, `created_at`)" \
+        "VALUES (:username, :workspace_id, :dtable_uuid, :form_id, :form_config, :token, :share_type, :created_at)"
+
+    db_session.execute(sql, {
+        'username': form['username'],
+        'workspace_id': workspace_id,
+        'dtable_uuid': ''.join(dtable_uuid.split('-')),
+        'form_id': form_id,
+        'form_config': form['form_config'],
+        'token': str(uuid.uuid4()),
+        'share_type': form['share_type'],
+        'created_at': datetime.datetime.now(),
+        })
+    db_session.commit()
+
+
+def create_forms_from_src_dtable(workspace_id, dtable_uuid, db_session):
+    if not db_session:
+        return
+    forms_json_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/', 'forms.json')
+    if not os.path.exists(forms_json_path):
+        return
+    
+    with open(forms_json_path, 'r') as fp:
+        forms_json = fp.read()
+    forms = json.loads(forms_json)
+    for form in forms:
+        if ('username' not in form) or ('form_config' not in form) or ('share_type' not in form):
+            continue
+        add_a_form_to_db(form, workspace_id, dtable_uuid, db_session)
 
 
 def download_files_to_path(username, repo_id, dtable_uuid, files, path):
