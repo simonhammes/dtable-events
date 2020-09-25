@@ -87,10 +87,10 @@ class WebhookJobs(Base):
     response_status = Column(Integer)
     response_body = Column(Text)
 
-    def __init__(self, webhook_id, requst_body, url, request_headers=None, status=PENDING):
+    def __init__(self, webhook_id, request_body, url, request_headers=None, status=PENDING):
         self.webhook_id = webhook_id
         self.url = url
-        self.request_body = json.dumps(requst_body) if isinstance(requst_body, dict) else str(requst_body)
+        self.request_body = json.dumps(request_body) if isinstance(request_body, dict) else str(request_body)
         self.created_at = datetime.now()
         if request_headers:
             self.request_headers = json.dumps(request_headers) if isinstance(request_headers, dict) else str(request_headers)

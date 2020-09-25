@@ -24,7 +24,7 @@ class Webhooker:
     3. generate webhook jobs according to webhooks, including request body, headers...etc
     4. trigger jobs one by one
 
-    Each WebhookJob instance has 4 states, PENDING, SENDING, SUCCEEE and FAILURE.
+    Each WebhookJob instance has 4 states, PENDING, SENDING, SUCCESS and FAILURE.
     Once a job instance generated, it's in PENDING state and it will be in SENDING when being sent.
     It is only 20X that the status code of response from hook triggered is, job's state is SUCCESS.
     In situation where request failed or response status isn't 20X, state is FAILURE.
