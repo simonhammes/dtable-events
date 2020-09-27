@@ -5,6 +5,8 @@ from hashlib import sha1
 
 from sqlalchemy import Column, Integer, String, DateTime, Text, text
 
+from sqlalchemy.dialects.mysql import INTEGER, TINYINT
+
 from dtable_events.db import Base
 
 logger = logging.getLogger(__name__)
@@ -19,14 +21,15 @@ FAILURE = 3
 class Webhooks(Base):
     """
     webhooks model
-    just for read in dtable-events, so model is perhaps fragmentary
     """
     __tablename__ = 'webhooks'
 
-    id = Column(Integer, primary_key=True)
+    id = Column(INTEGER(unsigned=True), primary_key=True, autoincrement=True)
     dtable_uuid = Column(String(32), nullable=False, index=True)
     url = Column(String(2000), nullable=False)
-    settings = Column(Text, nullable=False)
+    settings = Column(Text)
+    creator = Column(String(255), nullable=False)
+    created_at = Column(DateTime, server_default=text('current_timestamp(6)'))
 
     @property
     def hook_settings(self):
@@ -76,11 +79,11 @@ class WebhookJobs(Base):
     """
     __tablename__ = 'webhook_jobs'
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    webhook_id = Column(String(length=36), index=True, nullable=False)
-    created_at = Column(DateTime)
+    id = Column(INTEGER(unsigned=True), primary_key=True, autoincrement=True)
+    webhook_id = Column(INTEGER(unsigned=True), index=True, nullable=False)
+    created_at = Column(DateTime, server_default=text('current_timestamp(6)'))
     trigger_at = Column(DateTime)
-    status = Column(Integer, default=0, index=True)
+    status = Column(TINYINT, default=0, index=True)
     url = Column(String(2000), nullable=False)
     request_headers = Column(Text)
     request_body = Column(Text)
