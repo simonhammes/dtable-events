@@ -89,10 +89,9 @@ class TaskManager(object):
                     self.tasks_map.pop(task_id, None)
 
     def run(self):
-        for i in range(self.conf['workers']):
-            t = threading.Thread(target=self.handle_task)
-            t.setDaemon(True)
-            t.start()
+        t = threading.Thread(target=self.handle_task)
+        t.setDaemon(True)
+        t.start()
 
     def cancel_task(self, task_id):
         self.tasks_map.pop(task_id, None)
