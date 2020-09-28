@@ -79,13 +79,14 @@ class TaskManager(object):
                 task_id = self.tasks_queue.get(timeout=2)
             except queue.Empty:
                 continue
-
-            task = self.tasks_map[task_id]
-            try:
-                task[0](*task[1])
-                self.tasks_map[task_id] = 'success'
-            except Exception as e:
-                logging.error('Failed to handle task, error: %s' % e)
+            else:
+                task = self.tasks_map[task_id]
+                try:
+                    task[0](*task[1])
+                    self.tasks_map[task_id] = 'success'
+                except Exception as e:
+                    logging.error('Failed to handle task %s, error: %s' % (task_id, e))
+                    self.tasks_map.pop(task_id, None)
 
     def run(self):
         for i in range(self.conf['workers']):
