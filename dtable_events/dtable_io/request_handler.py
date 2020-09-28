@@ -29,8 +29,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         arguments = parse.parse_qs(arguments)
         if path == '/add-export-task':
 
-            if task_manager.is_workers_maxed():
-                self.send_error(400, 'dtable io server bussy.')
+            if task_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = arguments['username'][0]
@@ -58,8 +58,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
         elif path == '/add-import-task':
 
-            if task_manager.is_workers_maxed():
-                self.send_error(400, 'dtable io server bussy.')
+            if task_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = arguments['username'][0]
@@ -145,8 +145,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         datasets = cgi.FieldStorage(fp = self.rfile,headers = self.headers,environ = {'REQUEST_METHOD': 'POST'})
 
         if path == '/dtable-asset-files':
-            if task_manager.is_workers_maxed():
-                self.send_error(400, 'dtable io server bussy.')
+            if task_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = datasets.getvalue('username')

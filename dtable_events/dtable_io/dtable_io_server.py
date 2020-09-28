@@ -1,3 +1,5 @@
+import time
+import logging
 from http.server import HTTPServer
 from threading import Thread
 
@@ -13,7 +15,8 @@ class DTableIOServer(Thread):
             self._workers, self._dtable_private_key, self._dtable_web_service_url, self._file_server_port,
             self._io_task_timeout, config
         )
-        self._server= HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
+        task_manager.run()
+        self._server = HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
 
     def _parse_config(self, config, dtable_server_config):
         if config.has_option('DTABLE-IO', 'host'):
@@ -48,5 +51,11 @@ class DTableIOServer(Thread):
             self._dtable_web_service_url = "http://127.0.0.1:8000"
 
     def run(self):
-        self._server.serve_forever()
-
+        while 1:
+            try:
+                self._server.serve_forever()
+            except Exception as e:
+                logging.error(e)
+                time.sleep(5)
+                self._server.server_close()
+                self._server = HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
