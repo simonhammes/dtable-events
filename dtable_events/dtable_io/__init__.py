@@ -1,9 +1,12 @@
 import shutil
 import os
-from dtable_events.dtable_io.utils import prepare_dtable_json, \
+from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json
 from dtable_events.db import init_db_session_class
+
+dtable_io_logger = setup_logger()
+
 
 def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     # delete tmp files/dirs
@@ -18,8 +21,6 @@ def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable
     2. make zip file
     3. return zip file's content
     """
-    from dtable_events.dtable_io.utils import setup_logger
-    dtable_io_logger = setup_logger()
     dtable_io_logger.info('Start prepare /tmp/dtable-io/{}/zip_file.zip for export DTable.'.format(dtable_uuid))
 
     tmp_file_path = os.path.join('/tmp/dtable-io', dtable_uuid,
@@ -81,8 +82,6 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
     post files at /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
     unzip django uploaded tmp file is suppose to be done in dtable-web api.
     """
-    from dtable_events.dtable_io.utils import setup_logger
-    dtable_io_logger = setup_logger()
     dtable_io_logger.info('Start import DTable: {}.'.format(dtable_uuid))
 
     try:
@@ -122,8 +121,6 @@ def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id
     """
     export asset files from dtable
     """
-    from dtable_events.dtable_io.utils import setup_logger
-    dtable_io_logger = setup_logger()
     files = [f.strip().strip('/') for f in files]
     tmp_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'asset-files', 
                                  str(task_id))           # used to store files
