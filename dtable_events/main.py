@@ -14,12 +14,6 @@ def main():
     args = parser.parse_args()
     app_logger = LogConfigurator(args.loglevel, args.logfile)
 
-    if args.logfile:
-        log_dir = os.path.dirname(os.path.realpath(args.logfile))
-        os.environ['DTABLE_EVENTS_LOG_DIR'] = log_dir
-
-    os.environ['DTABLE_EVENTS_CONFIG_FILE'] = os.path.expanduser(args.config_file)
-
     dtable_server_config_path = os.environ['DTABLE_SERVER_CONFIG']
     with open(dtable_server_config_path) as f:
         dtable_server_config = json.load(f)

@@ -25,7 +25,7 @@ def setup_logger():
     """
     setup logger for dtable io
     """
-    logdir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
+    logdir = os.path.join(os.environ.get('LOG_DIR', ''))
     log_file = os.path.join(logdir, 'dtable_events_io.log')
     handler = logging.FileHandler(log_file)
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
