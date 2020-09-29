@@ -39,14 +39,12 @@ class Webhooker:
         self._db_session_class = scoped_session(init_db_session_class(config))
         self._redis_client = RedisClient(config)
         self._subscriber = self._redis_client.get_subscriber('table-events')
-        self.event_queue = Queue()
         self.post_queue = Queue()
 
     def start(self):
         logger.info('Starting handle webhook jobs...')
         self.recover_from_db()
         tds = [Thread(target=self.sub_from_redis, daemon=True)]
-        tds.extend([Thread(target=self.checkout_webhook_jobs, daemon=True) for i in range(2)])
         tds.extend([Thread(target=self.post_webhook_jobs, daemon=True) for i in range(2)])
         [td.start() for td in tds]
         while True:
@@ -71,32 +69,29 @@ class Webhooker:
                         except:
                             continue
 
-                        self.event_queue.put({
+                        self.checkout_webhook_jobs({
                             'data': data,
                             'event': 'update'
                         })
             except:
                 self._subscriber = self._redis_client.get_subscriber('table-events')
 
-    def checkout_webhook_jobs(self):
-        while True:
-            # get event
-            event = self.event_queue.get()
-            data = event['data']
-            # get dtable_uuid
-            dtable_uuid = data.get('dtable_uuid')
-            # get dtable_uuid all webhooks
-            with DB(self._db_session_class()) as db_session:
-                hooks = db_session.query(Webhooks).filter(Webhooks.dtable_uuid==dtable_uuid).all()
-                # validate webhooks one by one and generate / put webhook_jobs
-                for hook in hooks:
-                    request_body = hook.gen_request_body(event)
-                    request_headers = hook.gen_request_headers()
-                    hook_job = WebhookJobs(hook.id, request_body, hook.url, request_headers=request_headers)
-                    # add and commit
-                    db_session.add(hook_job)
-                    db_session.commit()
-                    self.post_queue.put(hook_job)
+    def checkout_webhook_jobs(self, event):
+        data = event['data']
+        # get dtable_uuid
+        dtable_uuid = data.get('dtable_uuid')
+        # get dtable_uuid all webhooks
+        with DB(self._db_session_class()) as db_session:
+            hooks = db_session.query(Webhooks).filter(Webhooks.dtable_uuid==dtable_uuid).all()
+            # validate webhooks one by one and generate / put webhook_jobs
+            for hook in hooks:
+                request_body = hook.gen_request_body(event)
+                request_headers = hook.gen_request_headers()
+                hook_job = WebhookJobs(hook.id, request_body, hook.url, request_headers=request_headers)
+                # add and commit
+                db_session.add(hook_job)
+                db_session.commit()
+                self.post_queue.put(hook_job)
 
     def post_webhook_jobs(self):
         while True:
