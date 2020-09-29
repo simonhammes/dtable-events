@@ -29,7 +29,7 @@ class DTableNofiticationRulesScanner(object):
         self._prepare_logfile()
 
     def _prepare_logfile(self):
-        logdir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
+        logdir = os.path.join(os.environ.get('LOG_DIR', ''))
         self._logfile = os.path.join(logdir, 'dtables_notification_rule_scanner.log')
 
     def _parse_config(self, config):

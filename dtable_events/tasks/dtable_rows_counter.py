@@ -29,7 +29,7 @@ class DTableRowsCounter(object):
         self._prepara_config(config)
 
     def _prepare_logfile(self):
-        logdir = os.path.join(os.environ.get('DTABLE_EVENTS_LOG_DIR', ''))
+        logdir = os.path.join(os.environ.get('LOG_DIR', ''))
         self._logfile = os.path.join(logdir, 'dtable_rows_counter.log')
 
     def _prepara_config(self, config):

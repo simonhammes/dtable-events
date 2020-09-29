@@ -30,7 +30,7 @@ class DTableUpdatesSender(object):
         self._parse_config(config)
 
     def _prepare_logfile(self):
-        log_dir = os.environ.get('DTABLE_EVENTS_LOG_DIR', '')
+        log_dir = os.environ.get('LOG_DIR', '')
         self._logfile = os.path.join(log_dir, 'dtable_updates_sender.log')
 
     def _parse_config(self, config):
