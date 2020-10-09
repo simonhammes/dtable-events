@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, Text, Index
 
 from dtable_events.db import Base
 
@@ -26,17 +26,33 @@ class Activities(Base):
         self.op_app = op_app
 
 
-class UserActivities(Base):
-    __tablename__ = 'user_activities'
+class TableActivities(Base):
+    __tablename__ = 'table_activities'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    activity_id = Column(Integer, ForeignKey('activities.id', ondelete='CASCADE'))
+    uuid_date_md5 = Column(String(length=32), nullable=False, unique=True)
+    dtable_uuid = Column(String(length=36), nullable=False, index=True)
+    op_date = Column(DateTime, nullable=False, index=True)
+
+    def __init__(self, uuid_date_md5, dtable_uuid, op_date):
+        self.uuid_date_md5 = uuid_date_md5
+        self.dtable_uuid = dtable_uuid
+        self.op_date = op_date
+
+
+class UserDTables(Base):
+    __tablename__ = 'user_dtables'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_uuid_date_md5 = Column(String(length=32), nullable=False, unique=True)
     username = Column(String(length=255), nullable=False)
-    timestamp = Column(DateTime, nullable=False, index=True)
+    dtable_uuid = Column(String(length=36), nullable=False)
+    op_date = Column(DateTime, nullable=False, index=True)
 
-    __table_args__ = (Index('user_activities_username_timestamp', 'username', 'timestamp'),)
+    __table_args__ = (Index('user_dtables_user_uuid_date', 'username', 'dtable_uuid', 'op_date'),)
 
-    def __init__(self, activity_id, username, timestamp):
-        self.activity_id = activity_id
+    def __init__(self, user_uuid_date_md5, username, dtable_uuid, op_date):
+        self.user_uuid_date_md5 = user_uuid_date_md5
         self.username = username
-        self.timestamp = timestamp
+        self.dtable_uuid = dtable_uuid
+        self.op_date = op_date

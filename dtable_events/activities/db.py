@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
+from hashlib import md5
 from datetime import datetime, timedelta
 
-from sqlalchemy import desc
+from sqlalchemy import desc, func, case
 from seaserv import ccnet_api
 
-from dtable_events.activities.models import Activities, UserActivities
+from dtable_events.activities.models import Activities, TableActivities, UserDTables
 
 logger = logging.getLogger(__name__)
 
 
-class UserActivityDetail(object):
+class TableActivityDetail(object):
     def __init__(self, activity):
         self.id = activity.id
         self.dtable_uuid = activity.dtable_uuid
@@ -75,7 +76,7 @@ def save_or_update_or_delete(session, event):
                 detail['row_name'] = event['row_name']
 
             detail = json.dumps(detail)
-            update_user_activity_timestamp(session, row.id, op_time, detail)
+            update_activity_timestamp(session, row.id, op_time, detail)
         else:
             save_user_activities(session, event)
     elif event['op_type'] == 'delete_row':
@@ -90,7 +91,6 @@ def save_or_update_or_delete(session, event):
         row = q.first()
         if row and row.op_type == 'insert_row':
             session.query(Activities).filter(Activities.id == row.id).delete()
-            session.query(UserActivities).filter(UserActivities.activity_id == row.id).delete()
             session.commit()
         else:
             save_user_activities(session, event)
@@ -98,16 +98,43 @@ def save_or_update_or_delete(session, event):
         save_user_activities(session, event)
 
 
-def update_user_activity_timestamp(session, activity_id, op_time, detail):
+def update_activity_timestamp(session, activity_id, op_time, detail):
     activity = session.query(Activities).filter(Activities.id == activity_id)
     activity.update({"op_time": op_time, "detail": detail})
-    user_activities = session.query(UserActivities).\
-        filter(UserActivities.activity_id == activity_id)
-    user_activities.update({"timestamp": op_time})
     session.commit()
 
 
-def get_user_activities(session, username, start, limit):
+def get_table_activities(session, username, start, limit):
+    if start < 0:
+        logger.error('start must be non-negative')
+        raise RuntimeError('start must be non-negative')
+
+    if limit <= 0:
+        logger.error('limit must be positive')
+        raise RuntimeError('limit must be positive')
+
+    table_activities = list()
+    try:
+        q = session.query(
+            TableActivities.dtable_uuid, TableActivities.op_date,
+            func.count(case([(Activities.op_type == 'insert_row', 1)])).label('insert_row'),
+            func.count(case([(Activities.op_type == 'modify_row', 1)])).label('modify_row'),
+            func.count(case([(Activities.op_type == 'delete_row', 1)])).label('delete_row'))
+        q = q.filter(
+            UserDTables.username == username,
+            UserDTables.dtable_uuid == TableActivities.dtable_uuid,
+            UserDTables.op_date == TableActivities.op_date,
+            UserDTables.dtable_uuid == Activities.dtable_uuid,
+            func.date_format(Activities.op_time, '%Y-%m-%d 00:00:00') == TableActivities.op_date)
+        q = q.group_by(TableActivities.op_date, TableActivities.dtable_uuid)
+        table_activities = q.order_by(desc(TableActivities.id)).slice(start, start + limit).all()
+    except Exception as e:
+        logger.error('Get table activities failed: %s' % e)
+
+    return table_activities
+
+
+def get_activities_detail(session, dtable_uuid, start_time, end_time, start, limit):
     if start < 0:
         logger.error('start must be non-negative')
         raise RuntimeError('start must be non-negative')
@@ -118,21 +145,22 @@ def get_user_activities(session, username, start, limit):
 
     activities = list()
     try:
-        q = session.query(Activities).filter(UserActivities.username == username)
-        q = q.filter(UserActivities.activity_id == Activities.id)
-        activities = q.order_by(desc(UserActivities.timestamp)).slice(start, start + limit).all()
+        q = session.query(Activities).filter(Activities.dtable_uuid == dtable_uuid).\
+            filter(Activities.op_time.between(start_time, end_time))
+        activities = q.order_by(desc(Activities.op_time)).slice(start, start + limit).all()
     except Exception as e:
-        logger.error('Get activities failed: %s' % e)
+        logger.error('Get table activities detail failed: %s' % e)
 
-    user_activities = list()
+    activities_detail = list()
     for activity in activities:
         try:
-            user_activity = UserActivityDetail(activity)
-            user_activities.append(user_activity)
+            activity_detail = TableActivityDetail(activity)
+            activities_detail.append(activity_detail)
         except Exception as e:
             logger.warning(e)
             continue
-    return user_activities
+
+    return activities_detail
 
 
 def save_user_activities(session, event):
@@ -159,6 +187,15 @@ def save_user_activities(session, event):
     session.add(activity)
     session.commit()
 
+    op_date = op_time.replace(hour=0, minute=0, second=0, microsecond=0)
+    op_date_str = op_date.strftime('%Y-%m-%d 00:00:00')
+    uuid_date_md5 = md5((dtable_uuid + op_date_str).encode('utf-8')).hexdigest()
+    cmd = "REPLACE INTO table_activities (uuid_date_md5, dtable_uuid, op_date)" \
+          "values(:uuid_date_md5, :dtable_uuid, :op_date)"
+    session.execute(cmd, {
+        "uuid_date_md5": uuid_date_md5, "dtable_uuid": dtable_uuid, "op_date": op_date})
+    session.commit()
+
     cmd = "SELECT to_user FROM dtable_share WHERE dtable_id=(SELECT id FROM dtables WHERE uuid=:dtable_uuid)"
     user_list = [res[r'to_user'] for res in session.execute(cmd, {"dtable_uuid": dtable_uuid})]
 
@@ -175,6 +212,9 @@ def save_user_activities(session, event):
                 user_list.append(member.user_name)
 
     for user in user_list:
-        user_activity = UserActivities(activity.id, user, activity.op_time)
-        session.add(user_activity)
+        user_uuid_date_md5 = md5((user + dtable_uuid + op_date_str).encode('utf-8')).hexdigest()
+        cmd = "REPLACE INTO user_dtables (user_uuid_date_md5, username, dtable_uuid, op_date)" \
+              "values(:user_uuid_date_md5, :username, :dtable_uuid, :op_date)"
+        session.execute(cmd, {"user_uuid_date_md5": user_uuid_date_md5, "username": user,
+                              "dtable_uuid": dtable_uuid, "op_date": op_date})
     session.commit()
