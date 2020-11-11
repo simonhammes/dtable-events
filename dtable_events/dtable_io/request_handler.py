@@ -153,15 +153,18 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             repo_id = datasets.getvalue('repo_id')
             dtable_uuid = datasets.getvalue('dtable_uuid')
             files = datasets.getvalue('files')
+            filenames = datasets.getvalue('filenames')
             if not isinstance(files, list):
                 files = [files]
-
+            if filenames and (not isinstance(filenames, list)):
+                filenames = [filenames, ]
             try:
                 task_id = task_manager.add_export_dtable_asset_files_task(
                     username,
                     repo_id,
                     dtable_uuid,
                     files,
+                    filenames,
                 )
             except Exception as e:
                 logger.error(e)
