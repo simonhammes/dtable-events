@@ -1,6 +1,8 @@
 import os
 import logging
-from threading import Thread, Event
+from threading import Thread
+
+from apscheduler.schedulers.blocking import BlockingScheduler
 
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool, get_python_executable, run
 
@@ -24,7 +26,6 @@ class DTableNofiticationRulesScanner(object):
     def __init__(self, config):
         self._enabled = False
         self._logfile = None
-        self._interval = 60 * 60
         self._parse_config(config)
         self._prepare_logfile()
 
@@ -37,7 +38,6 @@ class DTableNofiticationRulesScanner(object):
         """
         section_name = 'NOTIFY-SCANNER'
         key_enabled = 'enabled'
-        key_interval = 'interval'
 
         if not config.has_section(section_name):
             section_name = 'NOTIFY SCANNER'
@@ -51,16 +51,15 @@ class DTableNofiticationRulesScanner(object):
             return
         self._enabled = True
 
-        self._interval = int(get_opt_from_conf_or_env(config, section_name, key_interval, default=60 * 60))
 
     def start(self):
         if not self.is_enabled():
             logging.warning('Can not start dtable notification rules scanner: it is not enabled!')
             return
 
-        logging.info('Start dtable notification rules scanner, interval = %s sec', self._interval)
+        logging.info('Start dtable notification rules scanner')
 
-        DTableNofiticationRulesScannerTimer(self._interval, self._logfile).start()
+        DTableNofiticationRulesScannerTimer(self._logfile).start()
 
     def is_enabled(self):
         return self._enabled
@@ -68,30 +67,28 @@ class DTableNofiticationRulesScanner(object):
 
 class DTableNofiticationRulesScannerTimer(Thread):
 
-    def __init__(self, interval, logfile):
+    def __init__(self, logfile):
         super(DTableNofiticationRulesScannerTimer, self).__init__()
-        self._interval = interval
         self._logfile = logfile
 
-        self.finished = Event()
-
     def run(self):
-        while not self.finished.is_set():
-            self.finished.wait(self._interval)
-            if not self.finished.is_set():
-                logging.info('Starts to scan notification rules...')
-                try:
-                    python_exec = get_python_executable()
-                    manage_py = os.path.join(dtable_web_dir, 'manage.py')
-                    cmd = [
-                        python_exec,
-                        manage_py,
-                        'scan_dtable_notification_rules',
-                    ]
-                    with open(self._logfile, 'a') as fp:
-                        run(cmd, cwd=dtable_web_dir, output=fp)
-                except Exception as e:
-                    logging.exception('error when scanning dtable notification rules: %s', e)
+        sched = BlockingScheduler()
+        # fire at every hour in every day of week
+        @sched.scheduled_job('cron', day_of_week='*', hour='*')
+        def timed_job():
+            logging.info('Starts to scan notification rules...')
+            try:
+                python_exec = get_python_executable()
+                manage_py = os.path.join(dtable_web_dir, 'manage.py')
+                cmd = [
+                    python_exec,
+                    manage_py,
+                    'scan_dtable_notification_rules',
+                ]
+                with open(self._logfile, 'a') as fp:
+                    run(cmd, cwd=dtable_web_dir, output=fp)
+            except Exception as e:
+                logging.exception('error when scanning dtable notification rules: %s', e)
 
-    def cancel(self):
-        self.finished.set()
+        sched.start()
+

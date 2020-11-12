@@ -57,7 +57,10 @@ def scan_notifications_rules_per_update(event_data, db_session):
     rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid})
 
     for rule in rules:
-        check_notification_rule(rule, table_id, row_id, db_session)
+        try:
+            check_notification_rule(rule, table_id, row_id, db_session)
+        except Exception as e:
+            logger.error(f'check rule failed. {rule}, error: {e}')
     db_session.commit()
 
 
@@ -92,32 +95,6 @@ def send_notification(dtable_uuid, user, detail):
     if res.status_code != 200:
         logger.error(res)
 
-
-def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days):
-    access_token = get_dtable_server_token(dtable_uuid)
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/'
-    headers = {'Authorization': 'Token ' + access_token.decode('utf-8')}
-    query_param = {
-        'table_id': table_id,
-        'view_id': view_id
-    }
-    try:
-        res = requests.get(url, headers=headers, params=query_param)
-    except requests.HTTPError as e:
-        logger.error(e)
-    rows = json.loads(res.content).get('rows', [])
-    rows_near_deadline = []
-    for row in rows:
-        deadline_date_date_str = row.get(date_column_name, '')
-        if not deadline_date_date_str:
-            continue
-        if ' ' in deadline_date_date_str:
-            deadline_date_date_str = deadline_date_date_str.split(' ')[0]
-        deadline_date = datetime.strptime(deadline_date_date_str, '%Y-%m-%d').date()
-        now_plus_alarm_date = date.today() + timedelta(days=int(alarm_days))
-        if date.today() <= deadline_date <= now_plus_alarm_date:
-            rows_near_deadline.append(row)
-    return rows_near_deadline
 
 def is_row_in_view(row_id, view_id, dtable_uuid, table_id):
     access_token = get_dtable_server_token(dtable_uuid)
@@ -211,24 +188,7 @@ def check_notification_rule(rule, message_table_id, row_id='', db_session=None):
             for user in users:
                 send_notification(dtable_uuid, user, detail)
 
-    elif trigger['condition'] == CONDITION_NEAR_DEADLINE:
-        date_column_name = trigger['date_column_name']
-        alarm_days = trigger['alarm_days']
-        rows_near_deadline = list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days)
-        if not rows_near_deadline:
-            return
-
-        row_id_list = [row['_id'] for row in rows_near_deadline]
-        detail = {
-            'table_id': table_id,
-            'view_id': view_id,
-            'condition': CONDITION_NEAR_DEADLINE,
-            'rule_id': rule.id,
-            'rule_name': rule_name,
-            'msg': msg,
-            'row_id_list': row_id_list,
-        }
-        for user in users:
-            send_notification(dtable_uuid, user, detail)
+    else:
+        return
 
     update_rule_last_trigger_time(rule_id, db_session)
