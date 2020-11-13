@@ -14,6 +14,10 @@ def main():
     args = parser.parse_args()
     app_logger = LogConfigurator(args.loglevel, args.logfile)
 
+    dtable_server_config_path = os.environ['DTABLE_SERVER_CONFIG']
+    with open(dtable_server_config_path) as f:
+        dtable_server_config = json.load(f)
+
     config = get_config(args.config_file)
     try:
         create_db_tables(config)
@@ -24,7 +28,7 @@ def main():
     if is_syslog_enabled(config):
         app_logger.add_syslog_handler()
 
-    app = App(config)
+    app = App(config, dtable_server_config)
     app.serve_forever()
 
 
