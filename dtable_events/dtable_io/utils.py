@@ -4,6 +4,7 @@ import os
 import time
 import logging
 import io
+import re
 import uuid
 import multiprocessing
 import datetime
@@ -59,6 +60,16 @@ def convert_dtable_export_file_and_image_url(dtable_content):
         json related operations are excluded
     """
 
+    description = dtable_content.get('description')
+    if description:
+        description_text = description.get('text', '')
+        urls = re.findall(r'!\[.*?\]\((.*?)\)', description_text, re.M)
+        for url in urls:
+            if 'http' in url and '/images/' in url:
+                img_name = '/'.join(url.strip('/').split('/')[-2:])  # e.g. "auto-upload/WeWork%20gg.png"
+                new_url = IMG_URL_PREFIX + img_name
+                description_text = description_text.replace(url, new_url)
+        description['text'] = description_text
     tables = dtable_content.get('tables', [])
     for table in tables:
         rows = table.get('rows', [])
@@ -190,10 +201,19 @@ def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtabl
     :param dtable_uuid:
     :return:  python dict
     """
-    tables = dtable_content.get('tables', [])
-
     # handle different url in settings.py
     dtable_web_service_url = task_manager.conf['dtable_web_service_url'].rstrip('/')
+
+    description = dtable_content.get('description')
+    if description:
+        description_text = description.get('text', '')
+        old_urls = re.findall(r'!\[.*?\]\(%s.*?\)' % re.escape(IMG_URL_PREFIX), description_text, re.M)
+        for url in old_urls:
+            new_url = url.replace(IMG_URL_PREFIX, '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
+                                                            dtable_uuid, 'images']) + '/')
+            description_text = description_text.replace(url, new_url)
+        dtable_content['description']['text'] = description_text
+    tables = dtable_content.get('tables', [])
 
     for table in tables:
         rows = table.get('rows', [])

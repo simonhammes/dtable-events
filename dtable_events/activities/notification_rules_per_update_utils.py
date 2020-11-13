@@ -30,7 +30,7 @@ except ImportError as e:
 
 
 CONDITION_ROWS_MODIFIED = 'rows_modified'
-CONDITION_VIEW_NOT_EMPTY = 'view_not_empty'
+CONDITION_FILTERS_SATISFY = 'filters_satisfy'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
 
 
@@ -76,22 +76,6 @@ def get_dtable_server_token(dtable_uuid):
         logger.error(e)
         return
     return access_token
-
-
-def is_view_not_empty(dtable_uuid, table_id, view_id):
-    access_token = get_dtable_server_token(dtable_uuid)
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/'
-    headers = {'Authorization': 'Token ' + access_token.decode('utf-8')}
-    query_param = {
-        'table_id': table_id,
-        'view_id': view_id
-    }
-    try:
-        res = requests.get(url, headers=headers, params=query_param)
-    except requests.HTTPError as e:
-        logger.error(e)
-    rows = json.loads(res.content).get('rows', [])
-    return len(rows) != 0
 
 
 def send_notification(dtable_uuid, user, detail):
@@ -150,6 +134,24 @@ def is_row_in_view(row_id, view_id, dtable_uuid, table_id):
         return False
     return json.loads(res.content).get('is_row_in_view')
 
+
+def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id):
+    access_token = get_dtable_server_token(dtable_uuid)
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/is-row-satisfy-filters/'
+    headers = {'Authorization': 'Token ' + access_token.decode('utf-8')}
+    data = {
+        'row_id': row_id,
+        'filters': filters,
+        'filter_conjunction': filter_conjuntion
+    }
+    res = requests.get(url, headers=headers, json=data)
+
+    if res.status_code != 200:
+        logger.error(res.text)
+        return False
+    return json.loads(res.content).get('is_row_satisfy_filters')
+
+
 def check_notification_rule(rule, message_table_id, row_id='', db_session=None):
     rule_id = rule[0]
     trigger = rule[1]
@@ -190,15 +192,21 @@ def check_notification_rule(rule, message_table_id, row_id='', db_session=None):
         for user in users:
             send_notification(dtable_uuid, user, detail)
 
-    elif trigger['condition'] == CONDITION_VIEW_NOT_EMPTY:
-        if is_view_not_empty(dtable_uuid, table_id, view_id):
+    elif trigger['condition'] == CONDITION_FILTERS_SATISFY:
+        filters = trigger.get('filters', [])
+        if not filters:
+            return
+
+        filter_conjuntion = trigger.get('filter_conjunction', 'And')
+        if is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id):
             detail = {
                 'table_id': table_id,
                 'view_id': view_id,
-                'condition': CONDITION_VIEW_NOT_EMPTY,
+                'condition': CONDITION_FILTERS_SATISFY,
                 'rule_id': rule.id,
                 'rule_name': rule_name,
-                'msg': msg
+                'msg': msg,
+                'row_id_list': [row_id],
             }
             for user in users:
                 send_notification(dtable_uuid, user, detail)
