@@ -1,5 +1,7 @@
 import time
 import logging
+import os
+import sys
 from http.server import HTTPServer
 from threading import Thread
 
@@ -44,11 +46,24 @@ class DTableIOServer(Thread):
         else:
             self._file_server_port = 8082
 
-        self._dtable_private_key = dtable_server_config['private_key']
-        try:
-            self._dtable_web_service_url = dtable_server_config['dtable_web_service_url']
-        except KeyError:
-            self._dtable_web_service_url = "http://127.0.0.1:8000"
+        central_conf_dir = os.environ.get('SEAFILE_CENTRAL_CONF_DIR', '')
+        self._dtable_web_service_url = "http://127.0.0.1:8000"
+        if central_conf_dir:
+            try:
+                if os.path.exists(central_conf_dir):
+                    sys.path.insert(0, central_conf_dir)
+                    from dtable_web_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY
+                    self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
+                    self._dtable_private_key = DTABLE_PRIVATE_KEY
+            except ImportError:
+                dtable_web_seahub_dir = os.path.join(os.environ.get('DTABLE_WEB_DIR', ''), 'seahub')
+                if os.path.exists(dtable_web_seahub_dir):
+                    sys.path.insert(0, dtable_web_seahub_dir)
+                    from local_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY
+                    self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
+                    self._dtable_private_key = DTABLE_PRIVATE_KEY 
+            except Exception as e:
+                logging.error(f'import settings from SEAFILE_CENTRAL_CONF_DIR/dtable_web_settings.py failed {e}')
 
     def run(self):
         while 1:
