@@ -12,13 +12,13 @@ from dtable_events.webhook.webhook import Webhooker
 
 
 class App(object):
-    def __init__(self, config):
+    def __init__(self, config, dtable_server_config):
         self._message_handler = MessageHandler(config)
         self._user_activity_counter = UserActivityCounter(config)
         self._instant_notices_sender = InstantNoticeSender(config)
         self._email_notices_sender = EmailNoticesSender(config)
         self._dtables_cleaner = DTablesCleaner(config)
-        self._dtable_io_server = DTableIOServer(config)
+        self._dtable_io_server = DTableIOServer(config, dtable_server_config)
         self._dtable_updates_sender = DTableUpdatesSender(config)
         self._dtable_notification_rules_scanner = DTableNofiticationRulesScanner(config)
         self._dtable_real_time_rows_counter = DTableRealTimeRowsCounter(config)

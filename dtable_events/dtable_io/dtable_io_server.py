@@ -1,6 +1,4 @@
 import time
-import os
-import sys
 import logging
 from http.server import HTTPServer
 from threading import Thread
@@ -10,9 +8,9 @@ from dtable_events.dtable_io.task_manager import task_manager
 
 class DTableIOServer(Thread):
 
-    def __init__(self, config):
+    def __init__(self, config, dtable_server_config):
         Thread.__init__(self)
-        self._parse_config(config)
+        self._parse_config(config, dtable_server_config)
         task_manager.init(
             self._workers, self._dtable_private_key, self._dtable_web_service_url, self._file_server_port,
             self._io_task_timeout, config
@@ -20,7 +18,7 @@ class DTableIOServer(Thread):
         task_manager.run()
         self._server = HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
 
-    def _parse_config(self, config):
+    def _parse_config(self, config, dtable_server_config):
         if config.has_option('DTABLE-IO', 'host'):
             self._host = config.get('DTABLE-IO', 'host')
         else:
@@ -46,17 +44,11 @@ class DTableIOServer(Thread):
         else:
             self._file_server_port = 8082
 
-        central_conf_dir = os.environ.get('SEAFILE_CENTRAL_CONF_DIR', '')
-        self._dtable_web_service_url = "http://127.0.0.1:8000"
-        if central_conf_dir:
-            try:
-                if os.path.exists(central_conf_dir):
-                    sys.path.insert(0, central_conf_dir)
-                    from dtable_web_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY
-                    self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
-                    self._dtable_private_key = DTABLE_PRIVATE_KEY
-            except Exception as e:
-                logging.error('import settings from SEAFILE_CENTRAL_CONF_DIR/dtable_web_settings.py failed {e}')
+        self._dtable_private_key = dtable_server_config['private_key']
+        try:
+            self._dtable_web_service_url = dtable_server_config['dtable_web_service_url']
+        except KeyError:
+            self._dtable_web_service_url = "http://127.0.0.1:8000"
 
     def run(self):
         while 1:
