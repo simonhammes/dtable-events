@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import desc, func, case
 from seaserv import ccnet_api
 
-from dtable_events.activities.models import Activities, TableActivities, UserDTables
+from dtable_events.activities.models import Activities, UserDTables
 
 logger = logging.getLogger(__name__)
 
@@ -115,19 +115,15 @@ def get_table_activities(session, username, start, limit):
 
     table_activities = list()
     try:
+        uuid_list = session.query(UserDTables.dtable_uuid).filter(UserDTables.username == username)
         q = session.query(
-            TableActivities.dtable_uuid, TableActivities.op_date,
+            Activities.dtable_uuid, Activities.op_time.label('op_date'),
+            func.date_format(Activities.op_time, '%Y-%m-%d 00:00:00').label('date'),
             func.count(case([(Activities.op_type == 'insert_row', 1)])).label('insert_row'),
             func.count(case([(Activities.op_type == 'modify_row', 1)])).label('modify_row'),
             func.count(case([(Activities.op_type == 'delete_row', 1)])).label('delete_row'))
-        q = q.filter(
-            UserDTables.username == username,
-            UserDTables.dtable_uuid == TableActivities.dtable_uuid,
-            UserDTables.op_date == TableActivities.op_date,
-            UserDTables.dtable_uuid == Activities.dtable_uuid,
-            func.date_format(Activities.op_time, '%Y-%m-%d 00:00:00') == TableActivities.op_date)
-        q = q.group_by(TableActivities.op_date, TableActivities.dtable_uuid)
-        table_activities = q.order_by(desc(TableActivities.id)).slice(start, start + limit).all()
+        q = q.filter(Activities.dtable_uuid.in_(uuid_list)).group_by(Activities.dtable_uuid, 'date')
+        table_activities = q.order_by(desc(Activities.id)).slice(start, start + limit).all()
     except Exception as e:
         logger.error('Get table activities failed: %s' % e)
 
@@ -189,12 +185,6 @@ def save_user_activities(session, event):
 
     op_date = op_time.replace(hour=0, minute=0, second=0, microsecond=0)
     op_date_str = op_date.strftime('%Y-%m-%d 00:00:00')
-    uuid_date_md5 = md5((dtable_uuid + op_date_str).encode('utf-8')).hexdigest()
-    cmd = "REPLACE INTO table_activities (uuid_date_md5, dtable_uuid, op_date)" \
-          "values(:uuid_date_md5, :dtable_uuid, :op_date)"
-    session.execute(cmd, {
-        "uuid_date_md5": uuid_date_md5, "dtable_uuid": dtable_uuid, "op_date": op_date})
-    session.commit()
 
     cmd = "SELECT to_user FROM dtable_share WHERE dtable_id=(SELECT id FROM dtables WHERE uuid=:dtable_uuid)"
     user_list = [res[r'to_user'] for res in session.execute(cmd, {"dtable_uuid": dtable_uuid})]
