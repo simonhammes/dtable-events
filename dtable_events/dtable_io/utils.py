@@ -331,7 +331,7 @@ def create_forms_from_src_dtable(workspace_id, dtable_uuid, db_session):
         add_a_form_to_db(form, workspace_id, dtable_uuid, db_session)
 
 
-def download_files_to_path(username, repo_id, dtable_uuid, files, path):
+def download_files_to_path(username, repo_id, dtable_uuid, files, path, filenames=None):
     """
     download dtable's asset files to path
     """
@@ -344,11 +344,12 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path):
             continue
         valid_file_obj_ids.append((file, obj_id))
 
-    for file, obj_id in valid_file_obj_ids:
+    for index,(file, obj_id) in enumerate(valid_file_obj_ids):
         token = seafile_api.get_fileserver_access_token(
             repo_id, obj_id, 'download', username,
             use_onetime=False
         )
+        file = filenames and filenames[index] or file
         file_name = os.path.basename(file)
         file_url = gen_inner_file_get_url(token, file_name)
         content = requests.get(file_url).content
