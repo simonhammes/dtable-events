@@ -157,7 +157,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             if not isinstance(files, list):
                 files = [files]
             if filenames and (not isinstance(filenames, list)):
-                filenames = [filenames, ]
+                filenames = [filenames]
             try:
                 task_id = task_manager.add_export_dtable_asset_files_task(
                     username,
