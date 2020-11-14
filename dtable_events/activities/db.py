@@ -122,8 +122,10 @@ def get_table_activities(session, username, start, limit):
             func.count(case([(Activities.op_type == 'insert_row', 1)])).label('insert_row'),
             func.count(case([(Activities.op_type == 'modify_row', 1)])).label('modify_row'),
             func.count(case([(Activities.op_type == 'delete_row', 1)])).label('delete_row'))
-        q = q.filter(Activities.dtable_uuid.in_(uuid_list)).group_by(Activities.dtable_uuid, 'date')
-        table_activities = q.order_by(desc(Activities.id)).slice(start, start + limit).all()
+        q = q.filter(
+            Activities.op_time > (datetime.utcnow() - timedelta(days=30)),
+            Activities.dtable_uuid.in_(uuid_list)).group_by(Activities.dtable_uuid, 'date')
+        table_activities = q.order_by(desc(Activities.op_time)).slice(start, start + limit).all()
     except Exception as e:
         logger.error('Get table activities failed: %s' % e)
 
