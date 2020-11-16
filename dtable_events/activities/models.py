@@ -8,11 +8,11 @@ class Activities(Base):
     __tablename__ = 'activities'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    dtable_uuid = Column(String(length=36), nullable=False)
+    dtable_uuid = Column(String(length=36), nullable=False, index=True)
     row_id = Column(String(length=36), nullable=False, index=True)
     op_user = Column(String(length=255), nullable=False)
     op_type = Column(String(length=128), nullable=False)
-    op_time = Column(DateTime, nullable=False)
+    op_time = Column(DateTime, nullable=False, index=True)
     detail = Column(Text, nullable=False)
     op_app = Column(String(length=255))
 
