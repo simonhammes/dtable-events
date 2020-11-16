@@ -16,6 +16,8 @@ class Activities(Base):
     detail = Column(Text, nullable=False)
     op_app = Column(String(length=255))
 
+    __table_args__ = (Index('ix_activities_op_time_dtable_uuid', 'op_time', 'dtable_uuid'),)
+
     def __init__(self, dtable_uuid, row_id, op_user, op_type, op_time, detail, op_app):
         self.dtable_uuid = dtable_uuid
         self.row_id = row_id
@@ -26,30 +28,14 @@ class Activities(Base):
         self.op_app = op_app
 
 
-class TableActivities(Base):
-    __tablename__ = 'table_activities'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    uuid_date_md5 = Column(String(length=32), nullable=False, unique=True)
-    dtable_uuid = Column(String(length=36), nullable=False, index=True)
-    op_date = Column(DateTime, nullable=False, index=True)
-
-    def __init__(self, uuid_date_md5, dtable_uuid, op_date):
-        self.uuid_date_md5 = uuid_date_md5
-        self.dtable_uuid = dtable_uuid
-        self.op_date = op_date
-
-
 class UserDTables(Base):
     __tablename__ = 'user_dtables'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_uuid_date_md5 = Column(String(length=32), nullable=False, unique=True)
-    username = Column(String(length=255), nullable=False)
+    username = Column(String(length=255), nullable=False, index=True)
     dtable_uuid = Column(String(length=36), nullable=False)
     op_date = Column(DateTime, nullable=False, index=True)
-
-    __table_args__ = (Index('user_dtables_user_uuid_date', 'username', 'dtable_uuid', 'op_date'),)
 
     def __init__(self, user_uuid_date_md5, username, dtable_uuid, op_date):
         self.user_uuid_date_md5 = user_uuid_date_md5
