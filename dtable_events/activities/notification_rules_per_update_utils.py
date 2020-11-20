@@ -31,7 +31,6 @@ except ImportError as e:
 
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
-CONDITION_NEAR_DEADLINE = 'near_deadline'
 
 
 def is_trigger_time_satisfy(last_trigger_time):
@@ -137,9 +136,6 @@ def check_notification_rule(rule, message_table_id, row_id='', db_session=None):
     last_trigger_time = rule[4]
     dtable_uuid = rule[5]
 
-    if not is_trigger_time_satisfy(last_trigger_time):
-        return
-
     trigger = json.loads(trigger)
     action = json.loads(action)
     users = action.get('users', [])
@@ -157,6 +153,9 @@ def check_notification_rule(rule, message_table_id, row_id='', db_session=None):
     if trigger['condition'] == CONDITION_ROWS_MODIFIED:
         if not row_id:
             return
+        if not is_trigger_time_satisfy(last_trigger_time):
+            return
+
         detail = {
             'table_id': table_id,
             'view_id': view_id,
