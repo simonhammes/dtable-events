@@ -50,6 +50,8 @@ def scan_notifications_rules_per_update(event_data, db_session):
     row_id = event_data.get('row_id', '')
     message_dtable_uuid = event_data.get('dtable_uuid', '')
     table_id = event_data.get('table_id', '')
+    row_data = event_data.get('row_data', [])
+    column_keys = [cell.get('column_key') for cell in row_data if 'column_key' in cell]
 
     sql = "SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules WHERE run_condition='per_update'" \
           "AND dtable_uuid=:dtable_uuid"
@@ -57,7 +59,7 @@ def scan_notifications_rules_per_update(event_data, db_session):
 
     for rule in rules:
         try:
-            check_notification_rule(rule, table_id, row_id, db_session)
+            check_notification_rule(rule, table_id, row_id, column_keys, db_session)
         except Exception as e:
             logger.error(f'check rule failed. {rule}, error: {e}')
     db_session.commit()
@@ -128,7 +130,7 @@ def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, tabl
     return json.loads(res.content).get('is_row_satisfy_filters')
 
 
-def check_notification_rule(rule, message_table_id, row_id='', db_session=None):
+def check_notification_rule(rule, message_table_id, row_id='', column_keys = [], db_session=None):
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
@@ -172,6 +174,18 @@ def check_notification_rule(rule, message_table_id, row_id='', db_session=None):
         filters = trigger.get('filters', [])
         if not filters:
             return
+
+        target_column_keys = trigger.get('column_keys', [])
+        watch_all_columns = trigger.get('watch_all_columns', False)
+
+        if not watch_all_columns:
+            has_msg_key_in_target_keys = False
+            for msg_key in column_keys:
+                if msg_key in target_column_keys:
+                    has_msg_key_in_target_keys = True
+                    break
+            if not has_msg_key_in_target_keys:
+                return
 
         filter_conjuntion = trigger.get('filter_conjunction', 'And')
         if is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id):
