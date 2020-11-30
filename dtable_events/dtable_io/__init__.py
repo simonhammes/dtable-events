@@ -117,7 +117,7 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
 
     dtable_io_logger.info('Import DTable: {} success!'.format(dtable_uuid))
 
-def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id, filenames=None):
+def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id, files_map=None):
     """
     export asset files from dtable
     """
@@ -132,7 +132,7 @@ def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id
 
     try:
         # 1. download files to tmp_file_path
-        download_files_to_path(username, repo_id, dtable_uuid, files, tmp_file_path, filenames)
+        download_files_to_path(username, repo_id, dtable_uuid, files, tmp_file_path, files_map)
         # 2. zip those files to tmp_zip_path
         shutil.make_archive(tmp_zip_path.split('.')[0], 'zip', root_dir=tmp_file_path)
     except Exception as e:
