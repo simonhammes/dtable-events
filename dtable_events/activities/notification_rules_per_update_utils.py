@@ -4,7 +4,7 @@ import time
 import json
 import os
 import datetime
-from datetime import date, timedelta, datetime
+from datetime import datetime
 import requests
 import jwt
 import sys
@@ -46,25 +46,6 @@ def update_rule_last_trigger_time(rule_id, db_session):
     db_session.execute(cmd, {'new_time': datetime.utcnow(), 'rule_id': rule_id})
 
 
-def scan_notifications_rules_per_update(event_data, db_session):
-    row_id = event_data.get('row_id', '')
-    message_dtable_uuid = event_data.get('dtable_uuid', '')
-    table_id = event_data.get('table_id', '')
-    row_data = event_data.get('row_data', [])
-    column_keys = [cell.get('column_key') for cell in row_data if 'column_key' in cell]
-
-    sql = "SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules WHERE run_condition='per_update'" \
-          "AND dtable_uuid=:dtable_uuid"
-    rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid})
-
-    for rule in rules:
-        try:
-            check_notification_rule(rule, table_id, row_id, column_keys, db_session)
-        except Exception as e:
-            logger.error(f'check rule failed. {rule}, error: {e}')
-    db_session.commit()
-
-
 def get_dtable_server_token(dtable_uuid):
     payload = {
         'exp': int(time.time()) + 60,
@@ -82,10 +63,54 @@ def get_dtable_server_token(dtable_uuid):
     return access_token
 
 
-def send_notification(dtable_uuid, user, detail):
-    access_token = get_dtable_server_token(dtable_uuid)
+def scan_notifications_rules_per_update(event_data, db_session):
+    row_id = event_data.get('row_id', '')
+    message_dtable_uuid = event_data.get('dtable_uuid', '')
+    table_id = event_data.get('table_id', '')
+    row_data = event_data.get('row_data', [])
+    column_keys = [cell.get('column_key') for cell in row_data if 'column_key' in cell]
+    if not row_id or not message_dtable_uuid or not table_id:
+        logger.error(f'redis event data not valid, event_data = {event_data}')
+        return
+
+    sql = "SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules WHERE run_condition='per_update'" \
+          "AND dtable_uuid=:dtable_uuid"
+    rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid})
+
+    dtable_server_access_token = get_dtable_server_token(message_dtable_uuid)
+
+    for rule in rules:
+        try:
+            check_notification_rule(rule, table_id, row_id, column_keys, dtable_server_access_token, db_session)
+        except Exception as e:
+            logger.error(f'check rule failed. {rule}, error: {e}')
+    db_session.commit()
+
+
+def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_key, dtable_server_access_token):
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/' + row_id + '/'
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
+    params = {
+        'table_id': table_id,
+        'view_id': view_id,
+        'convert': False,
+    }
+    res = requests.get(url, headers=headers, params=params)
+
+    if res.status_code != 200:
+        logger.error(f'failed to list_users_by_column_key {res.text}')
+
+    rowdict = json.loads(res.content)
+    user_list = rowdict.get(column_key, [])
+    if isinstance(user_list, str):
+        return [user_list]
+    return user_list
+
+
+
+def send_notification(dtable_uuid, user, detail, dtable_server_access_token):
     url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/notifications/'
-    headers = {'Authorization': 'Token ' + access_token.decode('utf-8')}
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     body = {
         'to_user': user,
         'msg_type': 'notification_rules',
@@ -94,13 +119,12 @@ def send_notification(dtable_uuid, user, detail):
     res = requests.post(url, headers=headers, json=body)
 
     if res.status_code != 200:
-        logger.error(res)
+        logger.error(f'failed to send_notification {res.text}')
 
 
-def is_row_in_view(row_id, view_id, dtable_uuid, table_id):
-    access_token = get_dtable_server_token(dtable_uuid)
+def is_row_in_view(row_id, view_id, dtable_uuid, table_id, dtable_server_access_token):
     url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/is-row-in-view/'
-    headers = {'Authorization': 'Token ' + access_token.decode('utf-8')}
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     params = {
         'row_id': row_id,
         'view_id': view_id,
@@ -113,10 +137,9 @@ def is_row_in_view(row_id, view_id, dtable_uuid, table_id):
     return json.loads(res.content).get('is_row_in_view')
 
 
-def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id):
-    access_token = get_dtable_server_token(dtable_uuid)
+def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id, dtable_server_access_token):
     url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/is-row-satisfy-filters/'
-    headers = {'Authorization': 'Token ' + access_token.decode('utf-8')}
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     data = {
         'row_id': row_id,
         'filters': filters,
@@ -130,7 +153,8 @@ def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, tabl
     return json.loads(res.content).get('is_row_satisfy_filters')
 
 
-def check_notification_rule(rule, message_table_id, row_id='', column_keys = [], db_session=None):
+def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session=None):
+
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
@@ -141,6 +165,7 @@ def check_notification_rule(rule, message_table_id, row_id='', column_keys = [],
     trigger = json.loads(trigger)
     action = json.loads(action)
     users = action.get('users', [])
+    users_column_key = action.get('users_column_key')
     msg = action.get('default_msg', '')
     rule_name = trigger.get('rule_name', '')
     table_id = trigger['table_id']
@@ -149,12 +174,10 @@ def check_notification_rule(rule, message_table_id, row_id='', column_keys = [],
     if message_table_id != table_id:
         return
 
-    if not is_row_in_view(row_id, view_id, dtable_uuid, message_table_id):
+    if not is_row_in_view(row_id, view_id, dtable_uuid, message_table_id, dtable_server_access_token):
         return
 
     if trigger['condition'] == CONDITION_ROWS_MODIFIED:
-        if not row_id:
-            return
         if not is_trigger_time_satisfy(last_trigger_time):
             return
 
@@ -167,8 +190,13 @@ def check_notification_rule(rule, message_table_id, row_id='', column_keys = [],
             'msg': msg,
             'row_id_list': [row_id],
         }
+
+        if users_column_key:
+            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_key, dtable_server_access_token)
+            users = list(set(users + users_from_cell))
+
         for user in users:
-            send_notification(dtable_uuid, user, detail)
+            send_notification(dtable_uuid, user, detail, dtable_server_access_token)
 
     elif trigger['condition'] == CONDITION_FILTERS_SATISFY:
         filters = trigger.get('filters', [])
@@ -188,18 +216,24 @@ def check_notification_rule(rule, message_table_id, row_id='', column_keys = [],
                 return
 
         filter_conjuntion = trigger.get('filter_conjunction', 'And')
-        if is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id):
-            detail = {
-                'table_id': table_id,
-                'view_id': view_id,
-                'condition': CONDITION_FILTERS_SATISFY,
-                'rule_id': rule.id,
-                'rule_name': rule_name,
-                'msg': msg,
-                'row_id_list': [row_id],
-            }
-            for user in users:
-                send_notification(dtable_uuid, user, detail)
+        if not is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id, dtable_server_access_token):
+            return
+
+        detail = {
+            'table_id': table_id,
+            'view_id': view_id,
+            'condition': CONDITION_FILTERS_SATISFY,
+            'rule_id': rule.id,
+            'rule_name': rule_name,
+            'msg': msg,
+            'row_id_list': [row_id],
+        }
+        if users_column_key:
+            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_key, dtable_server_access_token)
+            users = list(set(users + users_from_cell))
+
+        for user in users:
+            send_notification(dtable_uuid, user, detail, dtable_server_access_token)
 
     else:
         return
