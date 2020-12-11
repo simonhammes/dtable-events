@@ -111,12 +111,12 @@ def send_notification(dtable_uuid, user_msg_list, dtable_server_access_token):
     url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/notifications-batch/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     body = {
-        'to_user_array': user_msg_list,
+        'user_messages': user_msg_list,
     }
     res = requests.post(url, headers=headers, json=body)
 
     if res.status_code != 200:
-        logger.error(res.text)
+        logger.error(f'failed to send_notification {res.text}')
 
 
 def is_row_in_view(row_id, view_id, dtable_uuid, table_id, dtable_server_access_token):
