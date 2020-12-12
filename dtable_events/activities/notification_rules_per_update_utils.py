@@ -107,14 +107,11 @@ def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_key,
     return user_list
 
 
-
-def send_notification(dtable_uuid, user, detail, dtable_server_access_token):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/notifications/'
+def send_notification(dtable_uuid, user_msg_list, dtable_server_access_token):
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/notifications-batch/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     body = {
-        'to_user': user,
-        'msg_type': 'notification_rules',
-        'detail': detail,
+        'user_messages': user_msg_list,
     }
     res = requests.post(url, headers=headers, json=body)
 
@@ -176,6 +173,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
 
     if not is_row_in_view(row_id, view_id, dtable_uuid, message_table_id, dtable_server_access_token):
         return
+    user_msg_list = []
 
     if trigger['condition'] == CONDITION_ROWS_MODIFIED:
         if not is_trigger_time_satisfy(last_trigger_time):
@@ -196,7 +194,12 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             users = list(set(users + users_from_cell))
 
         for user in users:
-            send_notification(dtable_uuid, user, detail, dtable_server_access_token)
+            user_msg_list.append({
+                'to_user': user,
+                'msg_type': 'notification_rules',
+                'detail': detail,
+                })
+        send_notification(dtable_uuid, user_msg_list, dtable_server_access_token)
 
     elif trigger['condition'] == CONDITION_FILTERS_SATISFY:
         filters = trigger.get('filters', [])
@@ -233,7 +236,12 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             users = list(set(users + users_from_cell))
 
         for user in users:
-            send_notification(dtable_uuid, user, detail, dtable_server_access_token)
+            user_msg_list.append({
+                'to_user': user,
+                'msg_type': 'notification_rules',
+                'detail': detail,
+                })
+        send_notification(dtable_uuid, user_msg_list, dtable_server_access_token)
 
     else:
         return
