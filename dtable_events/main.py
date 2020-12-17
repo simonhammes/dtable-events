@@ -7,7 +7,7 @@ import json
 from dtable_events.db import create_db_tables
 from dtable_events.app.app import App
 from dtable_events.app.log import LogConfigurator
-from dtable_events.app.config import get_config, is_syslog_enabled
+from dtable_events.app.config import get_config, is_syslog_enabled, get_task_mode
 
 
 def main():
@@ -27,8 +27,10 @@ def main():
 
     if is_syslog_enabled(config):
         app_logger.add_syslog_handler()
+ 
+    task_mode = get_task_mode(args.taskmode)
 
-    app = App(config, dtable_server_config)
+    app = App(config, dtable_server_config, task_mode)
     app.serve_forever()
 
 
@@ -37,5 +39,6 @@ if __name__ == '__main__':
     parser.add_argument('--config-file', help='config file')
     parser.add_argument('--logfile', help='log file')
     parser.add_argument('--loglevel', default='info', help='log level')
+    parser.add_argument('--taskmode', default='all', help='task mode')
 
     main()
