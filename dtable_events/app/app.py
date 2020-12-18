@@ -18,29 +18,33 @@ class App(object):
 
         if self._enable_foreground_tasks:
             self._dtable_io_server = DTableIOServer(config, dtable_server_config)
-            self._webhooker = Webhooker(config)
 
         if self._enable_background_tasks:
+            # redis client subscriber
             self._message_handler = MessageHandler(config)
             self._user_activity_counter = UserActivityCounter(config)
+            self._dtable_real_time_rows_counter = DTableRealTimeRowsCounter(config)
+            self._webhooker = Webhooker(config)
+            # cron jobs
             self._instant_notices_sender = InstantNoticeSender(config)
             self._email_notices_sender = EmailNoticesSender(config)
             self._dtables_cleaner = DTablesCleaner(config)
             self._dtable_updates_sender = DTableUpdatesSender(config)
             self._dtable_notification_rules_scanner = DTableNofiticationRulesScanner(config)
-            self._dtable_real_time_rows_counter = DTableRealTimeRowsCounter(config)
 
     def serve_forever(self):
         if self._enable_foreground_tasks:
             self._dtable_io_server.start()
-            self._webhooker.start()
 
         if self._enable_background_tasks:
+            # redis client subscriber
             self._message_handler.start()
             self._user_activity_counter.start()
+            self._dtable_real_time_rows_counter.start()
+            self._webhooker.start()
+            # cron jobs
             self._instant_notices_sender.start()
             self._email_notices_sender.start()
             self._dtables_cleaner.start()
             self._dtable_updates_sender.start()
             self._dtable_notification_rules_scanner.start()
-            self._dtable_real_time_rows_counter.start()
