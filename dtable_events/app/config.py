@@ -24,3 +24,21 @@ def is_syslog_enabled(config):
             return False
 
     return False
+
+
+class TaskMode(object):
+    enable_foreground_tasks = False
+    enable_background_tasks = False
+
+
+def get_task_mode(task_mode_str):
+    task_mode = TaskMode()
+    if task_mode_str == 'foreground':
+        task_mode.enable_foreground_tasks = True
+    elif task_mode_str == 'background':
+        task_mode.enable_background_tasks = True
+    else:
+        task_mode.enable_foreground_tasks = True
+        task_mode.enable_background_tasks = True
+
+    return task_mode
