@@ -175,7 +175,8 @@ def get_dtable_transfer_asset_files(username, repo_id, dtable_uuid, files, task_
         dtable_io_logger.error('transfer asset files from dtable failed. ERROR: {}'.format(e))
 
     # delete local files
-    for file in local_file_list:
-        os.remove(file)
+    if os.path.exists(tmp_file_path):
+        shutil.rmtree(tmp_file_path)
+
 
 
