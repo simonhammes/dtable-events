@@ -1,5 +1,6 @@
 import shutil
 import os
+import requests
 from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json
@@ -139,3 +140,42 @@ def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id
         dtable_io_logger.error('export asset files from dtable failed. ERROR: {}'.format(e))
     else:
         dtable_io_logger.info('export files from dtable: %s success!', dtable_uuid)
+
+
+def _get_upload_link_to_seafile(seafile_server_url, access_token, parent_dir="/"):
+    upload_link_api_url = "%s%s" % (seafile_server_url.rstrip('/'),  '/api/v2.1/via-repo-token/upload-link/')
+    headers = {
+        'authorization': 'Token ' + access_token
+    }
+    params = {
+        'path':parent_dir
+    }
+    response = requests.get(upload_link_api_url,headers=headers,params=params)
+    return response.json()
+
+
+def _upload_to_seafile(seafile_server_url, access_token, files, parent_dir="/", relative_path="", replace=False):
+    upload_url = _get_upload_link_to_seafile(seafile_server_url, access_token, parent_dir)
+    files_tuple_list = [('file', open(file,'rb')) for file in files]
+    files = files_tuple_list + [('parent_dir', parent_dir),('relative_path', relative_path),('replace', 1 if replace else 0)]
+    response = requests.get(upload_url, files=files)
+    return response
+
+def get_dtable_transfer_asset_files(username, repo_id, dtable_uuid, files, task_id, files_map, parent_dir, relative_path, replace, repo_api_token, seafile_server_url):
+    tmp_file_path = os.path.join('/tmp/dtable-io/',dtable_uuid, 'transfer-files', str(task_id))
+    os.makedirs(tmp_file_path, exist_ok=True)
+
+    # download files to local
+    local_file_list = download_files_to_path(username, repo_id, dtable_uuid, files, tmp_file_path, files_map)
+
+    # upload files from local to seafile
+    try:
+        _upload_to_seafile(seafile_server_url, repo_api_token, local_file_list, parent_dir, relative_path, replace)
+    except Exception as e:
+        dtable_io_logger.error('transfer asset files from dtable failed. ERROR: {}'.format(e))
+
+    # delete local files
+    for file in local_file_list:
+        os.remove(file)
+
+

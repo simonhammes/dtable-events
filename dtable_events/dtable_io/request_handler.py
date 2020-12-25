@@ -177,5 +177,48 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp = {'task_id': task_id}
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
+        if path == '/transfer-dtable-asset-files':
+            if task_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            username = datasets.getvalue('username')
+            repo_id = datasets.getvalue('repo_id')
+            dtable_uuid = datasets.getvalue('dtable_uuid')
+            files = datasets.getvalue('files')
+            files_map = datasets.getvalue('files_map')
+            repo_api_token = datasets.getvalue('repo_api_token')
+            seafile_server_url = datasets.getvalue('seafile_server_url')
+            parent_dir = datasets.getvalue('parent_dir')
+            relative_path = datasets.getvalue('relative_path')
+            replace = datasets.getvalue('replace')
+            if not isinstance(files, list):
+                files = [files]
+            if not isinstance(files_map, dict):
+                files_map = json.loads(files_map)
+            try:
+                task_id = task_manager.add_transfer_dtable_asset_files_task(
+                    username,
+                    repo_id,
+                    dtable_uuid,
+                    files,
+                    files_map,
+                    parent_dir,
+                    relative_path,
+                    replace,
+                    repo_api_token,
+                    seafile_server_url,
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {'task_id': task_id}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
         else:
             self.send_error(400, 'path %s invalid.' % path)

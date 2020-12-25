@@ -52,7 +52,6 @@ class TaskManager(object):
                 (username, repo_id, workspace_id, dtable_uuid, dtable_file_name, self.config))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
-
         return task_id
 
     def add_export_dtable_asset_files_task(self, username, repo_id, dtable_uuid, files, files_map=None):
@@ -61,6 +60,25 @@ class TaskManager(object):
         task_id = str(int(time.time()*1000))
         task = (get_dtable_export_asset_files,
                 (username, repo_id, dtable_uuid, files, task_id, files_map))
+        self.tasks_queue.put(task_id)
+        self.tasks_map[task_id] = task
+        return task_id
+
+    def add_transfer_dtable_asset_files_task(self, username, repo_id, dtable_uuid, files, files_map, parent_dir, relative_path, replace, repo_api_token, seafile_server_url):
+        from dtable_events.dtable_io import get_dtable_transfer_asset_files
+        task_id = str(int(time.time() * 1000))
+        task = (get_dtable_transfer_asset_files,
+                (username,
+                 repo_id,
+                 dtable_uuid,
+                 files,
+                 task_id,
+                 files_map,
+                 parent_dir,
+                 relative_path,
+                 replace,
+                 repo_api_token,
+                 seafile_server_url))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
         return task_id
