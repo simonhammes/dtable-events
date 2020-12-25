@@ -47,8 +47,6 @@ class Webhooker:
         tds = [Thread(target=self.sub_from_redis, daemon=True)]
         tds.extend([Thread(target=self.post_webhook_jobs, daemon=True) for i in range(2)])
         [td.start() for td in tds]
-        while True:
-            time.sleep(5)
 
     def recover_from_db(self):
         with DB(self._db_session_class()) as db_session:
