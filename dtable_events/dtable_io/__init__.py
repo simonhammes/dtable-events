@@ -154,10 +154,10 @@ def _get_upload_link_to_seafile(seafile_server_url, access_token, parent_dir="/"
     return response.json()
 
 
-def _upload_to_seafile(seafile_server_url, access_token, files, parent_dir="/", relative_path="", replace=False):
+def _upload_to_seafile(seafile_server_url, access_token, files, parent_dir="/", relative_path="", replace=None):
     upload_url = _get_upload_link_to_seafile(seafile_server_url, access_token, parent_dir)
     files_tuple_list = [('file', open(file,'rb')) for file in files]
-    files = files_tuple_list + [('parent_dir', parent_dir),('relative_path', relative_path),('replace', 1 if replace else 0)]
+    files = files_tuple_list + [('parent_dir', parent_dir),('relative_path', relative_path),('replace', replace)]
     response = requests.get(upload_url, files=files)
     return response
 
