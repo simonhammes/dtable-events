@@ -360,6 +360,3 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path, files_ma
             f.write(content)
         tmp_file_list.append(filename_by_path)
     return tmp_file_list
-
-
-

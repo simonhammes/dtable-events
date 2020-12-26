@@ -219,6 +219,5 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             resp = {'task_id': task_id}
             self.wfile.write(json.dumps(resp).encode('utf-8'))
-
         else:
             self.send_error(400, 'path %s invalid.' % path)
