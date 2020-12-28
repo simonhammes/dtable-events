@@ -177,7 +177,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp = {'task_id': task_id}
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
-        if path == '/transfer-dtable-asset-files':
+        elif path == '/transfer-dtable-asset-files':
             if task_manager.tasks_queue.full():
                 self.send_error(400, 'dtable io server busy.')
                 return
