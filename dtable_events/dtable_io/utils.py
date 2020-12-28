@@ -344,6 +344,7 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path, files_ma
             continue
         valid_file_obj_ids.append((file, obj_id))
 
+    tmp_file_list = []
     for file, obj_id in valid_file_obj_ids:
         token = seafile_api.get_fileserver_access_token(
             repo_id, obj_id, 'download', username,
@@ -354,5 +355,8 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path, files_ma
             file_name = files_map.get(file)
         file_url = gen_inner_file_get_url(token, file_name)
         content = requests.get(file_url).content
-        with open(os.path.join(path, file_name), 'wb') as f:
+        filename_by_path = os.path.join(path, file_name)
+        with open(filename_by_path, 'wb') as f:
             f.write(content)
+        tmp_file_list.append(filename_by_path)
+    return tmp_file_list
