@@ -157,7 +157,7 @@ def _upload_to_seafile(seafile_server_url, access_token, files, parent_dir="/", 
     upload_url = _get_upload_link_to_seafile(seafile_server_url, access_token, parent_dir)
     files_tuple_list = [('file', open(file, 'rb')) for file in files]
     files = files_tuple_list + [('parent_dir', parent_dir), ('relative_path', relative_path), ('replace', replace)]
-    response = requests.get(upload_url, files=files)
+    response = requests.post(upload_url, files=files)
     return response
 
 def get_dtable_transfer_asset_files(username, repo_id, dtable_uuid, files, task_id, files_map, parent_dir, relative_path, replace, repo_api_token, seafile_server_url):
