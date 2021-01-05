@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
-from hashlib import md5
 from datetime import datetime, timedelta
 
 from sqlalchemy import desc, func, case
-from seaserv import ccnet_api
 
-from dtable_events.activities.models import Activities, UserDTables
+from dtable_events.activities.models import Activities
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +102,7 @@ def update_activity_timestamp(session, activity_id, op_time, detail):
     session.commit()
 
 
-def get_table_activities(session, username, start, limit):
+def get_table_activities(session, uuid_list, start, limit):
     if start < 0:
         logger.error('start must be non-negative')
         raise RuntimeError('start must be non-negative')
@@ -115,7 +113,6 @@ def get_table_activities(session, username, start, limit):
 
     table_activities = list()
     try:
-        uuid_list = session.query(UserDTables.dtable_uuid).filter(UserDTables.username == username)
         q = session.query(
             Activities.dtable_uuid, Activities.op_time.label('op_date'),
             func.date_format(Activities.op_time, '%Y-%m-%d 00:00:00').label('date'),
@@ -183,30 +180,4 @@ def save_user_activities(session, event):
 
     activity = Activities(dtable_uuid, row_id, op_user, op_type, op_time, detail, op_app)
     session.add(activity)
-    session.commit()
-
-    op_date = op_time.replace(hour=0, minute=0, second=0, microsecond=0)
-    op_date_str = op_date.strftime('%Y-%m-%d 00:00:00')
-
-    cmd = "SELECT to_user FROM dtable_share WHERE dtable_id=(SELECT id FROM dtables WHERE uuid=:dtable_uuid)"
-    user_list = [res[r'to_user'] for res in session.execute(cmd, {"dtable_uuid": dtable_uuid})]
-
-    cmd = "SELECT owner FROM workspaces WHERE id=(SELECT workspace_id FROM dtables WHERE uuid=:dtable_uuid)"
-    owner = [res[r'owner'] for res in session.execute(cmd, {"dtable_uuid": dtable_uuid})][0]
-
-    if '@seafile_group' not in owner:
-        user_list.append(owner)
-    else:
-        group_id = int(owner.split('@')[0])
-        members = ccnet_api.get_group_members(group_id)
-        for member in members:
-            if member.user_name not in user_list:
-                user_list.append(member.user_name)
-
-    for user in user_list:
-        user_uuid_date_md5 = md5((user + dtable_uuid + op_date_str).encode('utf-8')).hexdigest()
-        cmd = "REPLACE INTO user_dtables (user_uuid_date_md5, username, dtable_uuid, op_date)" \
-              "values(:user_uuid_date_md5, :username, :dtable_uuid, :op_date)"
-        session.execute(cmd, {"user_uuid_date_md5": user_uuid_date_md5, "username": user,
-                              "dtable_uuid": dtable_uuid, "op_date": op_date})
     session.commit()
