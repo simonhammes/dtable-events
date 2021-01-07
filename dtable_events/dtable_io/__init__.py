@@ -1,11 +1,11 @@
 import shutil
 import os
 import requests
-from openpyxl import load_workbook
 from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json
 from dtable_events.db import init_db_session_class
+from dtable_events.dtable_io.excel import parse_excel_to_json
 
 dtable_io_logger = setup_logger()
 
@@ -142,15 +142,20 @@ def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id
     else:
         dtable_io_logger.info('export files from dtable: %s success!', dtable_uuid)
 
-def parse_excel(username, repo_id, workspace_id, dtable_name, excel_file_dir, config):
+def parse_excel(username, repo_id, workspace_id, dtable_name, config):
     """
     post files at /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
     unzip django uploaded tmp file is suppose to be done in dtable-web api.
     """
-    excel_file_name = dtable_name + '.xlsx'
-    dtable_io_logger.info('Start parse excel: {}.'.format(excel_file_name))
-    excel_file_dir = os.path.join('/tmp/dtable-io/excel/', str(workspace_id))
-    excel_file_path = os.path.join(excel_file_dir, excel_file_name)
+    dtable_io_logger.info('Start parse excel: %s.xlsx.' % dtable_name)
+    file_dir = os.path.join('/tmp/dtable-io/excel/', str(workspace_id))
+
+    try:
+        parse_excel_to_json(dtable_name, file_dir)
+    except Exception as e:
+        dtable_io_logger.error('parse excel failed. ERROR: {}'.format(e))
+    else:
+        dtable_io_logger.info('parse excel %s.xlsx success!' % dtable_name)
 
 def import_dtable_form_excel(username, repo_id, workspace_id, dtable_uuid, dtable_name, config):
     """
