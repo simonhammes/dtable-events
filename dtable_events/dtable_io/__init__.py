@@ -1,6 +1,7 @@
 import shutil
 import os
 import requests
+from openpyxl import load_workbook
 from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json
@@ -141,6 +142,22 @@ def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id
     else:
         dtable_io_logger.info('export files from dtable: %s success!', dtable_uuid)
 
+def parse_excel(username, repo_id, workspace_id, dtable_name, excel_file_dir, config):
+    """
+    post files at /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
+    unzip django uploaded tmp file is suppose to be done in dtable-web api.
+    """
+    excel_file_name = dtable_name + '.xlsx'
+    dtable_io_logger.info('Start parse excel: {}.'.format(excel_file_name))
+    excel_file_dir = os.path.join('/tmp/dtable-io/excel/', str(workspace_id))
+    excel_file_path = os.path.join(excel_file_dir, excel_file_name)
+
+def import_dtable_form_excel(username, repo_id, workspace_id, dtable_uuid, dtable_name, config):
+    """
+    post files at /tmp/<dtable_uuid>/dtable_zip_extracted/ to file server
+    unzip django uploaded tmp file is suppose to be done in dtable-web api.
+    """
+    dtable_io_logger.info('Start import excel: {}.'.format(dtable_uuid))
 
 def _get_upload_link_to_seafile(seafile_server_url, access_token, parent_dir="/"):
     upload_link_api_url = "%s%s" % (seafile_server_url.rstrip('/'),  '/api/v2.1/via-repo-token/upload-link/')
