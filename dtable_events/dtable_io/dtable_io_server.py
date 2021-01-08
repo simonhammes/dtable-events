@@ -14,7 +14,8 @@ class DTableIOServer(Thread):
         Thread.__init__(self)
         self._parse_config(config, dtable_server_config)
         task_manager.init(
-            self._workers, self._dtable_private_key, self._dtable_web_service_url, self._file_server_port,
+            self._workers, self._dtable_private_key, self._dtable_web_service_url,
+            self._file_server_port, self._dtable_server_url,
             self._io_task_timeout, config
         )
         task_manager.run()
@@ -48,20 +49,23 @@ class DTableIOServer(Thread):
 
         central_conf_dir = os.environ.get('SEAFILE_CENTRAL_CONF_DIR', '')
         self._dtable_web_service_url = "http://127.0.0.1:8000"
+        self._dtable_server_url = "http://127.0.0.1:5000"
         if central_conf_dir:
             try:
                 if os.path.exists(central_conf_dir):
                     sys.path.insert(0, central_conf_dir)
-                    from dtable_web_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY
+                    from dtable_web_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
                     self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
                     self._dtable_private_key = DTABLE_PRIVATE_KEY
+                    self._dtable_server_url = DTABLE_SERVER_URL
             except ImportError:
                 dtable_web_seahub_dir = os.path.join(os.environ.get('DTABLE_WEB_DIR', ''), 'seahub')
                 if os.path.exists(dtable_web_seahub_dir):
                     sys.path.insert(0, dtable_web_seahub_dir)
-                    from local_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY
+                    from local_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
                     self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
                     self._dtable_private_key = DTABLE_PRIVATE_KEY 
+                    self._dtable_server_url = DTABLE_SERVER_URL
             except Exception as e:
                 logging.error(f'import settings from SEAFILE_CENTRAL_CONF_DIR/dtable_web_settings.py failed {e}')
 

@@ -1,4 +1,3 @@
-import os
 import json
 from datetime import datetime
 
@@ -70,12 +69,15 @@ def parse_excel_sheet(sheet):
 
 def parse_excel_to_json(repo_id, dtable_name):
     from dtable_events.dtable_io.utils import get_excel_file, upload_excel_json_file
-    excel_file = get_excel_file(repo_id, dtable_name)
 
+    # parse
+    excel_file = get_excel_file(repo_id, dtable_name)
     tables = []
     wb = load_workbook(excel_file, read_only=True)
     for sheet in wb:
         rows, columns = parse_excel_sheet(sheet)
+        if not columns:
+            continue
         table = {
             'name': sheet.title,
             'rows': rows,
@@ -83,15 +85,17 @@ def parse_excel_to_json(repo_id, dtable_name):
         }
         tables.append(table)
 
-    # upload json to seaf-server
+    # upload json to file server
     upload_excel_json_file(repo_id, dtable_name, json.dumps(tables))
 
 
-def import_excel_from_json(dtable_name, file_dir):
-    json_file_path = os.path.join(file_dir, dtable_name + '.json')
-    with open(json_file_path, 'r') as f:
-        tables = json.loads(f)
+def import_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name):
+    from dtable_events.dtable_io.utils import get_excel_json_file, \
+        upload_excel_json_to_dtable_server, delete_excel_file
 
-    for table in tables:
-        pass
-    
+    # get json file
+    json_file = get_excel_json_file(repo_id, dtable_name)
+    # delete excel file
+    delete_excel_file(username, repo_id, dtable_name)
+    # upload json file to dtable-server
+    upload_excel_json_to_dtable_server(username, dtable_uuid, json_file)
