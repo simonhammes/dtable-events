@@ -148,10 +148,9 @@ def parse_excel(username, repo_id, workspace_id, dtable_name, config):
     unzip django uploaded tmp file is suppose to be done in dtable-web api.
     """
     dtable_io_logger.info('Start parse excel: %s.xlsx.' % dtable_name)
-    file_dir = os.path.join('/tmp/dtable-io/excel/', str(workspace_id))
 
     try:
-        parse_excel_to_json(dtable_name, file_dir)
+        parse_excel_to_json(repo_id, dtable_name)
     except Exception as e:
         dtable_io_logger.error('parse excel failed. ERROR: {}'.format(e))
     else:

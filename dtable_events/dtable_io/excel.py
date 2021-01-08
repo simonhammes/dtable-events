@@ -68,11 +68,12 @@ def parse_excel_sheet(sheet):
     return rows, columns
 
 
-def parse_excel_to_json(dtable_name, file_dir):
-    excel_file_path = os.path.join(file_dir, dtable_name + '.xlsx')
+def parse_excel_to_json(repo_id, dtable_name):
+    from dtable_events.dtable_io.utils import get_excel_file, upload_excel_json_file
+    excel_file = get_excel_file(repo_id, dtable_name)
 
     tables = []
-    wb = load_workbook(excel_file_path, read_only=True)
+    wb = load_workbook(excel_file, read_only=True)
     for sheet in wb:
         rows, columns = parse_excel_sheet(sheet)
         table = {
@@ -82,6 +83,15 @@ def parse_excel_to_json(dtable_name, file_dir):
         }
         tables.append(table)
 
+    # upload json to seaf-server
+    upload_excel_json_file(repo_id, dtable_name, json.dumps(tables))
+
+
+def import_excel_from_json(dtable_name, file_dir):
     json_file_path = os.path.join(file_dir, dtable_name + '.json')
-    with open(json_file_path, 'w') as f:
-        json.dump(tables, f)
+    with open(json_file_path, 'r') as f:
+        tables = json.loads(f)
+
+    for table in tables:
+        pass
+    

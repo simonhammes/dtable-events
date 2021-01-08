@@ -9,6 +9,7 @@ import multiprocessing
 import datetime
 import random
 import string
+from io import BytesIO
 from zipfile import ZipFile, is_zipfile
 
 from django.utils.http import urlquote
@@ -42,6 +43,15 @@ def gen_inner_file_get_url(token, filename):
     INNER_FILE_SERVER_ROOT = 'http://127.0.0.1:' + str(FILE_SERVER_PORT)
     return '%s/files/%s/%s' % (INNER_FILE_SERVER_ROOT, token,
                                urlquote(filename))
+
+
+def gen_inner_file_upload_url(token, op, replace=False):
+    FILE_SERVER_PORT = task_manager.conf['file_server_port']
+    INNER_FILE_SERVER_ROOT = 'http://127.0.0.1:' + str(FILE_SERVER_PORT)
+    url = '%s/%s/%s' % (INNER_FILE_SERVER_ROOT, op, token)
+    if replace is True:
+        url += '?replace=1'
+    return url
 
 
 def gen_dir_zip_download_url(token):
@@ -360,3 +370,39 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path, files_ma
             f.write(content)
         tmp_file_list.append(filename_by_path)
     return tmp_file_list
+
+def get_excel_file(repo_id, file_name):
+    dir_path = '/tmp/excel/'
+    file_path = dir_path + file_name + '.xlsx'
+    obj_id = seafile_api.get_file_id_by_path(repo_id, file_path)
+    token = seafile_api.get_fileserver_access_token(
+        repo_id, obj_id, 'download', '', use_onetime=True
+    )
+    url = gen_inner_file_get_url(token, file_name + '.xlsx')
+    content = requests.get(url).content
+    return BytesIO(content)
+
+def upload_excel_json_file(repo_id, file_name, content):
+    dir_path = '/tmp/excel/'
+    obj_id = json.dumps({'parent_dir': dir_path})
+    token = seafile_api.get_fileserver_access_token(
+        repo_id, obj_id, 'upload', '', use_onetime=True
+    )
+    upload_link = gen_inner_file_upload_url(token, 'upload-api', replace=True)
+    f = BytesIO()
+    f.write(content.encode('utf-8'))
+    response = requests.post(upload_link, 
+        data = {'parent_dir': dir_path, 'relative_path': '', 'replace': 1},
+        files = {'file': (file_name + '.json', f.read())}
+    )
+
+def get_excel_json_file(repo_id, file_name):
+    dir_path = '/tmp/excel/'
+    file_path = dir_path + file_name + '.json'
+    obj_id = seafile_api.get_file_id_by_path(repo_id, file_path)
+    token = seafile_api.get_fileserver_access_token(
+        repo_id, obj_id, 'download', '', use_onetime=True
+    )
+    url = gen_inner_file_get_url(token, file_name + '.json')
+    content = requests.get(url).content
+    return BytesIO(content)
