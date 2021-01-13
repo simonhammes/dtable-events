@@ -142,15 +142,15 @@ def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id
     else:
         dtable_io_logger.info('export files from dtable: %s success!', dtable_uuid)
 
-def parse_excel(username, repo_id, workspace_id, dtable_name, config):
+def parse_excel(username, repo_id, workspace_id, dtable_name, custom, config):
     """
     parse excel to json file, then upload json file to file server
     """
     dtable_io_logger.info('Start parse excel: %s.xlsx.' % dtable_name)
     try:
-        parse_excel_to_json(repo_id, dtable_name)
+        parse_excel_to_json(repo_id, dtable_name, custom)
     except Exception as e:
-        dtable_io_logger.error('parse excel failed. ERROR: {}'.format(e))
+        dtable_io_logger.exception('parse excel failed. ERROR: {}'.format(e))
     else:
         dtable_io_logger.info('parse excel %s.xlsx success!' % dtable_name)
 

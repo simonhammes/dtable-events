@@ -98,6 +98,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             repo_id = arguments['repo_id'][0]
             workspace_id = arguments['workspace_id'][0]
             dtable_name = arguments['dtable_name'][0]
+            custom = arguments['custom'][0]
+            custom = bool(int(custom))
 
             try:
                 task_id = task_manager.add_parse_excel_task(
@@ -105,6 +107,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                     repo_id,
                     workspace_id,
                     dtable_name,
+                    custom,
                 )
             except Exception as e:
                 logger.error(e)

@@ -21,6 +21,7 @@ from dtable_events.dtable_io.task_manager import task_manager
 # this two prefix used in exported zip file
 FILE_URL_PREFIX = 'file://dtable-bundle/asset/files/'
 IMG_URL_PREFIX = 'file://dtable-bundle/asset/images/'
+EXCEL_DIR_PATH = '/tmp/excel/'
 
 
 def setup_logger():
@@ -388,8 +389,7 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path, files_ma
     return tmp_file_list
 
 def get_excel_file(repo_id, file_name):
-    dir_path = '/tmp/excel/'
-    file_path = dir_path + file_name + '.xlsx'
+    file_path = EXCEL_DIR_PATH + file_name + '.xlsx'
     obj_id = seafile_api.get_file_id_by_path(repo_id, file_path)
     token = seafile_api.get_fileserver_access_token(
         repo_id, obj_id, 'download', '', use_onetime=True
@@ -399,21 +399,19 @@ def get_excel_file(repo_id, file_name):
     return BytesIO(content)
 
 def upload_excel_json_file(repo_id, file_name, content):
-    dir_path = '/tmp/excel/'
-    obj_id = json.dumps({'parent_dir': dir_path})
+    obj_id = json.dumps({'parent_dir': EXCEL_DIR_PATH})
     token = seafile_api.get_fileserver_access_token(
         repo_id, obj_id, 'upload', '', use_onetime=True
     )
     upload_link = gen_inner_file_upload_url(token, 'upload-api', replace=True)
     content_type = 'application/json'
     response = requests.post(upload_link, 
-        data = {'parent_dir': dir_path, 'relative_path': '', 'replace': 1},
+        data = {'parent_dir': EXCEL_DIR_PATH, 'relative_path': '', 'replace': 1},
         files = {'file': (file_name + '.json', content.encode('utf-8'), content_type)}
     )
 
 def get_excel_json_file(repo_id, file_name):
-    dir_path = '/tmp/excel/'
-    file_path = dir_path + file_name + '.json'
+    file_path = EXCEL_DIR_PATH + file_name + '.json'
     file_id = seafile_api.get_file_id_by_path(repo_id, file_path)
     if not file_id:
         raise FileExistsError('file %s not found' % file_path)
@@ -425,9 +423,8 @@ def get_excel_json_file(repo_id, file_name):
     return json_file
 
 def delete_excel_file(username, repo_id, file_name):
-    dir_path = '/tmp/excel/'
     filename = file_name + '.xlsx\t' + file_name + '.json\t'
-    seafile_api.del_file(repo_id, dir_path, filename, username)
+    seafile_api.del_file(repo_id, EXCEL_DIR_PATH, filename, username)
 
 def upload_excel_json_to_dtable_server(username, dtable_uuid, json_file):
     DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
