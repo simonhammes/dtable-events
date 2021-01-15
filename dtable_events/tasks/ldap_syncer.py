@@ -15,10 +15,6 @@ if not os.path.exists(dtable_web_dir):
     logging.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
     raise RuntimeError('dtable_web_dir does not exist')
 
-__all__ = [
-    'DTableRowsCounter',
-]
-
 
 class LDAPSyncer(object):
 
