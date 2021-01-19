@@ -123,7 +123,6 @@ def parse_excel_columns(sheet_rows, head_index, max_column):
             'data': column_data,
         }
         columns.append(column)
-        index = index + 1
 
     return columns
 
