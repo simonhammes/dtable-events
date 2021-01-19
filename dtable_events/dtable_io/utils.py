@@ -9,6 +9,8 @@ import multiprocessing
 import datetime
 import random
 import string
+import jwt
+from io import BytesIO
 from zipfile import ZipFile, is_zipfile
 
 from django.utils.http import urlquote
@@ -19,6 +21,7 @@ from dtable_events.dtable_io.task_manager import task_manager
 # this two prefix used in exported zip file
 FILE_URL_PREFIX = 'file://dtable-bundle/asset/files/'
 IMG_URL_PREFIX = 'file://dtable-bundle/asset/images/'
+EXCEL_DIR_PATH = '/tmp/excel/'
 
 
 def setup_logger():
@@ -42,6 +45,30 @@ def gen_inner_file_get_url(token, filename):
     INNER_FILE_SERVER_ROOT = 'http://127.0.0.1:' + str(FILE_SERVER_PORT)
     return '%s/files/%s/%s' % (INNER_FILE_SERVER_ROOT, token,
                                urlquote(filename))
+
+
+def gen_inner_file_upload_url(token, op, replace=False):
+    FILE_SERVER_PORT = task_manager.conf['file_server_port']
+    INNER_FILE_SERVER_ROOT = 'http://127.0.0.1:' + str(FILE_SERVER_PORT)
+    url = '%s/%s/%s' % (INNER_FILE_SERVER_ROOT, op, token)
+    if replace is True:
+        url += '?replace=1'
+    return url
+
+
+def get_dtable_server_token(username, dtable_uuid):
+    DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
+    payload = {
+        'exp': int(time.time()) + 60,
+        'dtable_uuid': dtable_uuid,
+        'username': username,
+        'permission': 'rw',
+    }
+    access_token = jwt.encode(
+        payload, DTABLE_PRIVATE_KEY, algorithm='HS256'
+    )
+
+    return access_token
 
 
 def gen_dir_zip_download_url(token):
@@ -360,3 +387,53 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path, files_ma
             f.write(content)
         tmp_file_list.append(filename_by_path)
     return tmp_file_list
+
+def get_excel_file(repo_id, file_name):
+    file_path = EXCEL_DIR_PATH + file_name + '.xlsx'
+    obj_id = seafile_api.get_file_id_by_path(repo_id, file_path)
+    token = seafile_api.get_fileserver_access_token(
+        repo_id, obj_id, 'download', '', use_onetime=True
+    )
+    url = gen_inner_file_get_url(token, file_name + '.xlsx')
+    content = requests.get(url).content
+    return BytesIO(content)
+
+def upload_excel_json_file(repo_id, file_name, content):
+    obj_id = json.dumps({'parent_dir': EXCEL_DIR_PATH})
+    token = seafile_api.get_fileserver_access_token(
+        repo_id, obj_id, 'upload', '', use_onetime=True
+    )
+    upload_link = gen_inner_file_upload_url(token, 'upload-api', replace=True)
+    content_type = 'application/json'
+    response = requests.post(upload_link, 
+        data = {'parent_dir': EXCEL_DIR_PATH, 'relative_path': '', 'replace': 1},
+        files = {'file': (file_name + '.json', content.encode('utf-8'), content_type)}
+    )
+
+def get_excel_json_file(repo_id, file_name):
+    file_path = EXCEL_DIR_PATH + file_name + '.json'
+    file_id = seafile_api.get_file_id_by_path(repo_id, file_path)
+    if not file_id:
+        raise FileExistsError('file %s not found' % file_path)
+    token = seafile_api.get_fileserver_access_token(
+        repo_id, file_id, 'download', '', use_onetime=True
+    )
+    url = gen_inner_file_get_url(token, file_name + '.json')
+    json_file = requests.get(url).content
+    return json_file
+
+def delete_excel_file(username, repo_id, file_name):
+    filename = file_name + '.xlsx\t' + file_name + '.json\t'
+    seafile_api.del_file(repo_id, EXCEL_DIR_PATH, filename, username)
+
+def upload_excel_json_to_dtable_server(username, dtable_uuid, json_file):
+    DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/' + dtable_uuid + '/import-excel/'
+    dtable_server_access_token = get_dtable_server_token(username, dtable_uuid)
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
+    files = {
+        'excel_json': json_file
+    }
+    res = requests.post(url, headers=headers, files=files)
+    if res.status_code != 200:
+        raise ConnectionError('failed to import excel json %s %s' % (dtable_uuid, res.text))

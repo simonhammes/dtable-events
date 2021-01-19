@@ -88,6 +88,71 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['task_id'] = task_id
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
+        elif path == '/add-parse-excel-task':
+
+            if task_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            username = arguments['username'][0]
+            repo_id = arguments['repo_id'][0]
+            workspace_id = arguments['workspace_id'][0]
+            dtable_name = arguments['dtable_name'][0]
+            custom = arguments['custom'][0]
+            custom = bool(int(custom))
+
+            try:
+                task_id = task_manager.add_parse_excel_task(
+                    username,
+                    repo_id,
+                    workspace_id,
+                    dtable_name,
+                    custom,
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {}
+            resp['task_id'] = task_id
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
+        elif path == '/add-import-excel-task':
+
+            if task_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            username = arguments['username'][0]
+            repo_id = arguments['repo_id'][0]
+            workspace_id = arguments['workspace_id'][0]
+            dtable_uuid = arguments['dtable_uuid'][0]
+            dtable_name = arguments['dtable_name'][0]
+
+            try:
+                task_id = task_manager.add_import_excel_task(
+                    username,
+                    repo_id,
+                    workspace_id,
+                    dtable_uuid,
+                    dtable_name,
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {}
+            resp['task_id'] = task_id
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
         elif path == '/query-status':
             task_id = arguments['task_id'][0]
 

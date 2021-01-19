@@ -16,11 +16,12 @@ class TaskManager(object):
         self.conf = None
         self.config = None
 
-    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, io_task_timeout, config):
+    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, dtable_server_url, io_task_timeout, config):
         self.conf = {
             'dtable_private_key': dtable_private_key,
             'dtable_web_service_url': dtable_web_service_url,
             'file_server_port': file_server_port,
+            'dtable_server_url': dtable_server_url,
             'io_task_timeout': io_task_timeout,
             'workers': workers,
         }
@@ -79,6 +80,26 @@ class TaskManager(object):
                  replace,
                  repo_api_token,
                  seafile_server_url))
+        self.tasks_queue.put(task_id)
+        self.tasks_map[task_id] = task
+        return task_id
+
+    def add_parse_excel_task(self, username, repo_id, workspace_id, dtable_name, custom):
+        from dtable_events.dtable_io import parse_excel
+
+        task_id = str(int(time.time()*1000))
+        task = (parse_excel,
+                (username, repo_id, workspace_id, dtable_name, custom, self.config))
+        self.tasks_queue.put(task_id)
+        self.tasks_map[task_id] = task
+        return task_id
+
+    def add_import_excel_task(self, username, repo_id, workspace_id, dtable_uuid, dtable_name):
+        from dtable_events.dtable_io import import_excel
+
+        task_id = str(int(time.time()*1000))
+        task = (import_excel,
+                (username, repo_id, workspace_id, dtable_uuid, dtable_name, self.config))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
         return task_id
