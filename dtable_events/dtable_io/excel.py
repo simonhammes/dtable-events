@@ -1,3 +1,4 @@
+import re
 import json
 import logging
 from datetime import datetime
@@ -16,7 +17,54 @@ CHECKBOX_TUPLE = (
     ('完成', '未完成'),
 )
 CHECKBOX_STRING_LIST = [string for item in CHECKBOX_TUPLE for string in item]
-CHECKBOX_TRUE_LISt = [item[0] for item in CHECKBOX_TUPLE]
+CHECKBOX_TRUE_LIST = [item[0] for item in CHECKBOX_TUPLE]
+
+# copy from dtable-web/frontend/src/components-form/utils/markdown-utils.js
+HREF_REG = r'\[.+\]\(\S+\)|<img src=\S+.+\/>|!\[\]\(\S+\)|<\S+>'
+LINK_REG_1 = r'^\[.+\]\((\S+)\)'
+LINK_REG_2 = r'^<(\S+)>$'
+IMAGE_REG_1 = r'^<img src="(\S+)" .+\/>'
+IMAGE_REG_2 = r'^!\[\]\((\S+)\)'
+
+
+def parse_checkbox(cell_value):
+    return True if cell_value in CHECKBOX_TRUE_LIST else False
+
+
+def parse_multiple_select(cell_value):
+    values = cell_value.split('，') if '，' in cell_value else cell_value.split(',')
+    return [value.strip(' ') for value in values]
+
+
+def parse_long_text(cell_value):
+    checked_count = cell_value.count('[x]')
+    unchecked_count = cell_value.count('[ ]')
+    total = checked_count + unchecked_count
+
+    href_reg = re.compile(HREF_REG)
+    preview = href_reg.sub(' ', cell_value)
+    preview = preview[:20].replace('\n', ' ')
+
+    images = []
+    links = []
+    href_list = href_reg.findall(cell_value)
+    for href in href_list:
+        if re.search(LINK_REG_1, href):
+            links.append(re.search(LINK_REG_1, href).group(1))
+        elif re.search(LINK_REG_2, href):
+            links.append(re.search(LINK_REG_2, href).group(1))
+        elif re.search(IMAGE_REG_1, href):
+            images.append(re.search(IMAGE_REG_1, href).group(1))
+        elif re.search(IMAGE_REG_2, href):
+            images.append(re.search(IMAGE_REG_2, href).group(1))
+
+    return {
+        'text': cell_value,
+        'preview': preview,
+        'checklist': {'completed': checked_count, 'total': total},
+        'images': images,
+        'links': links,
+    }
 
 
 def parse_excel_rows(sheet_rows, columns, head_index, max_column):
@@ -39,15 +87,11 @@ def parse_excel_rows(sheet_rows, columns, head_index, max_column):
                 elif column_type == 'date':
                     row_data[column_name] = str(cell_value)
                 elif column_type == 'long-text':
-                    row_data[column_name] = {
-                        'preview': cell_value[:10].replace('\n', ' '),
-                        'text': cell_value,
-                    }
+                    row_data[column_name] = parse_long_text(cell_value)
                 elif column_type == 'checkbox':
-                    row_data[column_name] = True if cell_value in CHECKBOX_TRUE_LISt else False
+                    row_data[column_name] = parse_checkbox(cell_value)
                 elif column_type == 'multiple-select':
-                    multiple_value = cell_value.split('，') if '，' in cell_value else cell_value.split(',')
-                    row_data[column_name] = [value.strip(' ') for value in multiple_value]
+                    row_data[column_name] = parse_multiple_select(cell_value)
                 else:
                     row_data[column_name] = str(cell_value)
             except Exception as e:
