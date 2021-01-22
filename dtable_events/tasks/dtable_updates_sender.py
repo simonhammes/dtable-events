@@ -3,7 +3,7 @@ import os
 import logging
 from threading import Thread, Event
 
-from dtable_events.utils import get_opt_from_conf_or_env, parse_bool, get_python_executable, run
+from dtable_events.utils import get_opt_from_conf_or_env, parse_bool, get_python_executable, run_and_wait
 
 
 # DTABLE_WEB_DIR
@@ -25,7 +25,7 @@ class DTableUpdatesSender(object):
     def __init__(self, config):
         self._enabled = True
         self._logfile = None
-        self._interval = 60
+        self._interval = 60 * 60
         self._prepare_logfile()
         self._parse_config(config)
 
@@ -81,7 +81,7 @@ class DTableUpdatesSenderTimer(Thread):
                         'send_dtable_updates',
                     ]
                     with open(self._logfile, 'a') as fp:
-                        run(cmd, cwd=dtable_web_dir, output=fp)
+                        run_and_wait(cmd, cwd=dtable_web_dir, output=fp)
                 except Exception as e:
                     logging.exception('send dtable updates email error: %s', e)
 
