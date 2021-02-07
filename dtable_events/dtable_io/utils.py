@@ -10,6 +10,7 @@ import datetime
 import random
 import string
 import jwt
+import sys
 from io import BytesIO
 from zipfile import ZipFile, is_zipfile
 
@@ -389,6 +390,8 @@ def download_files_to_path(username, repo_id, dtable_uuid, files, path, files_ma
     return tmp_file_list
 
 def get_excel_file(repo_id, file_name):
+    from dtable_events.dtable_io import dtable_io_logger
+
     file_path = EXCEL_DIR_PATH + file_name + '.xlsx'
     obj_id = seafile_api.get_file_id_by_path(repo_id, file_path)
     token = seafile_api.get_fileserver_access_token(
@@ -396,18 +399,27 @@ def get_excel_file(repo_id, file_name):
     )
     url = gen_inner_file_get_url(token, file_name + '.xlsx')
     content = requests.get(url).content
+
+    file_size = sys.getsizeof(content)
+    dtable_io_logger.info('excel file size: %d KB' % (file_size >> 10))
     return BytesIO(content)
 
 def upload_excel_json_file(repo_id, file_name, content):
+    from dtable_events.dtable_io import dtable_io_logger
+
     obj_id = json.dumps({'parent_dir': EXCEL_DIR_PATH})
     token = seafile_api.get_fileserver_access_token(
         repo_id, obj_id, 'upload', '', use_onetime=True
     )
     upload_link = gen_inner_file_upload_url(token, 'upload-api', replace=True)
     content_type = 'application/json'
+
+    file = content.encode('utf-8')
+    file_size = sys.getsizeof(file)
+    dtable_io_logger.info( 'excel json file size: %d KB' % (file_size >> 10))
     response = requests.post(upload_link, 
         data = {'parent_dir': EXCEL_DIR_PATH, 'relative_path': '', 'replace': 1},
-        files = {'file': (file_name + '.json', content.encode('utf-8'), content_type)}
+        files = {'file': (file_name + '.json', file, content_type)}
     )
 
 def get_excel_json_file(repo_id, file_name):

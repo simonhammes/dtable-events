@@ -1,6 +1,5 @@
 import re
 import json
-import logging
 from datetime import datetime
 
 from openpyxl import load_workbook
@@ -25,6 +24,10 @@ LINK_REG_1 = r'^\[.+\]\((\S+)\)'
 LINK_REG_2 = r'^<(\S+)>$'
 IMAGE_REG_1 = r'^<img src="(\S+)" .+\/>'
 IMAGE_REG_2 = r'^!\[\]\((\S+)\)'
+
+
+class EmptyCell(object):
+    value = None
 
 
 def parse_checkbox(cell_value):
@@ -68,6 +71,8 @@ def parse_long_text(cell_value):
 
 
 def parse_excel_rows(sheet_rows, columns, head_index, max_column):
+    from dtable_events.dtable_io import dtable_io_logger
+
     if head_index < 0:
         value_rows = sheet_rows
     else:
@@ -95,13 +100,15 @@ def parse_excel_rows(sheet_rows, columns, head_index, max_column):
                 else:
                     row_data[column_name] = str(cell_value)
             except Exception as e:
-                logging.exception(e)
+                dtable_io_logger.exception(e)
         rows.append(row_data)
 
     return rows
 
 
 def parse_excel_column_type(value_list):
+    from dtable_events.dtable_io import dtable_io_logger
+
     try:
         type_list = []
         # Check the first 200 rows of data
@@ -144,12 +151,14 @@ def parse_excel_column_type(value_list):
 
         return max_column_type, column_data
     except Exception as e:
-        logging.exception(e)
+        dtable_io_logger.exception(e)
         return 'text', None
+
 
 def parse_excel_columns(sheet_rows, head_index, max_column):
     if head_index == -1:
-        head_row = [None] * head_index
+        empty_cell = EmptyCell()
+        head_row = [empty_cell] * max_column
         value_rows = sheet_rows
     else:
         head_row = sheet_rows[head_index]
@@ -174,6 +183,7 @@ def parse_excel_columns(sheet_rows, head_index, max_column):
 def parse_excel_to_json(repo_id, dtable_name, custom=False):
     from dtable_events.dtable_io.utils import get_excel_file, \
         upload_excel_json_file, get_excel_json_file
+    from dtable_events.dtable_io import dtable_io_logger
 
     # user custom columns
     if custom:
@@ -188,6 +198,8 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
     tables = []
     wb = load_workbook(excel_file, read_only=True)
     for sheet in wb:
+        dtable_io_logger.info(
+            'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
         sheet_rows = list(sheet.rows)
         max_row = len(sheet_rows)
         if not max_row:
@@ -213,6 +225,7 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
             'max_column': max_column,
         }
         tables.append(table)
+    wb.close()
 
     # upload json to file server
     upload_excel_json_file(repo_id, dtable_name, json.dumps(tables))

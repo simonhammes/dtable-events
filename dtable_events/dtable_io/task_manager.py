@@ -2,7 +2,6 @@ import time
 import os
 import queue
 import threading
-import logging
 
 
 from seaserv import seafile_api
@@ -15,6 +14,7 @@ class TaskManager(object):
         self.tasks_queue = queue.Queue(10)
         self.conf = None
         self.config = None
+        self.current_task_info = None
 
     def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, dtable_server_url, io_task_timeout, config):
         self.conf = {
@@ -112,6 +112,8 @@ class TaskManager(object):
         return False
 
     def handle_task(self):
+        from dtable_events.dtable_io import dtable_io_logger
+
         while True:
             try:
                 task_id = self.tasks_queue.get(timeout=2)
@@ -120,11 +122,21 @@ class TaskManager(object):
             else:
                 task = self.tasks_map[task_id]
                 try:
+                    self.current_task_info = task_id + ' ' + str(task[0])
+                    dtable_io_logger.info('Run task: %s' % self.current_task_info)
+                    start_time = time.time()
+
+                    # run
                     task[0](*task[1])
                     self.tasks_map[task_id] = 'success'
+
+                    finish_time = time.time()
+                    dtable_io_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
+                    self.current_task_info = None
                 except Exception as e:
-                    logging.error('Failed to handle task %s, error: %s' % (task_id, e))
+                    dtable_io_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
                     self.tasks_map.pop(task_id, None)
+                    self.current_task_info = None
 
     def run(self):
         t = threading.Thread(target=self.handle_task)
