@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
+        from dtable_events.dtable_io import dtable_io_logger
+
         auth = self.headers['Authorization'].split()
         if not auth or auth[0].lower() != 'token' or len(auth) != 2:
             self.send_error(403, 'Token invalid.')
@@ -30,8 +32,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         if path == '/add-export-task':
 
             if task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy, queue size: %d, current task: %s' \
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
                         % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = arguments['username'][0]
@@ -60,8 +63,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         elif path == '/add-import-task':
 
             if task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy, queue size: %d, current task: %s' \
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
                         % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = arguments['username'][0]
@@ -93,8 +97,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         elif path == '/add-parse-excel-task':
 
             if task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy, queue size: %d, current task: %s' \
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
                         % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = arguments['username'][0]
@@ -127,8 +132,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         elif path == '/add-import-excel-task':
 
             if task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy, queue size: %d, current task: %s' \
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
                         % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = arguments['username'][0]
@@ -197,6 +203,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.send_error(400, 'path %s invalid.' % path)
 
     def do_POST(self):
+        from dtable_events.dtable_io import dtable_io_logger
+
         auth = self.headers['Authorization'].split()
         if not auth or auth[0].lower() != 'token' or len(auth) != 2:
             self.send_error(403, 'Token invalid.')
@@ -215,8 +223,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
         if path == '/dtable-asset-files':
             if task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy, queue size: %d, current task: %s' \
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
                         % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = datasets.getvalue('username')
@@ -249,8 +258,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
         elif path == '/transfer-dtable-asset-files':
             if task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy, queue size: %d, current task: %s' \
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
                         % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                self.send_error(400, 'dtable io server busy.')
                 return
 
             username = datasets.getvalue('username')
