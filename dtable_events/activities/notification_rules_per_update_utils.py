@@ -9,6 +9,8 @@ import requests
 import jwt
 import sys
 
+from dtable_events.utils.constants import ColumnTypes
+
 logger = logging.getLogger(__name__)
 
 
@@ -83,6 +85,7 @@ def scan_notifications_rules_per_update(event_data, db_session):
         try:
             check_notification_rule(rule, table_id, row_id, column_keys, dtable_server_access_token, db_session)
         except Exception as e:
+            logger.exception(e)
             logger.error(f'check rule failed. {rule}, error: {e}')
     db_session.commit()
 
@@ -150,6 +153,70 @@ def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, tabl
     return json.loads(res.content).get('is_row_satisfy_filters')
 
 
+def gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token):
+    if not msg:
+        return msg
+    headers = {
+        'Authorization': b'Token ' + dtable_server_access_token
+    }
+    # get row of table-view-row
+    row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
+    query = {
+        'table_id': table_id
+    }
+    try:
+        response = requests.get(row_url, params=query, headers=headers)
+        row = response.json()
+    except Exception as e:
+        logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
+        return msg
+
+    # get columns of table-view
+    columns_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/columns/'.format(dtable_uuid=dtable_uuid)
+    query = {
+        'table_id': table_id,
+        'view_id': view_id
+    }
+    try:
+        response = requests.get(columns_url, params=query, headers=headers)
+        columns = response.json()['columns']
+    except Exception as e:
+        logger.error('dtable_uuid: %s, table_id: %s, view_id: %s, request columns error: %s', dtable_uuid, table_id, view_id, e)
+        return msg
+
+    # gen msg with row content
+    col_name_dict = {col['name']: col for col in columns}
+    for col_name, value in row.items():
+        if col_name in col_name_dict:
+            if col_name_dict[col_name]['type'] in [
+                ColumnTypes.TEXT,
+                ColumnTypes.DATE,
+                ColumnTypes.LONG_TEXT,
+                ColumnTypes.SINGLE_SELECT,
+                ColumnTypes.URL,
+                ColumnTypes.DURATION,
+                ColumnTypes.NUMBER,
+                ColumnTypes.EMAIL,
+                ColumnTypes.FORMULA,
+                ColumnTypes.CREATOR,
+                ColumnTypes.LAST_MODIFIER,
+                ColumnTypes.AUTO_NUMBER,
+                ColumnTypes.CTIME,
+                ColumnTypes.MTIME
+            ]:
+                msg = msg.replace('{' + col_name + '}', str(value))
+            elif col_name_dict[col_name]['type'] in [
+                ColumnTypes.IMAGE,
+                ColumnTypes.MULTIPLE_SELECT,
+                ColumnTypes.COLLABORATOR
+            ]:
+                msg = msg.replace('{' + col_name + '}', '[' + ', '.join(value) + ']')
+            elif col_name_dict[col_name]['type'] in [ColumnTypes.FILE]:
+                msg = msg.replace('{' + col_name + '}', '[' + ', '.join([f['name'] for f in value]) + ']')
+
+    return msg
+
+
 def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session=None):
 
     rule_id = rule[0]
@@ -185,7 +252,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_ROWS_MODIFIED,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': msg,
+            'msg': gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
             'row_id_list': [row_id],
         }
 
@@ -228,7 +295,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_FILTERS_SATISFY,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': msg,
+            'msg': gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
             'row_id_list': [row_id],
         }
         if users_column_key:
