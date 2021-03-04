@@ -8,6 +8,9 @@ from datetime import datetime
 import requests
 import jwt
 import sys
+import re
+
+from dtable_events.utils.constants import ColumnTypes
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +153,85 @@ def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, tabl
     return json.loads(res.content).get('is_row_satisfy_filters')
 
 
+def gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token):
+    if not msg:
+        return msg
+
+    # checkout all blanks to fill in
+    # if no blanks, just return msg
+    blanks = set(re.findall(r'\{([^{]*?)\}', msg))
+    if not blanks:
+        return msg
+
+    # get columns of table-view
+    headers = {
+        'Authorization': b'Token ' + dtable_server_access_token
+    }
+    columns_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/columns/'.format(dtable_uuid=dtable_uuid)
+    query = {
+        'table_id': table_id,
+        'view_id': view_id
+    }
+    try:
+        response = requests.get(columns_url, params=query, headers=headers)
+        columns = response.json()['columns']
+    except Exception as e:
+        logger.error('dtable_uuid: %s, table_id: %s, view_id: %s, request columns error: %s', dtable_uuid, table_id, view_id, e)
+        return msg
+
+    col_name_dict = {col['name']: col for col in columns}
+
+    # judge to-be-filled blanks whether in columns
+    # if all blanks not in columns, straightly send msg to save the time on request row
+    column_blanks = [f for f in blanks if f in col_name_dict]
+    if not column_blanks:
+        return msg
+
+    # get row of table-view-row
+    row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
+    query = {
+        'table_id': table_id
+    }
+    try:
+        response = requests.get(row_url, params=query, headers=headers)
+        row = response.json()
+    except Exception as e:
+        logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
+        return msg
+
+    for blank in column_blanks:
+        if col_name_dict[blank]['type'] in [
+            ColumnTypes.TEXT,
+            ColumnTypes.DATE,
+            ColumnTypes.LONG_TEXT,
+            ColumnTypes.SINGLE_SELECT,
+            ColumnTypes.URL,
+            ColumnTypes.DURATION,
+            ColumnTypes.NUMBER,
+            ColumnTypes.EMAIL,
+            ColumnTypes.FORMULA,
+            ColumnTypes.CREATOR,
+            ColumnTypes.LAST_MODIFIER,
+            ColumnTypes.AUTO_NUMBER,
+            ColumnTypes.CTIME,
+            ColumnTypes.MTIME
+        ]:
+            value = row.get(blank, '')
+            msg = msg.replace('{' + blank + '}', str(value))
+        elif col_name_dict[blank]['type'] in [
+            ColumnTypes.IMAGE,
+            ColumnTypes.MULTIPLE_SELECT,
+            ColumnTypes.COLLABORATOR
+        ]:
+            value = row.get(blank, [])
+            msg = msg.replace('{' + blank + '}', '[' + ', '.join(value) + ']')
+        elif col_name_dict[blank]['type'] in [ColumnTypes.FILE]:
+            value = row.get(blank, [])
+            msg = msg.replace('{' + blank + '}', '[' + ', '.join([f['name'] for f in value]) + ']')
+
+    return msg
+
+
 def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session=None):
 
     rule_id = rule[0]
@@ -185,7 +267,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_ROWS_MODIFIED,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': msg,
+            'msg': gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
             'row_id_list': [row_id],
         }
 
@@ -228,7 +310,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_FILTERS_SATISFY,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': msg,
+            'msg': gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
             'row_id_list': [row_id],
         }
         if users_column_key:
