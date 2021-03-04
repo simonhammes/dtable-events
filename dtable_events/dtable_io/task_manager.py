@@ -37,6 +37,7 @@ class TaskManager(object):
             self.tasks_map.pop(task_id, None)
             return True
         return False
+
     def handle_task(self):
         from dtable_events.dtable_io import dtable_io_logger
 
