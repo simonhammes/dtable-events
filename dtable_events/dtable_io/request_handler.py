@@ -4,7 +4,7 @@ import jwt
 import logging
 from urllib import parse
 from http.server import SimpleHTTPRequestHandler
-from dtable_events.dtable_io.task_manager import task_manager
+from dtable_events.dtable_io.task_manager import task_manager, task_message_manager
 
 logger = logging.getLogger(__name__)
 
@@ -163,14 +163,18 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['task_id'] = task_id
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
-        elif path == '/query-status':
+        elif path in ['/query-status', '/query-message-send-status']:
             task_id = arguments['task_id'][0]
+            task_handle_manager = {
+                '/query-status': task_manager,
+                '/query-message-send-status': task_message_manager
+            }.get(path)
 
-            if not task_manager.is_valid_task_id(task_id):
+            if not task_handle_manager.is_valid_task_id(task_id):
                 self.send_error(400, 'task_id invalid.')
             is_finished = False
             try:
-                is_finished = task_manager.query_status(task_id)
+                is_finished = task_handle_manager.query_status(task_id)
             except Exception as e:
                 logger.error(e)
                 self.send_error(500)
@@ -182,13 +186,16 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['is_finished'] = is_finished
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
-        elif path == '/cancel-task':
+        elif path in ['/cancel-task','/cancel-message-send-task']:
             task_id = arguments['task_id'][0]
-
-            if not task_manager.is_valid_task_id(task_id):
+            task_handle_manager = {
+                '/cancel-task': task_manager,
+                '/cancel-message-send-task': task_message_manager
+            }.get(path)
+            if not task_handle_manager.is_valid_task_id(task_id):
                 self.send_error(400, 'task_id invalid.')
             try:
-                task_manager.cancel_task(task_id)
+                task_handle_manager.cancel_task(task_id)
             except Exception as e:
                 logger.error(e)
                 self.send_error(500)
@@ -289,6 +296,65 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                     replace,
                     repo_api_token,
                     seafile_server_url,
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {'task_id': task_id}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
+        elif path == '/add-wechat-sending-task':
+            if task_message_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            webhook_url = datasets.getvalue('webhook_url')
+            msg = datasets.getvalue('msg')
+            try:
+                task_id = task_message_manager.add_wechat_sending_task(
+                    webhook_url,
+                    msg
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {'task_id': task_id}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
+        elif path == '/add-email-sending-task':
+            if task_message_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            auth_info = {
+                'email_host': datasets.getvalue('email_host'),
+                'email_port': datasets.getvalue('email_port'),
+                'host_user': datasets.getvalue('host_user'),
+                'password': datasets.getvalue('password')
+            }
+
+            send_info = {
+                'message': datasets.getvalue('message'),
+                'contact_email': datasets.getvalue('contact_email'),
+                'subject': datasets.getvalue('subject'),
+                'source': datasets.getvalue('source'),
+                'copy_to': datasets.getvalue('copy_to'),
+                'reply_to': datasets.getvalue('reply_to'),
+            }
+            try:
+                task_id = task_message_manager.add_email_sending_task(
+                    auth_info,
+                    send_info
                 )
             except Exception as e:
                 logger.error(e)
