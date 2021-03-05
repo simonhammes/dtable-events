@@ -235,14 +235,15 @@ def send_email_msg(auth_info, send_info):
     msg_obj['Subject'] = subject
     msg_obj['From'] = source or host_user
     msg_obj['To'] = ",".join(contact_email)
-    msg_obj['Cc'] = ",".join(copy_to)
+    msg_obj['Cc'] = copy_to and ",".join(copy_to) or ""
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
     smtp = smtplib.SMTP(email_host, int(email_port))
     try:
         smtp.starttls()
         smtp.login(host_user, password)
-        smtp.sendmail(host_user, contact_email + copy_to, msg_obj.as_string())
+        recevers = copy_to and contact_email + copy_to or contact_email
+        smtp.sendmail(host_user, recevers, msg_obj.as_string())
     except Exception as e :
         dtable_message_logger.error('Email sending failed. ERROR: {}'.format(e))
     else:
