@@ -7,8 +7,8 @@ from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server
 
-dtable_io_logger = setup_logger()
-
+dtable_io_logger = setup_logger('dtable_events_io.log')
+dtable_message_logger = setup_logger('dtable_events_message.log')
 
 def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     # delete tmp files/dirs
@@ -207,9 +207,9 @@ def send_wechat_msg(webhook_url, msg):
     try:
         requests.post(webhook_url, json=msg_format, headers={"Content-Type": "application/json"})
     except Exception as e:
-        dtable_io_logger.error('Wechat sending failed. ERROR: {}'.format(e))
+        dtable_message_logger.error('Wechat sending failed. ERROR: {}'.format(e))
     else:
-        dtable_io_logger.info('Wechat sending success!')
+        dtable_message_logger.info('Wechat sending success!')
 
 def send_email_msg(auth_info, send_info):
     import smtplib
@@ -224,28 +224,28 @@ def send_email_msg(auth_info, send_info):
 
     # send info
     msg = send_info.get('message', '')
-    contact_email = send_info.get('contact_email', '')
+    contact_email = send_info.get('contact_email', [])
     subject = send_info.get('subject', '')
     source = send_info.get('source', '')
-    copy_to = send_info.get('copy_to', '')
+    copy_to = send_info.get('copy_to', [])
     reply_to = send_info.get('reply_to', '')
 
     msg_obj = MIMEMultipart()
     content_body = MIMEText(msg)
     msg_obj['Subject'] = subject
     msg_obj['From'] = source or host_user
-    msg_obj['To'] = contact_email
-    msg_obj['Cc'] = copy_to
+    msg_obj['To'] = ",".join(contact_email)
+    msg_obj['Cc'] = ",".join(copy_to)
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
     smtp = smtplib.SMTP(email_host, int(email_port))
     try:
         smtp.starttls()
         smtp.login(host_user, password)
-        smtp.sendmail(host_user, contact_email, msg_obj.as_string())
+        smtp.sendmail(host_user, contact_email + copy_to, msg_obj.as_string())
     except Exception as e :
-        dtable_io_logger.error('Email sending failed. ERROR: {}'.format(e))
+        dtable_message_logger.error('Email sending failed. ERROR: {}'.format(e))
     else:
-        dtable_io_logger.info('Email sending success!')
+        dtable_message_logger.info('Email sending success!')
     finally:
         smtp.quit()

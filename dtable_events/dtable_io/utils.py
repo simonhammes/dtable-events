@@ -25,12 +25,12 @@ IMG_URL_PREFIX = 'file://dtable-bundle/asset/images/'
 EXCEL_DIR_PATH = '/tmp/excel/'
 
 
-def setup_logger():
+def setup_logger(logname):
     """
     setup logger for dtable io
     """
     logdir = os.path.join(os.environ.get('LOG_DIR', ''))
-    log_file = os.path.join(logdir, 'dtable_events_io.log')
+    log_file = os.path.join(logdir, logname)
     handler = logging.FileHandler(log_file)
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     handler.setFormatter(formatter)

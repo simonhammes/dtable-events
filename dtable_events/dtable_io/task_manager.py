@@ -198,4 +198,4 @@ class TaskMessageManager(TaskManager):
 
 
 task_manager = TaskIOManager()
-task_message_manager = TaskMessageManager()
+message_task_manager = TaskMessageManager()

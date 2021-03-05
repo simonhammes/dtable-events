@@ -4,7 +4,7 @@ import jwt
 import logging
 from urllib import parse
 from http.server import SimpleHTTPRequestHandler
-from dtable_events.dtable_io.task_manager import task_manager, task_message_manager
+from dtable_events.dtable_io.task_manager import task_manager, message_task_manager
 
 logger = logging.getLogger(__name__)
 
@@ -163,18 +163,13 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['task_id'] = task_id
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
-        elif path in ['/query-status', '/query-message-send-status']:
+        elif path == '/query-status':
             task_id = arguments['task_id'][0]
-            task_handle_manager = {
-                '/query-status': task_manager,
-                '/query-message-send-status': task_message_manager
-            }.get(path)
-
-            if not task_handle_manager.is_valid_task_id(task_id):
+            if not task_manager.is_valid_task_id(task_id):
                 self.send_error(400, 'task_id invalid.')
             is_finished = False
             try:
-                is_finished = task_handle_manager.query_status(task_id)
+                is_finished = task_manager.query_status(task_id)
             except Exception as e:
                 logger.error(e)
                 self.send_error(500)
@@ -186,16 +181,46 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['is_finished'] = is_finished
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
-        elif path in ['/cancel-task','/cancel-message-send-task']:
+        elif path == '/cancel-task':
             task_id = arguments['task_id'][0]
-            task_handle_manager = {
-                '/cancel-task': task_manager,
-                '/cancel-message-send-task': task_message_manager
-            }.get(path)
-            if not task_handle_manager.is_valid_task_id(task_id):
+            if not task_manager.is_valid_task_id(task_id):
                 self.send_error(400, 'task_id invalid.')
             try:
-                task_handle_manager.cancel_task(task_id)
+                task_manager.cancel_task(task_id)
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.end_headers()
+            resp = {'success': True}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
+        elif path == '/query-message-send-status':
+            task_id = arguments['task_id'][0]
+            if not message_task_manager.is_valid_task_id(task_id):
+                self.send_error(400, 'task_id invalid.')
+            is_finished = False
+            try:
+                is_finished = message_task_manager.query_status(task_id)
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.end_headers()
+            resp = {}
+            resp['is_finished'] = is_finished
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
+        elif path == '/cancel-message-send-task':
+            task_id = arguments['task_id'][0]
+            if not message_task_manager.is_valid_task_id(task_id):
+                self.send_error(400, 'task_id invalid.')
+            try:
+                message_task_manager.cancel_task(task_id)
             except Exception as e:
                 logger.error(e)
                 self.send_error(500)
@@ -309,14 +334,14 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
         elif path == '/add-wechat-sending-task':
-            if task_message_manager.tasks_queue.full():
+            if message_task_manager.tasks_queue.full():
                 self.send_error(400, 'dtable io server busy.')
                 return
 
             webhook_url = datasets.getvalue('webhook_url')
             msg = datasets.getvalue('msg')
             try:
-                task_id = task_message_manager.add_wechat_sending_task(
+                task_id = message_task_manager.add_wechat_sending_task(
                     webhook_url,
                     msg
                 )
@@ -332,9 +357,16 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
         elif path == '/add-email-sending-task':
-            if task_message_manager.tasks_queue.full():
+            if message_task_manager.tasks_queue.full():
                 self.send_error(400, 'dtable io server busy.')
                 return
+
+            contact_email = datasets.getvalue('contact_email')
+            copy_to = datasets.getvalue('copy_to')
+            if not isinstance(contact_email, list):
+                contact_email = [contact_email]
+            if copy_to and not isinstance(copy_to, list):
+                copy_to = [copy_to]
 
             auth_info = {
                 'email_host': datasets.getvalue('email_host'),
@@ -345,14 +377,14 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
             send_info = {
                 'message': datasets.getvalue('message'),
-                'contact_email': datasets.getvalue('contact_email'),
+                'contact_email': contact_email,
                 'subject': datasets.getvalue('subject'),
                 'source': datasets.getvalue('source'),
-                'copy_to': datasets.getvalue('copy_to'),
+                'copy_to': copy_to,
                 'reply_to': datasets.getvalue('reply_to'),
             }
             try:
-                task_id = task_message_manager.add_email_sending_task(
+                task_id = message_task_manager.add_email_sending_task(
                     auth_info,
                     send_info
                 )
