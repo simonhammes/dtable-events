@@ -238,8 +238,8 @@ def send_email_msg(auth_info, send_info):
     msg_obj['Cc'] = copy_to
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
+    smtp = smtplib.SMTP(email_host, int(email_port))
     try:
-        smtp = smtplib.SMTP(email_host, int(email_port))
         smtp.starttls()
         smtp.login(host_user, password)
         smtp.sendmail(host_user, contact_email, msg_obj.as_string())
