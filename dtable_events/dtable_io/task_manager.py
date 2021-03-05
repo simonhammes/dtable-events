@@ -32,7 +32,7 @@ class TaskManager(object):
         return task_id in self.tasks_map.keys()
 
     def query_status(self, task_id):
-        task = self.tasks_map[task_id]
+        task = self.tasks_map.get('task_id')
         if task == 'success':
             self.tasks_map.pop(task_id, None)
             return True
