@@ -26,13 +26,6 @@ class TaskMessageManager(object):
     def is_valid_task_id(self, task_id):
         return task_id in self.tasks_map.keys()
 
-    def query_status(self, task_id):
-        task = self.tasks_map[task_id]
-        if task == 'success':
-            self.tasks_map.pop(task_id, None)
-            return True
-        return False
-
     def add_email_sending_task(self, auth_info, send_info):
         from dtable_events.dtable_io import send_email_msg
         task_id = str(int(time.time() * 1000))
@@ -56,6 +49,13 @@ class TaskMessageManager(object):
 
     def cancel_task(self, task_id):
         self.tasks_map.pop(task_id, None)
+
+    def query_status(self, task_id):
+        task = self.tasks_map[task_id]
+        if task == 'success':
+            self.tasks_map.pop(task_id, None)
+            return True
+        return False
 
     def handle_task(self):
         from dtable_events.dtable_io import dtable_message_logger
