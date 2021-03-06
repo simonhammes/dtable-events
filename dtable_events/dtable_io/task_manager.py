@@ -46,29 +46,32 @@ class TaskManager(object):
                 task_id = self.tasks_queue.get(timeout=2)
             except queue.Empty:
                 continue
-            else:
-                try:
-                    task = self.tasks_map[task_id]
-                    self.current_task_info = task_id + ' ' + str(task[0])
-                    dtable_io_logger.info('Run task: %s' % self.current_task_info)
-                    start_time = time.time()
+            except Exception as e:
+                dtable_io_logger.error(e)
+                continue
 
-                    # run
-                    task[0](*task[1])
-                    self.tasks_map[task_id] = 'success'
+            try:
+                task = self.tasks_map[task_id]
+                self.current_task_info = task_id + ' ' + str(task[0])
+                dtable_io_logger.info('Run task: %s' % self.current_task_info)
+                start_time = time.time()
 
-                    finish_time = time.time()
-                    dtable_io_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
-                    self.current_task_info = None
-                except Exception as e:
-                    dtable_io_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
-                    self.tasks_map.pop(task_id, None)
-                    self.current_task_info = None
+                # run
+                task[0](*task[1])
+                self.tasks_map[task_id] = 'success'
+
+                finish_time = time.time()
+                dtable_io_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
+                self.current_task_info = None
+            except Exception as e:
+                dtable_io_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
+                self.tasks_map.pop(task_id, None)
+                self.current_task_info = None
 
     def run(self):
-        t = threading.Thread(target=self.handle_task)
-        t.setDaemon(True)
-        t.start()
+        self.t = threading.Thread(target=self.handle_task)
+        self.t.setDaemon(True)
+        self.t.start()
 
     def cancel_task(self, task_id):
         self.tasks_map.pop(task_id, None)
@@ -161,24 +164,27 @@ class TaskMessageManager(TaskManager):
                 task_id = self.tasks_queue.get(timeout=2)
             except queue.Empty:
                 continue
-            else:
-                try:
-                    task = self.tasks_map[task_id]
-                    self.current_task_info = task_id + ' ' + str(task[0])
-                    dtable_message_logger.info('Run task: %s' % self.current_task_info)
-                    start_time = time.time()
+            except Exception as e:
+                dtable_message_logger.error(e)
+                continue
+                
+            try:
+                task = self.tasks_map[task_id]
+                self.current_task_info = task_id + ' ' + str(task[0])
+                dtable_message_logger.info('Run task: %s' % self.current_task_info)
+                start_time = time.time()
 
-                    # run
-                    task[0](*task[1])
-                    self.tasks_map[task_id] = 'success'
+                # run
+                task[0](*task[1])
+                self.tasks_map[task_id] = 'success'
 
-                    finish_time = time.time()
-                    dtable_message_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
-                    self.current_task_info = None
-                except Exception as e:
-                    dtable_message_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
-                    self.tasks_map.pop(task_id, None)
-                    self.current_task_info = None
+                finish_time = time.time()
+                dtable_message_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
+                self.current_task_info = None
+            except Exception as e:
+                dtable_message_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
+                self.tasks_map.pop(task_id, None)
+                self.current_task_info = None
 
     def add_email_sending_task(self, auth_info, send_info):
         from dtable_events.dtable_io import send_email_msg
