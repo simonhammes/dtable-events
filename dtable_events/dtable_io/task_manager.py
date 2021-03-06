@@ -6,6 +6,7 @@ import threading
 
 from seaserv import seafile_api
 
+
 class TaskManager(object):
 
     def __init__(self):
@@ -37,7 +38,7 @@ class TaskManager(object):
         asset_dir_path = os.path.join('/asset', dtable_uuid)
         asset_dir_id = seafile_api.get_dir_id_by_path(repo_id, asset_dir_path)
 
-        task_id = str(int(time.time() * 1000))
+        task_id = str(int(time.time()*1000))
         task = (get_dtable_export_content,
                 (username, repo_id, dtable_name, dtable_uuid, dtable_file_id, asset_dir_id, self.config))
         self.tasks_queue.put(task_id)
@@ -48,7 +49,7 @@ class TaskManager(object):
     def add_import_task(self, username, repo_id, workspace_id, dtable_uuid, dtable_file_name):
         from dtable_events.dtable_io import post_dtable_import_files
 
-        task_id = str(int(time.time() * 1000))
+        task_id = str(int(time.time()*1000))
         task = (post_dtable_import_files,
                 (username, repo_id, workspace_id, dtable_uuid, dtable_file_name, self.config))
         self.tasks_queue.put(task_id)
@@ -58,15 +59,14 @@ class TaskManager(object):
     def add_export_dtable_asset_files_task(self, username, repo_id, dtable_uuid, files, files_map=None):
         from dtable_events.dtable_io import get_dtable_export_asset_files
 
-        task_id = str(int(time.time() * 1000))
+        task_id = str(int(time.time()*1000))
         task = (get_dtable_export_asset_files,
                 (username, repo_id, dtable_uuid, files, task_id, files_map))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
         return task_id
 
-    def add_transfer_dtable_asset_files_task(self, username, repo_id, dtable_uuid, files, files_map, parent_dir,
-                                             relative_path, replace, repo_api_token, seafile_server_url):
+    def add_transfer_dtable_asset_files_task(self, username, repo_id, dtable_uuid, files, files_map, parent_dir, relative_path, replace, repo_api_token, seafile_server_url):
         from dtable_events.dtable_io import get_dtable_transfer_asset_files
         task_id = str(int(time.time() * 1000))
         task = (get_dtable_transfer_asset_files,
@@ -88,7 +88,7 @@ class TaskManager(object):
     def add_parse_excel_task(self, username, repo_id, workspace_id, dtable_name, custom):
         from dtable_events.dtable_io import parse_excel
 
-        task_id = str(int(time.time() * 1000))
+        task_id = str(int(time.time()*1000))
         task = (parse_excel,
                 (username, repo_id, workspace_id, dtable_name, custom, self.config))
         self.tasks_queue.put(task_id)
@@ -98,7 +98,7 @@ class TaskManager(object):
     def add_import_excel_task(self, username, repo_id, workspace_id, dtable_uuid, dtable_name):
         from dtable_events.dtable_io import import_excel
 
-        task_id = str(int(time.time() * 1000))
+        task_id = str(int(time.time()*1000))
         task = (import_excel,
                 (username, repo_id, workspace_id, dtable_uuid, dtable_name, self.config))
         self.tasks_queue.put(task_id)
@@ -149,7 +149,6 @@ class TaskManager(object):
 
     def cancel_task(self, task_id):
         self.tasks_map.pop(task_id, None)
-
 
 
 task_manager = TaskManager()
