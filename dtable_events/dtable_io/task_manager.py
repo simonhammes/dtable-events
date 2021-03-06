@@ -16,8 +16,7 @@ class TaskManager(object):
         self.current_task_info = None
         self.t = None
 
-    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, dtable_server_url,
-             io_task_timeout, config):
+    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, dtable_server_url, io_task_timeout, config):
         self.conf = {
             'dtable_private_key': dtable_private_key,
             'dtable_web_service_url': dtable_web_service_url,
@@ -167,7 +166,7 @@ class TaskMessageManager(TaskManager):
             except Exception as e:
                 dtable_message_logger.error(e)
                 continue
-                
+
             try:
                 task = self.tasks_map[task_id]
                 self.current_task_info = task_id + ' ' + str(task[0])
