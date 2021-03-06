@@ -361,10 +361,10 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                 self.send_error(400, 'dtable io server busy.')
                 return
 
-            contact_email = datasets.getvalue('contact_email')
+            send_to = datasets.getvalue('send_to')
             copy_to = datasets.getvalue('copy_to')
-            if not isinstance(contact_email, list):
-                contact_email = [contact_email]
+            if not isinstance(send_to, list):
+                send_to = [send_to]
             if copy_to and not isinstance(copy_to, list):
                 copy_to = [copy_to]
 
@@ -377,7 +377,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
             send_info = {
                 'message': datasets.getvalue('message'),
-                'contact_email': contact_email,
+                'send_to': send_to,
                 'subject': datasets.getvalue('subject'),
                 'source': datasets.getvalue('source'),
                 'copy_to': copy_to,

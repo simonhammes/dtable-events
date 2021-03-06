@@ -224,7 +224,7 @@ def send_email_msg(auth_info, send_info):
 
     # send info
     msg = send_info.get('message', '')
-    contact_email = send_info.get('contact_email', [])
+    send_to = send_info.get('send_to', [])
     subject = send_info.get('subject', '')
     source = send_info.get('source', '')
     copy_to = send_info.get('copy_to', [])
@@ -234,7 +234,7 @@ def send_email_msg(auth_info, send_info):
     content_body = MIMEText(msg)
     msg_obj['Subject'] = subject
     msg_obj['From'] = source or host_user
-    msg_obj['To'] = ",".join(contact_email)
+    msg_obj['To'] = ",".join(send_to)
     msg_obj['Cc'] = copy_to and ",".join(copy_to) or ""
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
@@ -242,7 +242,7 @@ def send_email_msg(auth_info, send_info):
     try:
         smtp.starttls()
         smtp.login(host_user, password)
-        recevers = copy_to and contact_email + copy_to or contact_email
+        recevers = copy_to and send_to + copy_to or send_to
         smtp.sendmail(host_user, recevers, msg_obj.as_string())
     except Exception as e :
         dtable_message_logger.error('Email sending failed. ERROR: {}'.format(e))
