@@ -47,8 +47,8 @@ class TaskManager(object):
             except queue.Empty:
                 continue
             else:
-                task = self.tasks_map[task_id]
                 try:
+                    task = self.tasks_map[task_id]
                     self.current_task_info = task_id + ' ' + str(task[0])
                     dtable_io_logger.info('Run task: %s' % self.current_task_info)
                     start_time = time.time()
@@ -162,8 +162,8 @@ class TaskMessageManager(TaskManager):
             except queue.Empty:
                 continue
             else:
-                task = self.tasks_map[task_id]
                 try:
+                    task = self.tasks_map[task_id]
                     self.current_task_info = task_id + ' ' + str(task[0])
                     dtable_message_logger.info('Run task: %s' % self.current_task_info)
                     start_time = time.time()
