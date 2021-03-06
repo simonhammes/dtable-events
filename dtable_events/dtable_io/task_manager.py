@@ -30,13 +30,6 @@ class TaskManager(object):
     def is_valid_task_id(self, task_id):
         return task_id in self.tasks_map.keys()
 
-    def query_status(self, task_id):
-        task = self.tasks_map[task_id]
-        if task == 'success':
-            self.tasks_map.pop(task_id, None)
-            return True
-        return False
-
     def add_export_task(self, username, repo_id, dtable_uuid, dtable_name):
         from dtable_events.dtable_io import get_dtable_export_content
 
@@ -112,6 +105,12 @@ class TaskManager(object):
         self.tasks_map[task_id] = task
         return task_id
 
+    def query_status(self, task_id):
+        task = self.tasks_map[task_id]
+        if task == 'success':
+            self.tasks_map.pop(task_id, None)
+            return True
+        return False
 
     def handle_task(self):
         from dtable_events.dtable_io import dtable_io_logger
