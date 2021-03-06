@@ -25,7 +25,7 @@ class TaskMessageManager(object):
 
     def is_valid_task_id(self, task_id):
         return task_id in self.tasks_map.keys()
-
+    
     def add_email_sending_task(self, auth_info, send_info):
         from dtable_events.dtable_io import send_email_msg
         task_id = str(int(time.time() * 1000))
@@ -41,14 +41,6 @@ class TaskMessageManager(object):
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
         return task_id
-
-    def run(self):
-        self.t = threading.Thread(target=self.handle_task)
-        self.t.setDaemon(True)
-        self.t.start()
-
-    def cancel_task(self, task_id):
-        self.tasks_map.pop(task_id, None)
 
     def query_status(self, task_id):
         task = self.tasks_map[task_id]
@@ -86,5 +78,14 @@ class TaskMessageManager(object):
                 dtable_message_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
                 self.tasks_map.pop(task_id, None)
                 self.current_task_info = None
+
+    def run(self):
+        self.t = threading.Thread(target=self.handle_task)
+        self.t.setDaemon(True)
+        self.t.start()
+
+    def cancel_task(self, task_id):
+        self.tasks_map.pop(task_id, None)
+
 
 message_task_manager = TaskMessageManager()

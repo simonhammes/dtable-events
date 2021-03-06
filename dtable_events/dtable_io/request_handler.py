@@ -4,7 +4,8 @@ import jwt
 import logging
 from urllib import parse
 from http.server import SimpleHTTPRequestHandler
-from dtable_events.dtable_io.task_manager import task_manager, message_task_manager
+from dtable_events.dtable_io.task_manager import task_manager
+from dtable_events.dtable_io.task_message_manager import message_task_manager
 
 logger = logging.getLogger(__name__)
 

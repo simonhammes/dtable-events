@@ -6,7 +6,9 @@ from http.server import HTTPServer
 from threading import Thread
 
 from dtable_events.dtable_io.request_handler import DTableIORequestHandler
-from dtable_events.dtable_io.task_manager import task_manager, message_task_manager
+from dtable_events.dtable_io.task_manager import task_manager
+from dtable_events.dtable_io.task_message_manager import message_task_manager
+
 
 class DTableIOServer(Thread):
 
