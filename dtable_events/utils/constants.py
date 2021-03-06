@@ -9,7 +9,7 @@ class ColumnTypes:
     CHECKBOX = 'checkbox'
     SINGLE_SELECT = 'single-select'
     MULTIPLE_SELECT = 'multiple-select'
-    URL = 'URL'
+    URL = 'url'
     DURATION = 'duration'
     NUMBER = 'number'
     FILE = 'file'

@@ -1,9 +1,12 @@
 import os
 import logging
+from datetime import datetime, timedelta
 from threading import Thread
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
+from dtable_events.activities.notification_rules_per_update_utils import check_near_deadline_notification_rule
+from dtable_events.db import init_db_session_class
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool, get_python_executable, run
 
 
@@ -28,6 +31,7 @@ class DTableNofiticationRulesScanner(object):
         self._logfile = None
         self._parse_config(config)
         self._prepare_logfile()
+        self._db_session_class = init_db_session_class(config)
 
     def _prepare_logfile(self):
         logdir = os.path.join(os.environ.get('LOG_DIR', ''))
@@ -59,17 +63,40 @@ class DTableNofiticationRulesScanner(object):
 
         logging.info('Start dtable notification rules scanner')
 
-        DTableNofiticationRulesScannerTimer(self._logfile).start()
+        DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class).start()
 
     def is_enabled(self):
         return self._enabled
 
 
+def scan_dtable_notification_rules(db_session):
+    sql = '''
+            SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules
+            WHERE (run_condition='per_day' AND last_trigger_time<:per_day_check_time)
+            OR (run_condition='per_week' AND last_trigger_time<:per_week_check_time)
+            OR last_trigger_time is null
+        '''
+    per_day_check_time = datetime.now() - timedelta(hours=23)
+    per_week_check_time = datetime.now() - timedelta(days=6)
+    rules = db_session.execute(sql, {
+        'per_day_check_time': per_day_check_time,
+        'per_week_check_time': per_week_check_time
+    })
+
+    for rule in rules:
+        try:
+            check_near_deadline_notification_rule(rule, db_session)
+        except Exception as e:
+            logging.error(f'check rule failed. {rule}, error: {e}')
+        db_session.commit()
+
+
 class DTableNofiticationRulesScannerTimer(Thread):
 
-    def __init__(self, logfile):
+    def __init__(self, logfile, db_session_class):
         super(DTableNofiticationRulesScannerTimer, self).__init__()
         self._logfile = logfile
+        self.db_session_class = db_session_class
 
     def run(self):
         sched = BlockingScheduler()
@@ -77,18 +104,14 @@ class DTableNofiticationRulesScannerTimer(Thread):
         @sched.scheduled_job('cron', day_of_week='*', hour='*')
         def timed_job():
             logging.info('Starts to scan notification rules...')
+
+            db_session = self.db_session_class()
             try:
-                python_exec = get_python_executable()
-                manage_py = os.path.join(dtable_web_dir, 'manage.py')
-                cmd = [
-                    python_exec,
-                    manage_py,
-                    'scan_dtable_notification_rules',
-                ]
-                with open(self._logfile, 'a') as fp:
-                    run(cmd, cwd=dtable_web_dir, output=fp)
+                scan_dtable_notification_rules(db_session)
             except Exception as e:
                 logging.exception('error when scanning dtable notification rules: %s', e)
+            finally:
+                db_session.close()
 
         sched.start()
 

@@ -4,7 +4,7 @@ import time
 import json
 import os
 import datetime
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import requests
 import jwt
 import sys
@@ -34,19 +34,21 @@ except ImportError as e:
 
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
+CONDITION_NEAR_DEADLINE = 'near_deadline'
+
 
 
 def is_trigger_time_satisfy(last_trigger_time):
     if last_trigger_time == None:
         return True
-    if (datetime.utcnow() - last_trigger_time).total_seconds() >= 60 * 5:
+    if (datetime.now() - last_trigger_time).total_seconds() >= 60 * 5:
         return True
 
 
 def update_rule_last_trigger_time(rule_id, db_session):
 
     cmd = "UPDATE dtable_notification_rules SET last_trigger_time=:new_time WHERE id=:rule_id"
-    db_session.execute(cmd, {'new_time': datetime.utcnow(), 'rule_id': rule_id})
+    db_session.execute(cmd, {'new_time': datetime.now(), 'rule_id': rule_id})
 
 
 def get_dtable_server_token(dtable_uuid):
@@ -153,52 +155,72 @@ def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, tabl
     return json.loads(res.content).get('is_row_satisfy_filters')
 
 
-def gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token):
-    if not msg:
-        return msg
-
-    # checkout all blanks to fill in
-    # if no blanks, just return msg
-    blanks = set(re.findall(r'\{([^{]*?)\}', msg))
-    if not blanks:
-        return msg
-
-    # get columns of table-view
-    headers = {
-        'Authorization': b'Token ' + dtable_server_access_token
-    }
-    columns_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/columns/'.format(dtable_uuid=dtable_uuid)
-    query = {
+def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token):
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/'
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
+    query_params = {
         'table_id': table_id,
         'view_id': view_id
     }
     try:
-        response = requests.get(columns_url, params=query, headers=headers)
-        columns = response.json()['columns']
+        res = requests.get(url, headers=headers, params=query_params)
     except Exception as e:
-        logger.error('dtable_uuid: %s, table_id: %s, view_id: %s, request columns error: %s', dtable_uuid, table_id, view_id, e)
-        return msg
+        logger.error(e)
+        return []
 
-    col_name_dict = {col['name']: col for col in columns}
+    if res.status_code != 200:
+        logger.error(res.text)
+        return []
 
-    # judge to-be-filled blanks whether in columns
-    # if all blanks not in columns, straightly send msg to save the time on request row
-    column_blanks = [f for f in blanks if f in col_name_dict]
-    if not column_blanks:
-        return msg
+    rows = json.loads(res.content).get('rows', [])
+    rows_near_deadline = []
+    for row in rows:
+        deadline_date_date_str = row.get(date_column_name, '')
+        if not deadline_date_date_str:
+            continue
+        if ' ' in deadline_date_date_str:
+            deadline_date_date_str = deadline_date_date_str.split(' ')[0]
+        try:
+            deadline_date = datetime.strptime(deadline_date_date_str, '%Y-%m-%d').date()
+        except Exception as e:
+            # perhaps result-type of fomular column has been changed to non-date
+            logger.warning('date_column_name: %s value: %s, transfer to date error: %s', date_column_name, deadline_date_date_str, e)
+            continue
+        now_plus_alarm_date = date.today() + timedelta(days=int(alarm_days))
+        if date.today() <= deadline_date <= now_plus_alarm_date:
+            rows_near_deadline.append(row)
+    return rows_near_deadline
 
-    # get row of table-view-row
-    row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
-    query = {
-        'table_id': table_id
+
+def get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token):
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/columns/'
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
+    query_params = {
+        'table_id': table_id,
+        'view_id': view_id
     }
     try:
-        response = requests.get(row_url, params=query, headers=headers)
-        row = response.json()
+        response = requests.get(url, params=query_params, headers=headers)
+        columns = response.json()['columns']
     except Exception as e:
-        logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
-        return msg
+        logger.error('dtable_uuid: %s, table_id: %s, view_id: %s request columns error: %s', dtable_uuid, table_id, view_id, e)
+        return []
+    return columns
 
+
+def get_related_users_dict(dtable_uuid, dtable_server_access_token):
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/related-users/'.format(dtable_uuid=dtable_uuid)
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
+    related_users = []
+    try:
+        response = requests.get(url, headers=headers)
+        related_users = response.json()['user_list']
+    except Exception as e:
+        logger.error('dtable_uuid: %s get related users error: %s', dtable_uuid, e)
+    return {u['email']: u for u in related_users}
+
+
+def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, related_users_dict=None):
     for blank in column_blanks:
         if col_name_dict[blank]['type'] in [
             ColumnTypes.TEXT,
@@ -210,26 +232,110 @@ def gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, ms
             ColumnTypes.NUMBER,
             ColumnTypes.EMAIL,
             ColumnTypes.FORMULA,
-            ColumnTypes.CREATOR,
-            ColumnTypes.LAST_MODIFIER,
             ColumnTypes.AUTO_NUMBER,
             ColumnTypes.CTIME,
             ColumnTypes.MTIME
         ]:
             value = row.get(blank, '')
             msg = msg.replace('{' + blank + '}', str(value))
+
         elif col_name_dict[blank]['type'] in [
             ColumnTypes.IMAGE,
             ColumnTypes.MULTIPLE_SELECT,
-            ColumnTypes.COLLABORATOR
         ]:
             value = row.get(blank, [])
             msg = msg.replace('{' + blank + '}', '[' + ', '.join(value) + ']')
+
         elif col_name_dict[blank]['type'] in [ColumnTypes.FILE]:
             value = row.get(blank, [])
             msg = msg.replace('{' + blank + '}', '[' + ', '.join([f['name'] for f in value]) + ']')
 
+        elif col_name_dict[blank]['type'] in [ColumnTypes.COLLABORATOR]:
+            users = row.get(blank, [])
+            if not related_users_dict:
+                msg = msg.replace('{' + blank + '}', '[' + ', '.join(users) + ']')
+            else:
+                names = []
+                for u in users:
+                    user = related_users_dict.get(u)
+                    name = user['name'] if user else value
+                    names.append(name)
+                msg = msg.replace('{' + blank + '}', '[' + ', '.join(names) + ']')
+
+        elif col_name_dict[blank]['type'] in [ColumnTypes.CREATOR, ColumnTypes.LAST_MODIFIER]:
+            value = row.get(blank, '')
+            if not related_users_dict:
+                msg = msg.replace('{' + blank + '}', value)
+            else:
+                user = related_users_dict.get(value)
+                name = user['name'] if user else value
+                msg = msg.replace('{' + blank + '}', name)
+
     return msg
+
+
+def _get_column_blanks_and_related_users(dtable_uuid, dtable_server_access_token, blanks, columns):
+    col_name_dict = {col['name']: col for col in columns}
+
+    column_blanks = []
+    need_related_users, related_users_dict = False, {}
+    for blank in blanks:
+        if blank in col_name_dict:
+            column_blanks.append(blank)
+            if col_name_dict[blank]['type'] in [
+                ColumnTypes.COLLABORATOR,
+                ColumnTypes.CREATOR,
+                ColumnTypes.LAST_MODIFIER
+            ]:
+                need_related_users = True
+    if not column_blanks:
+        return [], col_name_dict, {}
+    if need_related_users:
+        related_users_dict = get_related_users_dict(dtable_uuid, dtable_server_access_token)
+
+    return column_blanks, col_name_dict, related_users_dict
+
+
+def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token):
+    if not msg:
+        return msg
+
+    # checkout all blanks to fill in
+    # if no blanks, just return msg
+    blanks = set(re.findall(r'\{([^{]*?)\}', msg))
+    if not blanks:
+        return msg
+
+    columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
+
+    column_blanks, col_name_dict, related_users_dict = _get_column_blanks_and_related_users(dtable_uuid, dtable_server_access_token, blanks, columns)
+
+    if not column_blanks:
+        return msg
+
+    # get row of table-view-row
+    row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
+    params = {'table_id': table_id}
+    try:
+        response = requests.get(row_url, params=params, headers=headers)
+        row = response.json()
+    except Exception as e:
+        logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
+        return msg
+
+    msg = _fill_msg_blanks(msg, column_blanks, col_name_dict, row, related_users_dict)
+
+    return msg
+
+
+def gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, related_users_dict):
+    if not msg:
+        return msg
+    if not column_blanks:
+        return msg
+
+    return _fill_msg_blanks(msg, column_blanks, col_name_dict, row, related_users_dict)
 
 
 def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session=None):
@@ -267,7 +373,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_ROWS_MODIFIED,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
+            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
             'row_id_list': [row_id],
         }
 
@@ -310,7 +416,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_FILTERS_SATISFY,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_content(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
+            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
             'row_id_list': [row_id],
         }
         if users_column_key:
@@ -327,5 +433,84 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
 
     else:
         return
+
+    update_rule_last_trigger_time(rule_id, db_session)
+
+
+def check_near_deadline_notification_rule(rule, db_session):
+    rule_id = rule[0]
+    trigger = rule[1]
+    action = rule[2]
+    dtable_uuid = rule[5]
+
+    trigger = json.loads(trigger)
+    action = json.loads(action)
+    users = action.get('users', [])
+    users_column_key = action.get('users_column_key')
+    msg = action.get('default_msg', '')
+    rule_name = trigger.get('rule_name', '')
+    table_id = trigger['table_id']
+    view_id = trigger['view_id']
+
+    if trigger['condition'] != CONDITION_NEAR_DEADLINE:
+        return
+
+    date_column_name = trigger['date_column_name']
+    alarm_days = trigger['alarm_days']
+    table_id = trigger['table_id']
+    view_id = trigger['view_id']
+    notify_hour = trigger.get('notify_hour')
+
+    cur_hour = int(time.strftime('%H'))
+    if notify_hour != None:
+        if int(notify_hour) != cur_hour:
+            return
+    else:
+        if cur_hour != 12:
+            return
+
+    dtable_server_access_token = get_dtable_server_token(dtable_uuid)
+    try:
+        rows_near_deadline = list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token)
+    except Exception as e:
+        logger.error('list rows_near_deadline failed. error: {}'.format(e))
+        return
+
+    if not rows_near_deadline:
+        return
+
+    blanks, column_blanks, col_name_dict = set(re.findall(r'\{([^{]*?)\}', msg)), None, None
+    related_users_dict = {}
+    if blanks:
+        columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
+        column_blanks, col_name_dict, related_users_dict = _get_column_blanks_and_related_users(dtable_uuid, dtable_server_access_token, blanks, columns)
+
+    for row in rows_near_deadline[:25]:
+        row_id = row['_id']
+
+        if users_column_key:
+            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_key, dtable_server_access_token)
+            to_users = list(set(users + users_from_cell))
+        else:
+            to_users = users
+
+        detail = {
+            'table_id': table_id,
+            'view_id': view_id,
+            'condition': CONDITION_NEAR_DEADLINE,
+            'rule_id': rule.id,
+            'rule_name': rule_name,
+            'msg': gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, related_users_dict),
+            'row_id_list': [row_id],
+        }
+
+        user_msg_list = []
+        for user in to_users:
+            user_msg_list.append({
+                'to_user': user,
+                'msg_type': 'notification_rules',
+                'detail': detail,
+            })
+        send_notification(dtable_uuid, user_msg_list, dtable_server_access_token)
 
     update_rule_last_trigger_time(rule_id, db_session)
