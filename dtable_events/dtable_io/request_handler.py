@@ -32,8 +32,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         if path == '/add-export-task':
 
             if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s, thread.is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.t.is_alive()))
                 self.send_error(400, 'dtable io server busy.')
                 return
 
@@ -63,8 +63,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         elif path == '/add-import-task':
 
             if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s, thread.is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.t.is_alive()))
                 self.send_error(400, 'dtable io server busy.')
                 return
 
@@ -97,8 +97,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         elif path == '/add-parse-excel-task':
 
             if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s, thread.is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.t.is_alive()))
                 self.send_error(400, 'dtable io server busy.')
                 return
 
@@ -132,8 +132,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
         elif path == '/add-import-excel-task':
 
             if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s, thread.is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.t.is_alive()))
                 self.send_error(400, 'dtable io server busy.')
                 return
 
@@ -223,8 +223,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
         if path == '/dtable-asset-files':
             if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s, thread.is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.t.is_alive()))
                 self.send_error(400, 'dtable io server busy.')
                 return
 
@@ -258,8 +258,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
         elif path == '/transfer-dtable-asset-files':
             if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info))
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s, thread.is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.t.is_alive()))
                 self.send_error(400, 'dtable io server busy.')
                 return
 

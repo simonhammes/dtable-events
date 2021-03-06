@@ -202,9 +202,15 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
     for sheet in wb:
         dtable_io_logger.info(
             'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
+
         sheet_rows = list(sheet.rows)
         max_row = len(sheet_rows)
-        if not max_row:
+        max_column = sheet.max_column
+        if max_row > 50000:
+            max_row = 50000  # rows limit
+        if max_column > 300:
+            max_column = 300  # columns limit
+        if max_row == 0:
             continue
 
         if custom:
@@ -214,9 +220,11 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
         else:
             head_index = 0
 
-        max_column = sheet.max_column
         columns = parse_excel_columns(sheet_rows, head_index, max_column)
         rows = parse_excel_rows(sheet_rows, columns, head_index, max_column)
+
+        dtable_io_logger.info(
+            'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), len(columns)))
 
         table = {
             'name': sheet.title,
