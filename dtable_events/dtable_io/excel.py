@@ -207,6 +207,8 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
         if not max_row:
             continue
 
+        max_column = sheet.max_column if sheet.max_column <= 300 else 300
+
         if custom:
             head_index = head_index_map.get(sheet.title, 0)
             if head_index > max_row - 1:
@@ -214,9 +216,11 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
         else:
             head_index = 0
 
-        max_column = sheet.max_column
         columns = parse_excel_columns(sheet_rows, head_index, max_column)
         rows = parse_excel_rows(sheet_rows, columns, head_index, max_column)
+
+        dtable_io_logger.info(
+            'got table: %s, rows: %d, columns: %d' % (sheet.title, max_row, max_column))
 
         table = {
             'name': sheet.title,
