@@ -37,47 +37,6 @@ class TaskManager(object):
             return True
         return False
 
-    def handle_task(self):
-        from dtable_events.dtable_io import dtable_io_logger
-
-        while True:
-            try:
-                task_id = self.tasks_queue.get(timeout=2)
-            except queue.Empty:
-                continue
-            except Exception as e:
-                dtable_io_logger.error(e)
-                continue
-
-            try:
-                task = self.tasks_map[task_id]
-                self.current_task_info = task_id + ' ' + str(task[0])
-                dtable_io_logger.info('Run task: %s' % self.current_task_info)
-                start_time = time.time()
-
-                # run
-                task[0](*task[1])
-                self.tasks_map[task_id] = 'success'
-
-                finish_time = time.time()
-                dtable_io_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
-                self.current_task_info = None
-            except Exception as e:
-                dtable_io_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
-                self.tasks_map.pop(task_id, None)
-                self.current_task_info = None
-
-    def run(self):
-        self.t = threading.Thread(target=self.handle_task)
-        self.t.setDaemon(True)
-        self.t.start()
-
-    def cancel_task(self, task_id):
-        self.tasks_map.pop(task_id, None)
-
-
-class TaskIOManager(TaskManager):
-
     def add_export_task(self, username, repo_id, dtable_uuid, dtable_name):
         from dtable_events.dtable_io import get_dtable_export_content
 
@@ -153,10 +112,9 @@ class TaskIOManager(TaskManager):
         self.tasks_map[task_id] = task
         return task_id
 
-class TaskMessageManager(TaskManager):
 
     def handle_task(self):
-        from dtable_events.dtable_io import dtable_message_logger
+        from dtable_events.dtable_io import dtable_io_logger
 
         while True:
             try:
@@ -164,13 +122,13 @@ class TaskMessageManager(TaskManager):
             except queue.Empty:
                 continue
             except Exception as e:
-                dtable_message_logger.error(e)
+                dtable_io_logger.error(e)
                 continue
 
             try:
                 task = self.tasks_map[task_id]
                 self.current_task_info = task_id + ' ' + str(task[0])
-                dtable_message_logger.info('Run task: %s' % self.current_task_info)
+                dtable_io_logger.info('Run task: %s' % self.current_task_info)
                 start_time = time.time()
 
                 # run
@@ -178,29 +136,21 @@ class TaskMessageManager(TaskManager):
                 self.tasks_map[task_id] = 'success'
 
                 finish_time = time.time()
-                dtable_message_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
+                dtable_io_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
                 self.current_task_info = None
             except Exception as e:
-                dtable_message_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
+                dtable_io_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
                 self.tasks_map.pop(task_id, None)
                 self.current_task_info = None
 
-    def add_email_sending_task(self, auth_info, send_info):
-        from dtable_events.dtable_io import send_email_msg
-        task_id = str(int(time.time() * 1000))
-        task = (send_email_msg,(auth_info, send_info))
-        self.tasks_queue.put(task_id)
-        self.tasks_map[task_id] = task
-        return task_id
+    def run(self):
+        self.t = threading.Thread(target=self.handle_task)
+        self.t.setDaemon(True)
+        self.t.start()
 
-    def add_wechat_sending_task(self, webhook_url, msg ):
-        from dtable_events.dtable_io import send_wechat_msg
-        task_id = str(int(time.time() * 1000))
-        task = (send_wechat_msg, (webhook_url, msg))
-        self.tasks_queue.put(task_id)
-        self.tasks_map[task_id] = task
-        return task_id
+    def cancel_task(self, task_id):
+        self.tasks_map.pop(task_id, None)
 
 
-task_manager = TaskIOManager()
-message_task_manager = TaskMessageManager()
+
+task_manager = TaskManager()
