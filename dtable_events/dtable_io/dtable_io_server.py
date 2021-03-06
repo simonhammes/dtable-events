@@ -7,6 +7,8 @@ from threading import Thread
 
 from dtable_events.dtable_io.request_handler import DTableIORequestHandler
 from dtable_events.dtable_io.task_manager import task_manager
+from dtable_events.dtable_io.task_message_manager import message_task_manager
+
 
 class DTableIOServer(Thread):
 
@@ -18,7 +20,13 @@ class DTableIOServer(Thread):
             self._file_server_port, self._dtable_server_url,
             self._io_task_timeout, config
         )
+        message_task_manager.init(
+            self._workers, self._dtable_private_key, self._dtable_web_service_url,
+            self._file_server_port, self._dtable_server_url,
+            self._io_task_timeout, config
+        )
         task_manager.run()
+        message_task_manager.run()
         self._server = HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
 
     def _parse_config(self, config, dtable_server_config):

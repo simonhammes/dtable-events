@@ -7,8 +7,8 @@ from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server
 
-dtable_io_logger = setup_logger()
-
+dtable_io_logger = setup_logger('dtable_events_io.log')
+dtable_message_logger = setup_logger('dtable_events_message.log')
 
 def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     # delete tmp files/dirs
@@ -200,3 +200,53 @@ def get_dtable_transfer_asset_files(username, repo_id, dtable_uuid, files, task_
     # delete local files
     if os.path.exists(tmp_file_path):
         shutil.rmtree(tmp_file_path)
+
+def send_wechat_msg(webhook_url, msg):
+
+    msg_format = {"msgtype": "text", "text": {"content": msg}}
+    try:
+        requests.post(webhook_url, json=msg_format, headers={"Content-Type": "application/json"})
+    except Exception as e:
+        dtable_message_logger.error('Wechat sending failed. ERROR: {}'.format(e))
+    else:
+        dtable_message_logger.info('Wechat sending success!')
+
+def send_email_msg(auth_info, send_info):
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    # auth info
+    email_host = auth_info.get('email_host')
+    email_port = int(auth_info.get('email_port'))
+    host_user = auth_info.get('host_user')
+    password = auth_info.get('password')
+
+    # send info
+    msg = send_info.get('message', '')
+    send_to = send_info.get('send_to', [])
+    subject = send_info.get('subject', '')
+    source = send_info.get('source', '')
+    copy_to = send_info.get('copy_to', [])
+    reply_to = send_info.get('reply_to', '')
+
+    msg_obj = MIMEMultipart()
+    content_body = MIMEText(msg)
+    msg_obj['Subject'] = subject
+    msg_obj['From'] = source or host_user
+    msg_obj['To'] = ",".join(send_to)
+    msg_obj['Cc'] = copy_to and ",".join(copy_to) or ""
+    msg_obj['Reply-to'] = reply_to
+    msg_obj.attach(content_body)
+    smtp = smtplib.SMTP(email_host, int(email_port), timeout=5)
+    try:
+        smtp.starttls()
+        smtp.login(host_user, password)
+        recevers = copy_to and send_to + copy_to or send_to
+        smtp.sendmail(host_user, recevers, msg_obj.as_string())
+    except Exception as e :
+        dtable_message_logger.error('Email sending failed. ERROR: {}'.format(e))
+    else:
+        dtable_message_logger.info('Email sending success!')
+    finally:
+        smtp.quit()
