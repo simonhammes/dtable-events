@@ -238,7 +238,7 @@ def send_email_msg(auth_info, send_info):
     msg_obj['Cc'] = copy_to and ",".join(copy_to) or ""
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
-    smtp = smtplib.SMTP(email_host, int(email_port))
+    smtp = smtplib.SMTP(email_host, int(email_port), timeout=5)
     try:
         smtp.starttls()
         smtp.login(host_user, password)
