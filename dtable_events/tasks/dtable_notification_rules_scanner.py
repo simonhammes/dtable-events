@@ -104,14 +104,6 @@ class DTableNofiticationRulesScannerTimer(Thread):
         self.db_session_class = db_session_class
         self.timezone = timezone
 
-        # db_session = self.db_session_class()
-        # try:
-        #     scan_dtable_notification_rules(db_session, self.timezone)
-        # except Exception as e:
-        #     logging.exception('error when scanning dtable notification rules: %s', e)
-        # finally:
-        #     db_session.close()
-
     def run(self):
         sched = BlockingScheduler()
         # fire at every hour in every day of week
