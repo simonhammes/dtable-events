@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 from datetime import datetime, timedelta
 from threading import Thread
@@ -19,6 +20,21 @@ if not os.path.exists(dtable_web_dir):
     logging.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
     raise RuntimeError('dtable_web_dir does not exist')
 
+# CONF DIR
+central_conf_dir, timezone = os.environ.get('SEAFILE_CENTRAL_CONF_DIR', ''), 'UTC'
+if central_conf_dir:
+    sys.path.insert(0, central_conf_dir)
+    try:
+        import dtable_web_settings
+        timezone = getattr(dtable_web_settings, 'TIME_ZONE', 'UTC')
+    except Exception as e:
+        logging.error('import dtable_web_settings error: %s', e)
+    else:
+        del dtable_web_settings
+else:
+    logging.error('no conf dir SEAFILE_CENTRAL_CONF_DIR find')
+
+
 __all__ = [
     'DTableNofiticationRulesScanner',
 ]
@@ -29,7 +45,6 @@ class DTableNofiticationRulesScanner(object):
     def __init__(self, config):
         self._enabled = False
         self._logfile = None
-        self._timezone = 'UTC'
         self._parse_config(config)
         self._prepare_logfile()
         self._db_session_class = init_db_session_class(config)
@@ -49,9 +64,6 @@ class DTableNofiticationRulesScanner(object):
             if not config.has_section(section_name):
                 return
 
-        if config.has_section('DTABLE-WEB') and config.has_option('DTABLE-WEB', 'TIME_ZONE'):
-            self._timezone = config.get('DTABLE-WEB', 'TIME_ZONE')
-
         # enabled
         enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=False)
         enabled = parse_bool(enabled)
@@ -67,7 +79,7 @@ class DTableNofiticationRulesScanner(object):
 
         logging.info('Start dtable notification rules scanner')
 
-        DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class, self._timezone).start()
+        DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class).start()
 
     def is_enabled(self):
         return self._enabled
@@ -98,11 +110,10 @@ def scan_dtable_notification_rules(db_session, timezone):
 
 class DTableNofiticationRulesScannerTimer(Thread):
 
-    def __init__(self, logfile, db_session_class, timezone):
+    def __init__(self, logfile, db_session_class):
         super(DTableNofiticationRulesScannerTimer, self).__init__()
         self._logfile = logfile
         self.db_session_class = db_session_class
-        self.timezone = timezone
 
     def run(self):
         sched = BlockingScheduler()
@@ -113,7 +124,7 @@ class DTableNofiticationRulesScannerTimer(Thread):
 
             db_session = self.db_session_class()
             try:
-                scan_dtable_notification_rules(db_session, self.timezone)
+                scan_dtable_notification_rules(db_session, timezone)
             except Exception as e:
                 logging.exception('error when scanning dtable notification rules: %s', e)
             finally:
