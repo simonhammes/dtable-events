@@ -3,12 +3,12 @@ import logging
 import time
 import json
 import os
-import datetime
 from datetime import datetime, date, timedelta
 import requests
 import jwt
 import sys
 import re
+import pytz
 
 from dtable_events.utils.constants import ColumnTypes
 
@@ -41,14 +41,14 @@ CONDITION_NEAR_DEADLINE = 'near_deadline'
 def is_trigger_time_satisfy(last_trigger_time):
     if last_trigger_time == None:
         return True
-    if (datetime.now() - last_trigger_time).total_seconds() >= 60 * 5:
+    if (datetime.utcnow() - last_trigger_time).total_seconds() >= 60 * 5:
         return True
 
 
 def update_rule_last_trigger_time(rule_id, db_session):
 
     cmd = "UPDATE dtable_notification_rules SET last_trigger_time=:new_time WHERE id=:rule_id"
-    db_session.execute(cmd, {'new_time': datetime.now(), 'rule_id': rule_id})
+    db_session.execute(cmd, {'new_time': datetime.utcnow(), 'rule_id': rule_id})
 
 
 def get_dtable_server_token(dtable_uuid):
@@ -437,7 +437,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
     update_rule_last_trigger_time(rule_id, db_session)
 
 
-def check_near_deadline_notification_rule(rule, db_session):
+def check_near_deadline_notification_rule(rule, db_session, timezone):
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
@@ -461,7 +461,12 @@ def check_near_deadline_notification_rule(rule, db_session):
     view_id = trigger['view_id']
     notify_hour = trigger.get('notify_hour')
 
-    cur_hour = int(time.strftime('%H'))
+    try:
+        cur_hour = int((datetime.utcnow() + pytz.timezone(timezone)._utcoffset).strftime('%H'))
+    except Exception as e:
+        logger.error('timezone: %s parse error: %s', timezone, e)
+        cur_hour = int(time.strftime('%H'))
+
     if notify_hour != None:
         if int(notify_hour) != cur_hour:
             return

@@ -5,7 +5,7 @@ from threading import Thread
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from dtable_events.activities.notification_rules_per_update_utils import check_near_deadline_notification_rule
+from dtable_events.activities.notification_rules_utils import check_near_deadline_notification_rule
 from dtable_events.db import init_db_session_class
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool, get_python_executable, run
 
@@ -29,6 +29,7 @@ class DTableNofiticationRulesScanner(object):
     def __init__(self, config):
         self._enabled = False
         self._logfile = None
+        self._timezone = 'UTC'
         self._parse_config(config)
         self._prepare_logfile()
         self._db_session_class = init_db_session_class(config)
@@ -48,6 +49,9 @@ class DTableNofiticationRulesScanner(object):
             if not config.has_section(section_name):
                 return
 
+        if config.has_section('DTABLE-WEB') and config.has_option('DTABLE-WEB', 'TIME_ZONE'):
+            self._timezone = config.get('DTABLE-WEB', 'TIME_ZONE')
+
         # enabled
         enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=False)
         enabled = parse_bool(enabled)
@@ -63,21 +67,21 @@ class DTableNofiticationRulesScanner(object):
 
         logging.info('Start dtable notification rules scanner')
 
-        DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class).start()
+        DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class, self._timezone).start()
 
     def is_enabled(self):
         return self._enabled
 
 
-def scan_dtable_notification_rules(db_session):
+def scan_dtable_notification_rules(db_session, timezone):
     sql = '''
             SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules
             WHERE (run_condition='per_day' AND last_trigger_time<:per_day_check_time)
             OR (run_condition='per_week' AND last_trigger_time<:per_week_check_time)
             OR last_trigger_time is null
         '''
-    per_day_check_time = datetime.now() - timedelta(hours=23)
-    per_week_check_time = datetime.now() - timedelta(days=6)
+    per_day_check_time = datetime.utcnow() - timedelta(hours=23)
+    per_week_check_time = datetime.utcnow() - timedelta(days=6)
     rules = db_session.execute(sql, {
         'per_day_check_time': per_day_check_time,
         'per_week_check_time': per_week_check_time
@@ -85,18 +89,28 @@ def scan_dtable_notification_rules(db_session):
 
     for rule in rules:
         try:
-            check_near_deadline_notification_rule(rule, db_session)
+            check_near_deadline_notification_rule(rule, db_session, timezone)
         except Exception as e:
+            logging.exception(e)
             logging.error(f'check rule failed. {rule}, error: {e}')
         db_session.commit()
 
 
 class DTableNofiticationRulesScannerTimer(Thread):
 
-    def __init__(self, logfile, db_session_class):
+    def __init__(self, logfile, db_session_class, timezone):
         super(DTableNofiticationRulesScannerTimer, self).__init__()
         self._logfile = logfile
         self.db_session_class = db_session_class
+        self.timezone = timezone
+
+        # db_session = self.db_session_class()
+        # try:
+        #     scan_dtable_notification_rules(db_session, self.timezone)
+        # except Exception as e:
+        #     logging.exception('error when scanning dtable notification rules: %s', e)
+        # finally:
+        #     db_session.close()
 
     def run(self):
         sched = BlockingScheduler()
@@ -107,7 +121,7 @@ class DTableNofiticationRulesScannerTimer(Thread):
 
             db_session = self.db_session_class()
             try:
-                scan_dtable_notification_rules(db_session)
+                scan_dtable_notification_rules(db_session, self.timezone)
             except Exception as e:
                 logging.exception('error when scanning dtable notification rules: %s', e)
             finally:
