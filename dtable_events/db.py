@@ -34,7 +34,7 @@ def create_engine_from_conf(config):
         password = config.get('DATABASE', 'password')
         db_name = config.get('DATABASE', 'db_name')
 
-        db_url = "mysql+pymysql://%s:%s@%s:%s/%s?charset=utf8" % \
+        db_url = "mysql+mysqldb://%s:%s@%s:%s/%s?charset=utf8" % \
                  (username, quote_plus(password), host, port, db_name)
         logger.debug('[dtable_events] database: mysql, name: %s', db_name)
     else:
