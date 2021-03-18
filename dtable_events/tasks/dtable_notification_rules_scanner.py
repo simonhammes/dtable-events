@@ -43,7 +43,7 @@ __all__ = [
 class DTableNofiticationRulesScanner(object):
 
     def __init__(self, config):
-        self._enabled = False
+        self._enabled = True
         self._logfile = None
         self._parse_config(config)
         self._prepare_logfile()
@@ -65,7 +65,7 @@ class DTableNofiticationRulesScanner(object):
                 return
 
         # enabled
-        enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=False)
+        enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=True)
         enabled = parse_bool(enabled)
         if not enabled:
             return

@@ -40,14 +40,14 @@ class App(object):
 
         if self._enable_background_tasks:
             # redis client subscriber
-            self._message_handler.start()
-            self._user_activity_counter.start()
-            self._dtable_real_time_rows_counter.start()
-            self._webhooker.start()
+            self._message_handler.start()                    # always True
+            self._user_activity_counter.start()              # always True
+            self._dtable_real_time_rows_counter.start()      # default True
+            self._webhooker.start()                          # always True
             # cron jobs
-            self._instant_notices_sender.start()
-            self._email_notices_sender.start()
-            self._dtables_cleaner.start()
-            self._dtable_updates_sender.start()
-            self._dtable_notification_rules_scanner.start()
-            self._ldap_syncer.start()
+            self._instant_notices_sender.start()             # default True
+            self._email_notices_sender.start()               # default True
+            self._dtables_cleaner.start()                    # default True
+            self._dtable_updates_sender.start()              # default True
+            self._dtable_notification_rules_scanner.start()  # default True
+            self._ldap_syncer.start()                        # default False
