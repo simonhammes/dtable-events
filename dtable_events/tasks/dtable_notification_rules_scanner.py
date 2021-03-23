@@ -100,6 +100,8 @@ def scan_dtable_notification_rules(db_session, timezone):
     })
 
     for rule in rules:
+        if not rule[5]:  # filter and ignore non-dtable-uuid records(some old records)
+            continue
         try:
             check_near_deadline_notification_rule(rule, db_session, timezone)
         except Exception as e:
