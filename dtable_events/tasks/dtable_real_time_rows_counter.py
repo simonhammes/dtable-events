@@ -38,7 +38,7 @@ def count_rows_by_uuids(session, dtable_uuids):
         GROUP BY w.owner
         ON DUPLICATE KEY UPDATE username=VALUES(username), rows_count=VALUES(rows_count), rows_count_update_at=VALUES(rows_count_update_at);
         '''
-        session.execute(user_sql, {'update_at': datetime.utcnow(), 'usernames': usernames})
+        session.execute(user_sql, {'update_at': datetime.utcnow(), 'usernames': list(usernames)})
         session.commit()
     if org_ids:
         org_sql = '''
@@ -50,7 +50,7 @@ def count_rows_by_uuids(session, dtable_uuids):
         GROUP BY w.org_id
         ON DUPLICATE KEY UPDATE org_id=VALUES(org_id), rows_count=VALUES(rows_count), rows_count_update_at=VALUES(rows_count_update_at);
         '''
-        session.execute(org_sql, {'update_at': datetime.utcnow(), 'org_ids': org_ids})
+        session.execute(org_sql, {'update_at': datetime.utcnow(), 'org_ids': list(org_ids)})
         session.commit()
 
 
