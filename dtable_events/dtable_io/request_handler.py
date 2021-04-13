@@ -468,6 +468,10 @@ def add_email_sending_task():
     if copy_to and not isinstance(copy_to, list):
         copy_to = [copy_to]
 
+    file_download_urls = data.getvalue('file_download_urls', )
+    if file_download_urls and not isinstance(file_download_urls, dict):
+        file_download_urls = json.loads(file_download_urls)
+
     auth_info = {
         'email_host': data.get('email_host'),
         'email_port': data.get('email_port'),
@@ -482,6 +486,7 @@ def add_email_sending_task():
         'source': data.get('source'),
         'copy_to': copy_to,
         'reply_to': data.get('reply_to'),
+        'file_download_urls': file_download_urls,
     }
 
     try:
