@@ -401,3 +401,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(resp).encode('utf-8'))
         else:
             self.send_error(400, 'path %s invalid.' % path)
+
+    def log_request(self, *args):
+        """
+        Override super.log_request to prevent server from logging request in log
+        """
+        pass

@@ -27,7 +27,7 @@ class LogConfigurator(object):
         # Rotating log
         handler = handlers.TimedRotatingFileHandler(self._logfile, when='W0', interval=1)
         handler.setLevel(self._level)
-        formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s')
+        formatter = logging.Formatter('[%(asctime)s] %(filename)s[line:%(lineno)d] [%(levelname)s] %(message)s')
         handler.setFormatter(formatter)
 
         logging.root.setLevel(self._level)
@@ -36,7 +36,7 @@ class LogConfigurator(object):
     def _basic_config(self):
         # Log to stdout. Mainly for development.
         kw = {
-            'format': '[%(asctime)s] [%(levelname)s] %(message)s',
+            'format': '[%(asctime)s] %(filename)s[line:%(lineno)d] [%(levelname)s] %(message)s',
             'datefmt': '%m/%d/%Y %H:%M:%S',
             'level': self._level,
             'stream': sys.stdout
