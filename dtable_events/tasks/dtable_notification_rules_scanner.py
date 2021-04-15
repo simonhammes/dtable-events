@@ -67,10 +67,7 @@ class DTableNofiticationRulesScanner(object):
         # enabled
         enabled = get_opt_from_conf_or_env(config, section_name, key_enabled, default=True)
         enabled = parse_bool(enabled)
-        if not enabled:
-            return
-        self._enabled = True
-
+        self._enabled = enabled
 
     def start(self):
         if not self.is_enabled():
