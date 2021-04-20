@@ -367,6 +367,22 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
         if not is_trigger_time_satisfy(last_trigger_time):
             return
 
+        target_column_keys = trigger.get('column_keys', [])
+        watch_all_columns = trigger.get('watch_all_columns')
+        if not isinstance(watch_all_columns, bool):
+            watch_all_columns = False
+
+        # For compatibility with old code, there is no need to judge whether updated column_keys in target_column_keys when watch_all_columns is None
+        # Only watch_all_columns is not None, need to judge whether send notification or not
+        if watch_all_columns is not None and not watch_all_columns:
+            has_msg_key_in_target_keys = False
+            for msg_key in column_keys:
+                if msg_key in target_column_keys:
+                    has_msg_key_in_target_keys = True
+                    break
+            if not has_msg_key_in_target_keys:
+                return
+
         detail = {
             'table_id': table_id,
             'view_id': view_id,
