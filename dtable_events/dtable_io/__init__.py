@@ -241,14 +241,13 @@ def send_email_msg(auth_info, send_info):
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
     err_msg = None
-    try:
 
+    try:
         smtp = smtplib.SMTP(email_host, int(email_port), timeout=5)
     except Exception as e:
         dtable_message_logger.error('Email server configured failed. ERROR: {}'.format(e))
         err_msg = "Please check the host and port of email server."
         return err_msg
-
 
     try:
         smtp.starttls()
