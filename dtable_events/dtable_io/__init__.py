@@ -202,14 +202,16 @@ def get_dtable_transfer_asset_files(username, repo_id, dtable_uuid, files, task_
         shutil.rmtree(tmp_file_path)
 
 def send_wechat_msg(webhook_url, msg):
-
     msg_format = {"msgtype": "text", "text": {"content": msg}}
+    err_msg = None
     try:
         requests.post(webhook_url, json=msg_format, headers={"Content-Type": "application/json"})
     except Exception as e:
         dtable_message_logger.error('Wechat sending failed. ERROR: {}'.format(e))
+        err_msg = "Webhook url invalid."
     else:
         dtable_message_logger.info('Wechat sending success!')
+    return err_msg
 
 def send_email_msg(auth_info, send_info):
     import smtplib
