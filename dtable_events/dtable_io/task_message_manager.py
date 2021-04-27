@@ -11,6 +11,7 @@ class TaskMessageManager(object):
         self.config = None
         self.current_task_info = None
         self.t = None
+        self.err_msg = None
 
     def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, dtable_server_url, io_task_timeout, config):
         self.conf = {
@@ -43,11 +44,13 @@ class TaskMessageManager(object):
         return task_id
 
     def query_status(self, task_id):
+        err_msg = self.err_msg
         task = self.tasks_map[task_id]
         if task == 'success':
             self.tasks_map.pop(task_id, None)
-            return True
-        return False
+            self.err_msg = None
+            return True, err_msg
+        return False, err_msg
 
     def handle_task(self):
         from dtable_events.dtable_io import dtable_message_logger
@@ -68,7 +71,7 @@ class TaskMessageManager(object):
                 start_time = time.time()
 
                 # run
-                task[0](*task[1])
+                self.err_msg = task[0](*task[1])
                 self.tasks_map[task_id] = 'success'
 
                 finish_time = time.time()

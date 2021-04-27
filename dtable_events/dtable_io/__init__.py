@@ -238,7 +238,16 @@ def send_email_msg(auth_info, send_info):
     msg_obj['Cc'] = copy_to and ",".join(copy_to) or ""
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
-    smtp = smtplib.SMTP(email_host, int(email_port), timeout=5)
+    err_msg = None
+    try:
+
+        smtp = smtplib.SMTP(email_host, int(email_port), timeout=5)
+    except Exception as e:
+        dtable_message_logger.error('Email server configured failed. ERROR: {}'.format(e))
+        err_msg = "Please check the host and port of email server."
+        return err_msg
+
+
     try:
         smtp.starttls()
         smtp.login(host_user, password)
@@ -246,7 +255,9 @@ def send_email_msg(auth_info, send_info):
         smtp.sendmail(host_user, recevers, msg_obj.as_string())
     except Exception as e :
         dtable_message_logger.error('Email sending failed. ERROR: {}'.format(e))
+        err_msg = "Please check the username and password of email server."
     else:
         dtable_message_logger.info('Email sending success!')
     finally:
         smtp.quit()
+    return err_msg
