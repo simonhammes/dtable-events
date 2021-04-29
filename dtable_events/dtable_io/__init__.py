@@ -203,15 +203,15 @@ def get_dtable_transfer_asset_files(username, repo_id, dtable_uuid, files, task_
 
 def send_wechat_msg(webhook_url, msg):
     msg_format = {"msgtype": "text", "text": {"content": msg}}
-    err_msg = None
+    result = {}
     try:
         requests.post(webhook_url, json=msg_format, headers={"Content-Type": "application/json"})
     except Exception as e:
         dtable_message_logger.error('Wechat sending failed. ERROR: {}'.format(e))
-        err_msg = "Webhook url invalid."
+        result['err_msg'] = "Webhook url invalid."
     else:
         dtable_message_logger.info('Wechat sending success!')
-    return err_msg
+    return result
 
 def send_email_msg(auth_info, send_info):
     import smtplib
@@ -240,14 +240,14 @@ def send_email_msg(auth_info, send_info):
     msg_obj['Cc'] = copy_to and ",".join(copy_to) or ""
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
-    err_msg = None
 
+    result = {}
     try:
         smtp = smtplib.SMTP(email_host, int(email_port), timeout=5)
     except Exception as e:
         dtable_message_logger.error('Email server configured failed. ERROR: {}'.format(e))
-        err_msg = "Please check the host and port of email server."
-        return err_msg
+        result['err_msg'] = "Please check the host and port of email server."
+        return result
 
     try:
         smtp.starttls()
@@ -256,9 +256,9 @@ def send_email_msg(auth_info, send_info):
         smtp.sendmail(host_user, recevers, msg_obj.as_string())
     except Exception as e :
         dtable_message_logger.error('Email sending failed. ERROR: {}'.format(e))
-        err_msg = "Please check the username and password of email server."
+        result['err_msg'] = "Please check the username and password of email server."
     else:
         dtable_message_logger.info('Email sending success!')
     finally:
         smtp.quit()
-    return err_msg
+    return result
