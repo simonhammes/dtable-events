@@ -6,6 +6,7 @@ class TaskMessageManager(object):
 
     def __init__(self):
         self.tasks_map = {}
+        self.tasks_result_map = {}
         self.tasks_queue = queue.Queue(10)
         self.conf = None
         self.config = None
@@ -45,9 +46,11 @@ class TaskMessageManager(object):
     def query_status(self, task_id):
         task = self.tasks_map[task_id]
         if task == 'success':
+            task_result = self.tasks_result_map.get(task_id)
             self.tasks_map.pop(task_id, None)
-            return True
-        return False
+            self.tasks_result_map.pop(task_id, None)
+            return True, task_result
+        return False, None
 
     def handle_task(self):
         from dtable_events.dtable_io import dtable_message_logger
@@ -68,8 +71,9 @@ class TaskMessageManager(object):
                 start_time = time.time()
 
                 # run
-                task[0](*task[1])
+                result = task[0](*task[1])
                 self.tasks_map[task_id] = 'success'
+                self.tasks_result_map[task_id] = result
 
                 finish_time = time.time()
                 dtable_message_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))

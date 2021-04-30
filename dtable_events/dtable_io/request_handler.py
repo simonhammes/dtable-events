@@ -203,8 +203,9 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             if not message_task_manager.is_valid_task_id(task_id):
                 self.send_error(400, 'task_id invalid.')
             is_finished = False
+            result = None
             try:
-                is_finished = message_task_manager.query_status(task_id)
+                is_finished, result = message_task_manager.query_status(task_id)
             except Exception as e:
                 logger.error(e)
                 self.send_error(500)
@@ -214,6 +215,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             resp = {}
             resp['is_finished'] = is_finished
+            resp['result'] = result if result else {}
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
         elif path == '/cancel-message-send-task':
