@@ -208,7 +208,7 @@ def send_wechat_msg(webhook_url, msg):
         requests.post(webhook_url, json=msg_format, headers={"Content-Type": "application/json"})
     except Exception as e:
         dtable_message_logger.error('Wechat sending failed. ERROR: {}'.format(e))
-        result['err_msg'] = "Webhook url invalid."
+        result['err_msg'] = 'Webhook URL invalid'
     else:
         dtable_message_logger.info('Wechat sending success!')
     return result
@@ -245,8 +245,9 @@ def send_email_msg(auth_info, send_info):
     try:
         smtp = smtplib.SMTP(email_host, int(email_port), timeout=5)
     except Exception as e:
-        dtable_message_logger.error('Email server configured failed. ERROR: {}'.format(e))
-        result['err_msg'] = "Please check the host and port of email server."
+        dtable_message_logger.error(
+            'Email server configured failed. host: %s, port: %s, error: %s' % (email_host, email_port, e))
+        result['err_msg'] = 'Email server host or port invalid'
         return result
 
     try:
@@ -255,8 +256,9 @@ def send_email_msg(auth_info, send_info):
         recevers = copy_to and send_to + copy_to or send_to
         smtp.sendmail(host_user, recevers, msg_obj.as_string())
     except Exception as e :
-        dtable_message_logger.error('Email sending failed. ERROR: {}'.format(e))
-        result['err_msg'] = "Please check the username and password of email server."
+        dtable_message_logger.error(
+            'Email sending failed. email: %s, error: %s' % (host_user, e))
+        result['err_msg'] = 'Email server username or password invalid'
     else:
         dtable_message_logger.info('Email sending success!')
     finally:
