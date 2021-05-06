@@ -440,7 +440,7 @@ def delete_excel_file(username, repo_id, file_name):
 
 def upload_excel_json_to_dtable_server(username, dtable_uuid, json_file):
     DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/' + dtable_uuid + '/import-excel/'
+    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/import-excel/'
     dtable_server_access_token = get_dtable_server_token(username, dtable_uuid)
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     files = {
