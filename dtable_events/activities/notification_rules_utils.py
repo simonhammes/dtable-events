@@ -161,8 +161,7 @@ def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, al
     query_params = {
         'table_id': table_id,
         'view_id': view_id,
-        'convert_link_id': True,
-        'mark_formula_collaborator': True
+        'convert_link_id': True
     }
     try:
         res = requests.get(url, headers=headers, params=query_params)
@@ -256,7 +255,6 @@ def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session, cache=N
             ColumnTypes.DURATION,
             ColumnTypes.NUMBER,
             ColumnTypes.EMAIL,
-            ColumnTypes.FORMULA,
             ColumnTypes.AUTO_NUMBER,
             ColumnTypes.CTIME,
             ColumnTypes.MTIME
@@ -293,23 +291,14 @@ def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session, cache=N
                 name = get_nickname_by_usernames([value], db_session, cache=cache).get(value, '')
             msg = msg.replace('{' + blank + '}', name)
 
-        elif col_name_dict[blank]['type'] in [ColumnTypes.LINK_FORMULA]:
-            cell_value = row.get(blank)
-            if cell_value is None:
+        elif col_name_dict[blank]['type'] in [ColumnTypes.FORMULA, ColumnTypes.LINK_FORMULA]:
+            value = row.get(blank)
+            if value is None:
                 msg = msg.replace('{' + blank + '}', '')
-            elif isinstance(cell_value, str):
-                msg = msg.replace('{' + blank + '}', cell_value)
-            elif isinstance(cell_value, list):
-                msg = msg.replace('{' + blank + '}', '[' + ', '.join([str(item) for item in cell_value]) + ']')
-            elif isinstance(cell_value, dict):
-                if cell_value.get('collaborator') is True:  # fill link-formula collaborators
-                    users = cell_value.get('value', [])
-                    if users is None:
-                        names = []
-                    else:
-                        names_dict = get_nickname_by_usernames(users, db_session, cache=cache)
-                        names = [names_dict.get(user, user) for user in users]
-                    msg = msg.replace('{' + blank + '}', '[' + ', '.join(names) + ']')
+            elif isinstance(value, list):
+                msg = msg.replace('{' + blank + '}', '[' + ', '.join([str(v) for v in value]) + ']')
+            else:
+                msg = msg.replace('{' + blank + '}', str(value))
 
     return msg
 
@@ -347,7 +336,7 @@ def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg
     # get row of table-view-row
     row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    params = {'table_id': table_id, 'convert_link_id': True, 'mark_formula_collaborator': True}
+    params = {'table_id': table_id, 'convert_link_id': True}
     try:
         response = requests.get(row_url, params=params, headers=headers)
         row = response.json()
