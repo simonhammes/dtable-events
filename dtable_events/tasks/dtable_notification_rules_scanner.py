@@ -7,8 +7,6 @@ from threading import Thread
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from dtable_events.activities.notification_rules_utils import check_near_deadline_notification_rule
-from dtable_events.app.event_redis import RedisClient
-from dtable_events.cache.clients import RedisCacheClient
 from dtable_events.db import init_db_session_class
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool, get_python_executable, run
 
@@ -47,7 +45,6 @@ class DTableNofiticationRulesScanner(object):
     def __init__(self, config):
         self._enabled = True
         self._logfile = None
-        self._config = config
         self._parse_config(config)
         self._prepare_logfile()
         self._db_session_class = init_db_session_class(config)
@@ -79,13 +76,13 @@ class DTableNofiticationRulesScanner(object):
 
         logging.info('Start dtable notification rules scanner')
 
-        DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class, self._config).start()
+        DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class).start()
 
     def is_enabled(self):
         return self._enabled
 
 
-def scan_dtable_notification_rules(db_session, timezone, cache=None):
+def scan_dtable_notification_rules(db_session, timezone):
     sql = '''
             SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules
             WHERE (run_condition='per_day' AND last_trigger_time<:per_day_check_time)
@@ -103,7 +100,7 @@ def scan_dtable_notification_rules(db_session, timezone, cache=None):
         if not rule[5]:  # filter and ignore non-dtable-uuid records(some old records)
             continue
         try:
-            check_near_deadline_notification_rule(rule, db_session, timezone, cache=cache)
+            check_near_deadline_notification_rule(rule, db_session, timezone)
         except Exception as e:
             logging.exception(e)
             logging.error(f'check rule failed. {rule}, error: {e}')
@@ -112,11 +109,10 @@ def scan_dtable_notification_rules(db_session, timezone, cache=None):
 
 class DTableNofiticationRulesScannerTimer(Thread):
 
-    def __init__(self, logfile, db_session_class, config):
+    def __init__(self, logfile, db_session_class):
         super(DTableNofiticationRulesScannerTimer, self).__init__()
         self._logfile = logfile
         self.db_session_class = db_session_class
-        self._config = config
 
     def run(self):
         sched = BlockingScheduler()
@@ -126,16 +122,12 @@ class DTableNofiticationRulesScannerTimer(Thread):
             logging.info('Starts to scan notification rules...')
 
             db_session = self.db_session_class()
-            _redis_client = RedisClient(self._config)
-            cache = RedisCacheClient(_redis_client)
             try:
-                scan_dtable_notification_rules(db_session, timezone, cache=cache)
+                scan_dtable_notification_rules(db_session, timezone)
             except Exception as e:
                 logging.exception('error when scanning dtable notification rules: %s', e)
             finally:
                 db_session.close()
-                # disconnect manually, because this task runs only once per hour
-                _redis_client.connection.connection_pool.disconnect()
 
         sched.start()
 

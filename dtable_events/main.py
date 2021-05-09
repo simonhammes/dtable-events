@@ -5,6 +5,7 @@ import logging
 import json
 
 from dtable_events.db import create_db_tables
+from dtable_events.app import config as config_module
 from dtable_events.app.app import App
 from dtable_events.app.log import LogConfigurator
 from dtable_events.app.config import get_config, is_syslog_enabled, get_task_mode
@@ -19,6 +20,8 @@ def main():
         dtable_server_config = json.load(f)
 
     config = get_config(args.config_file)
+    config_module.global_config = config  # set global config
+
     try:
         create_db_tables(config)
     except Exception as e:

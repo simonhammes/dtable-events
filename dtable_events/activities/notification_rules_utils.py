@@ -11,6 +11,7 @@ import re
 import pytz
 
 from dtable_events.utils.constants import ColumnTypes
+from dtable_events.cache import redis_cache as cache
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ def get_dtable_server_token(dtable_uuid):
     return access_token
 
 
-def scan_notifications_rules_per_update(event_data, db_session, cache):
+def scan_notifications_rules_per_update(event_data, db_session):
     row_id = event_data.get('row_id', '')
     message_dtable_uuid = event_data.get('dtable_uuid', '')
     table_id = event_data.get('table_id', '')
@@ -86,7 +87,7 @@ def scan_notifications_rules_per_update(event_data, db_session, cache):
 
     for rule in rules:
         try:
-            check_notification_rule(rule, table_id, row_id, column_keys, dtable_server_access_token, db_session, cache)
+            check_notification_rule(rule, table_id, row_id, column_keys, dtable_server_access_token, db_session)
         except Exception as e:
             logger.error(f'check rule failed. {rule}, error: {e}')
     db_session.commit()
@@ -209,7 +210,7 @@ def get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_
     return columns
 
 
-def get_nickname_by_usernames(usernames, db_session, cache=None):
+def get_nickname_by_usernames(usernames, db_session):
     """
     fetch nicknames by usernames from db / cache
     return: {username0: nickname0, username1: nickname1...}
@@ -218,33 +219,32 @@ def get_nickname_by_usernames(usernames, db_session, cache=None):
         return {}
     cache_timeout = 60*60*24
     key_format = 'user:nickname:%s'
-    users_dict, miss_users = {}, [] if cache else usernames
-    if cache:
-        for username in usernames:
-            nickname = cache.get(key_format % username)
-            if nickname is None:
-                miss_users.append(username)
-            else:
-                users_dict[username] = nickname
-                cache.set(key_format % username, nickname, timeout=cache_timeout)
+    users_dict, miss_users = {}, []
+
+    for username in usernames:
+        nickname = cache.get(key_format % username)
+        if nickname is None:
+            miss_users.append(username)
+        else:
+            users_dict[username] = nickname
+            cache.set(key_format % username, nickname, timeout=cache_timeout)
 
     if not miss_users:
         return users_dict
 
-    # no cache or missed_users
+    # miss_users is not empty
     sql = "SELECT user, nickname FROM profile_profile WHERE user in :users"
     try:
         for username, nickname in db_session.execute(sql, {'users': usernames}).fetchall():
             users_dict[username] = nickname
-            if cache:
-                cache.set(key_format % username, nickname, timeout=cache_timeout)
+            cache.set(key_format % username, nickname, timeout=cache_timeout)
     except Exception as e:
         logger.error('check nicknames error: %s', e)
 
     return users_dict
 
 
-def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session, cache=None):
+def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session):
     for blank in column_blanks:
         if col_name_dict[blank]['type'] in [
             ColumnTypes.TEXT,
@@ -279,7 +279,7 @@ def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session, cache=N
             if users is None:
                 names = []
             else:
-                names_dict = get_nickname_by_usernames(users, db_session, cache=cache)
+                names_dict = get_nickname_by_usernames(users, db_session)
                 names = [names_dict.get(user, user) for user in users]
             msg = msg.replace('{' + blank + '}', '[' + ', '.join(names) + ']')
 
@@ -288,7 +288,7 @@ def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session, cache=N
             if value is None:
                 name = ''
             else:
-                name = get_nickname_by_usernames([value], db_session, cache=cache).get(value, '')
+                name = get_nickname_by_usernames([value], db_session).get(value, '')
             msg = msg.replace('{' + blank + '}', name)
 
         elif col_name_dict[blank]['type'] in [ColumnTypes.FORMULA, ColumnTypes.LINK_FORMULA]:
@@ -316,7 +316,7 @@ def _get_column_blanks(blanks, columns):
     return column_blanks, col_name_dict
 
 
-def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session, cache=None):
+def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session):
     if not msg:
         return msg
 
@@ -344,21 +344,21 @@ def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg
         logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
         return msg, {}
 
-    msg = _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session, cache=cache)
+    msg = _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session)
 
     return msg
 
 
-def gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, db_session, cache=None):
+def gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, db_session):
     if not msg:
         return msg
     if not column_blanks:
         return msg
 
-    return _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session, cache=cache)
+    return _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session)
 
 
-def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session, cache=None):
+def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session):
 
     rule_id = rule[0]
     trigger = rule[1]
@@ -409,7 +409,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_ROWS_MODIFIED,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session, cache=cache),
+            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session),
             'row_id_list': [row_id],
         }
 
@@ -452,7 +452,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_FILTERS_SATISFY,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session, cache=cache),
+            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session),
             'row_id_list': [row_id],
         }
         if users_column_key:
@@ -473,7 +473,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
     update_rule_last_trigger_time(rule_id, db_session)
 
 
-def check_near_deadline_notification_rule(rule, db_session, timezone, cache=None):
+def check_near_deadline_notification_rule(rule, db_session, timezone):
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
@@ -541,7 +541,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone, cache=None
             'condition': CONDITION_NEAR_DEADLINE,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, db_session, cache=cache),
+            'msg': gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, db_session),
             'row_id_list': [row_id],
         }
 
