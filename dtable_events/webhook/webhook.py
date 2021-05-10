@@ -61,7 +61,7 @@ class Webhooker:
             try:
                 for item in self._subscriber.listen():
                     if item['type'] == 'message':
-                        data = item['data'].decode('utf-8')
+                        data = item['data']
                         try:
                             data = json.loads(data)
                         except:
@@ -71,7 +71,8 @@ class Webhooker:
                             'data': data,
                             'event': 'update'
                         })
-            except:
+            except Exception as e:
+                logger.error('webhook sub from redis error: %s', e)
                 self._subscriber = self._redis_client.get_subscriber('table-events')
 
     def checkout_webhook_jobs(self, event):
