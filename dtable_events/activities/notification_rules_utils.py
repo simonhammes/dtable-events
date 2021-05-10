@@ -11,6 +11,7 @@ import re
 import pytz
 
 from dtable_events.utils.constants import ColumnTypes
+from dtable_events.cache import redis_cache as cache
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,8 @@ def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, al
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     query_params = {
         'table_id': table_id,
-        'view_id': view_id
+        'view_id': view_id,
+        'convert_link_id': True
     }
     try:
         res = requests.get(url, headers=headers, params=query_params)
@@ -208,19 +210,41 @@ def get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_
     return columns
 
 
-def get_related_users_dict(dtable_uuid, dtable_server_access_token):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/related-users/'.format(dtable_uuid=dtable_uuid)
-    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    related_users = []
+def get_nickname_by_usernames(usernames, db_session):
+    """
+    fetch nicknames by usernames from db / cache
+    return: {username0: nickname0, username1: nickname1...}
+    """
+    if not usernames:
+        return {}
+    cache_timeout = 60*60*24
+    key_format = 'user:nickname:%s'
+    users_dict, miss_users = {}, []
+
+    for username in usernames:
+        nickname = cache.get(key_format % username)
+        if nickname is None:
+            miss_users.append(username)
+        else:
+            users_dict[username] = nickname
+            cache.set(key_format % username, nickname, timeout=cache_timeout)
+
+    if not miss_users:
+        return users_dict
+
+    # miss_users is not empty
+    sql = "SELECT user, nickname FROM profile_profile WHERE user in :users"
     try:
-        response = requests.get(url, headers=headers)
-        related_users = response.json()['user_list']
+        for username, nickname in db_session.execute(sql, {'users': usernames}).fetchall():
+            users_dict[username] = nickname
+            cache.set(key_format % username, nickname, timeout=cache_timeout)
     except Exception as e:
-        logger.error('dtable_uuid: %s get related users error: %s', dtable_uuid, e)
-    return {u['email']: u for u in related_users}
+        logger.error('check nicknames error: %s', e)
+
+    return users_dict
 
 
-def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, related_users_dict=None):
+def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session):
     for blank in column_blanks:
         if col_name_dict[blank]['type'] in [
             ColumnTypes.TEXT,
@@ -231,72 +255,68 @@ def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, related_users_dict=
             ColumnTypes.DURATION,
             ColumnTypes.NUMBER,
             ColumnTypes.EMAIL,
-            ColumnTypes.FORMULA,
             ColumnTypes.AUTO_NUMBER,
             ColumnTypes.CTIME,
             ColumnTypes.MTIME
         ]:
             value = row.get(blank, '')
-            msg = msg.replace('{' + blank + '}', str(value))
+            msg = msg.replace('{' + blank + '}', str(value) if value else '')  # maybe value is None and str(None) is 'None'
 
         elif col_name_dict[blank]['type'] in [
             ColumnTypes.IMAGE,
             ColumnTypes.MULTIPLE_SELECT,
+            ColumnTypes.LINK,
         ]:
             value = row.get(blank, [])
-            msg = msg.replace('{' + blank + '}', '[' + ', '.join(value) + ']')
+            msg = msg.replace('{' + blank + '}', ('[' + ', '.join(value) + ']') if value else '[]')  # maybe value is None
 
         elif col_name_dict[blank]['type'] in [ColumnTypes.FILE]:
             value = row.get(blank, [])
-            msg = msg.replace('{' + blank + '}', '[' + ', '.join([f['name'] for f in value]) + ']')
+            msg = msg.replace('{' + blank + '}', ('[' + ', '.join([f['name'] for f in value]) + ']') if value else '[]')
 
         elif col_name_dict[blank]['type'] in [ColumnTypes.COLLABORATOR]:
             users = row.get(blank, [])
-            if not related_users_dict:
-                msg = msg.replace('{' + blank + '}', '[' + ', '.join(users) + ']')
-            else:
+            if users is None:
                 names = []
-                for u in users:
-                    user = related_users_dict.get(u)
-                    name = user['name'] if user else value
-                    names.append(name)
-                msg = msg.replace('{' + blank + '}', '[' + ', '.join(names) + ']')
+            else:
+                names_dict = get_nickname_by_usernames(users, db_session)
+                names = [names_dict.get(user, user) for user in users]
+            msg = msg.replace('{' + blank + '}', '[' + ', '.join(names) + ']')
 
         elif col_name_dict[blank]['type'] in [ColumnTypes.CREATOR, ColumnTypes.LAST_MODIFIER]:
             value = row.get(blank, '')
-            if not related_users_dict:
-                msg = msg.replace('{' + blank + '}', value)
+            if value is None:
+                name = ''
             else:
-                user = related_users_dict.get(value)
-                name = user['name'] if user else value
-                msg = msg.replace('{' + blank + '}', name)
+                name = get_nickname_by_usernames([value], db_session).get(value, '')
+            msg = msg.replace('{' + blank + '}', name)
+
+        elif col_name_dict[blank]['type'] in [ColumnTypes.FORMULA, ColumnTypes.LINK_FORMULA]:
+            value = row.get(blank)
+            if value is None:
+                msg = msg.replace('{' + blank + '}', '')
+            elif isinstance(value, list):
+                msg = msg.replace('{' + blank + '}', '[' + ', '.join([str(v) for v in value]) + ']')
+            else:
+                msg = msg.replace('{' + blank + '}', str(value))
 
     return msg
 
 
-def _get_column_blanks_and_related_users(dtable_uuid, dtable_server_access_token, blanks, columns):
+def _get_column_blanks(blanks, columns):
     col_name_dict = {col['name']: col for col in columns}
 
     column_blanks = []
-    need_related_users, related_users_dict = False, {}
     for blank in blanks:
         if blank in col_name_dict:
             column_blanks.append(blank)
-            if col_name_dict[blank]['type'] in [
-                ColumnTypes.COLLABORATOR,
-                ColumnTypes.CREATOR,
-                ColumnTypes.LAST_MODIFIER
-            ]:
-                need_related_users = True
     if not column_blanks:
-        return [], col_name_dict, {}
-    if need_related_users:
-        related_users_dict = get_related_users_dict(dtable_uuid, dtable_server_access_token)
+        return [], col_name_dict
 
-    return column_blanks, col_name_dict, related_users_dict
+    return column_blanks, col_name_dict
 
 
-def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token):
+def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session):
     if not msg:
         return msg
 
@@ -308,7 +328,7 @@ def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg
 
     columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
 
-    column_blanks, col_name_dict, related_users_dict = _get_column_blanks_and_related_users(dtable_uuid, dtable_server_access_token, blanks, columns)
+    column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
 
     if not column_blanks:
         return msg
@@ -316,29 +336,29 @@ def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg
     # get row of table-view-row
     row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    params = {'table_id': table_id}
+    params = {'table_id': table_id, 'convert_link_id': True}
     try:
         response = requests.get(row_url, params=params, headers=headers)
         row = response.json()
     except Exception as e:
         logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
-        return msg
+        return msg, {}
 
-    msg = _fill_msg_blanks(msg, column_blanks, col_name_dict, row, related_users_dict)
+    msg = _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session)
 
     return msg
 
 
-def gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, related_users_dict):
+def gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, db_session):
     if not msg:
         return msg
     if not column_blanks:
         return msg
 
-    return _fill_msg_blanks(msg, column_blanks, col_name_dict, row, related_users_dict)
+    return _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session)
 
 
-def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session=None):
+def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session):
 
     rule_id = rule[0]
     trigger = rule[1]
@@ -389,7 +409,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_ROWS_MODIFIED,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
+            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session),
             'row_id_list': [row_id],
         }
 
@@ -432,7 +452,7 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_FILTERS_SATISFY,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token),
+            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session),
             'row_id_list': [row_id],
         }
         if users_column_key:
@@ -504,7 +524,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
     related_users_dict = {}
     if blanks:
         columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
-        column_blanks, col_name_dict, related_users_dict = _get_column_blanks_and_related_users(dtable_uuid, dtable_server_access_token, blanks, columns)
+        column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
 
     for row in rows_near_deadline[:25]:
         row_id = row['_id']
@@ -521,7 +541,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
             'condition': CONDITION_NEAR_DEADLINE,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, related_users_dict),
+            'msg': gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, db_session),
             'row_id_list': [row_id],
         }
 

@@ -19,7 +19,8 @@ class RedisClient(object):
         """
         self.connection = redis.Redis(
             host=self._host, port=self._port, password=self._password,
-            socket_timeout=socket_timeout, socket_connect_timeout=socket_connect_timeout
+            socket_timeout=socket_timeout, socket_connect_timeout=socket_connect_timeout,
+            decode_responses=True
             )
 
 
@@ -44,3 +45,15 @@ class RedisClient(object):
                 time.sleep(10)
             else:
                 return subscriber
+
+    def get(self, key):
+        return self.connection.get(key)
+
+    def set(self, key, value, timeout=None):
+        if not timeout:
+            return self.connection.set(key, value)
+        else:
+            return self.connection.setex(key, timeout, value)
+
+    def delete(self, key):
+        return self.connection.delete(key)

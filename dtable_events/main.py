@@ -4,10 +4,11 @@ import argparse
 import logging
 import json
 
-from dtable_events.db import create_db_tables
 from dtable_events.app.app import App
 from dtable_events.app.log import LogConfigurator
 from dtable_events.app.config import get_config, is_syslog_enabled, get_task_mode
+from dtable_events.cache import redis_cache
+from dtable_events.db import create_db_tables
 
 
 def main():
@@ -19,6 +20,9 @@ def main():
         dtable_server_config = json.load(f)
 
     config = get_config(args.config_file)
+
+    redis_cache._init_redis(config)  # init redis instance in redis-cache
+
     try:
         create_db_tables(config)
     except Exception as e:
