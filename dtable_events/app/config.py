@@ -4,13 +4,6 @@ import configparser
 
 logger = logging.getLogger(__name__)
 
-# For other modules importing config directly instead of passing config
-# If you want to use global_config in other modulers
-# Usage:
-#   from dtable_events.app import config
-#   config.global_config and other code
-global_config = None
-
 
 def get_config(config_file):
     config = configparser.ConfigParser()

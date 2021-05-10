@@ -15,8 +15,11 @@ class BaseCacheClient:
 
 class RedisCacheClient(BaseCacheClient):
 
-    def __init__(self, redis_client: RedisClient):
-        self._redis_client = redis_client
+    def __init__(self):
+        self._redis_client = None
+
+    def _init_redis(self, config):
+        self._redis_client = RedisClient(config)
 
     def set(self, key, value, timeout=None):
         if not timeout:
@@ -29,4 +32,3 @@ class RedisCacheClient(BaseCacheClient):
 
     def delete(self, key):
         self._redis_client.delete(key)
-
