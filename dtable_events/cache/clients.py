@@ -22,13 +22,10 @@ class RedisCacheClient(BaseCacheClient):
         self._redis_client = RedisClient(config)
 
     def set(self, key, value, timeout=None):
-        if not timeout:
-            self._redis_client.connection.set(key, value, timeout=timeout)
-        else:
-            self._redis_client.connection.setex(key, timeout, value)
+        return self._redis_client.set(key, value, timeout=timeout)
 
     def get(self, key):
-        self._redis_client.connection.get(key)
+        return self._redis_client.get(key)
 
     def delete(self, key):
-        self._redis_client.delete(key)
+        return self._redis_client.delete(key)

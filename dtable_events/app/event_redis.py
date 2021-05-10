@@ -45,3 +45,15 @@ class RedisClient(object):
                 time.sleep(10)
             else:
                 return subscriber
+
+    def get(self, key):
+        return self.connection.get(key)
+
+    def set(self, key, value, timeout=None):
+        if not timeout:
+            return self.connection.set(key, value)
+        else:
+            return self.connection.setex(key, timeout, value)
+
+    def delete(self, key):
+        return self.connection.delete(key)
