@@ -125,7 +125,11 @@ def send_notification(dtable_uuid, user_msg_list, dtable_server_access_token):
         logger.error(f'failed to send_notification {res.text}')
 
 
-def is_row_in_view(row_id, view_id, dtable_uuid, table_id, dtable_server_access_token):
+def deal_invalid_rule(rule_id, db_session):
+    sql = "UPDATE dtable_notification_rules SET is_valid=:state WHERE id=:rule_id"
+    db_session.execute(sql, {'is_valid': 0, 'rule_id': rule_id})
+
+def is_row_in_view(row_id, view_id, dtable_uuid, table_id, dtable_server_access_token, rule_id=None, db_session=None):
     url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/is-row-in-view/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     params = {
@@ -137,10 +141,13 @@ def is_row_in_view(row_id, view_id, dtable_uuid, table_id, dtable_server_access_
     if res.status_code != 200:
         logger.error(res.text)
         return False
-    return json.loads(res.content).get('is_row_in_view')
+    state = json.loads(res.content).get('is_row_in_view')
+    if not state and db_session and rule_id:
+        deal_invalid_rule(rule_id, db_session)
+    return state
 
 
-def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id, dtable_server_access_token):
+def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id, dtable_server_access_token, rule_id=None, db_session=None):
     url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/is-row-satisfy-filters/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     data = {
@@ -153,10 +160,13 @@ def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, tabl
     if res.status_code != 200:
         logger.error(res.text)
         return False
-    return json.loads(res.content).get('is_row_satisfy_filters')
+    state = json.loads(res.content).get('is_row_satisfy_filters')
+    if not state and db_session and rule_id:
+        deal_invalid_rule(rule_id, db_session)
+    return state
 
 
-def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token):
+def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token, rule_id=None, db_session=None):
     url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     query_params = {
@@ -175,6 +185,8 @@ def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, al
         return []
 
     rows = json.loads(res.content).get('rows', [])
+    if not rows and db_session and rule_id:
+        deal_invalid_rule(rule_id, db_session)
     rows_near_deadline = []
     for row in rows:
         deadline_date_date_str = row.get(date_column_name, '')
@@ -512,7 +524,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
 
     dtable_server_access_token = get_dtable_server_token(dtable_uuid)
     try:
-        rows_near_deadline = list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token)
+        rows_near_deadline = list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token, rule_id, db_session)
     except Exception as e:
         logger.error('list rows_near_deadline failed. error: {}'.format(e))
         return
