@@ -127,7 +127,7 @@ def send_notification(dtable_uuid, user_msg_list, dtable_server_access_token):
 
 def deal_invalid_rule(rule_id, db_session):
     sql = "UPDATE dtable_notification_rules SET is_valid=:state WHERE id=:rule_id"
-    db_session.execute(sql, {'is_valid': 0, 'rule_id': rule_id})
+    db_session.execute(sql, {'state': 0, 'rule_id': rule_id})
 
 def is_row_in_view(row_id, view_id, dtable_uuid, table_id, dtable_server_access_token, rule_id=None, db_session=None):
     url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/is-row-in-view/'
