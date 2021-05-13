@@ -27,10 +27,10 @@ class TaskMessageManager(object):
     def is_valid_task_id(self, task_id):
         return task_id in self.tasks_map.keys()
     
-    def add_email_sending_task(self, auth_info, send_info):
+    def add_email_sending_task(self, auth_info, send_info, username):
         from dtable_events.dtable_io import send_email_msg
         task_id = str(int(time.time() * 1000))
-        task = (send_email_msg,(auth_info, send_info))
+        task = (send_email_msg,(auth_info, send_info, username, self.config))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
         return task_id

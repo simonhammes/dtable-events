@@ -386,10 +386,12 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                 'copy_to': copy_to,
                 'reply_to': datasets.getvalue('reply_to'),
             }
+            username = datasets.getvalue('username')
             try:
                 task_id = message_task_manager.add_email_sending_task(
                     auth_info,
-                    send_info
+                    send_info,
+                    username
                 )
             except Exception as e:
                 logger.error(e)

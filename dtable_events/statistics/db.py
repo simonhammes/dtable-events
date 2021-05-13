@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import func
 
-from dtable_events.statistics.models import UserActivityStatistics
+from dtable_events.statistics.models import UserActivityStatistics, EmailSendingLog
 
 logger = logging.getLogger(__name__)
 
@@ -66,3 +66,10 @@ def get_daily_active_users(session, date_day, start, count):
         active_users = list()
 
     return active_users, total_count
+
+def save_email_sending_records(session, username, host, message, success):
+    timestamp = datetime.now()
+
+    new_log = EmailSendingLog(username, timestamp, host, message, success)
+    session.add(new_log)
+    session.commit()
