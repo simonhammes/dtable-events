@@ -29,29 +29,64 @@ def count_rows_by_uuids(session, dtable_uuids):
                 usernames.add(owner)
     # count user and org
     if usernames:
-        user_sql = '''
-        INSERT INTO user_rows_count(username, rows_count, rows_count_update_at)
-        SELECT w.owner AS username, SUM(drc.rows_count) AS rows_count, :update_at FROM dtable_rows_count drc
-        JOIN dtables d ON drc.dtable_uuid=d.uuid
+        sql = '''
+        SELECT w.owner, d.uuid FROM dtables d
         JOIN workspaces w ON d.workspace_id=w.id
-        WHERE w.owner IN :usernames AND d.deleted=0
-        GROUP BY w.owner
-        ON DUPLICATE KEY UPDATE username=VALUES(username), rows_count=VALUES(rows_count), rows_count_update_at=VALUES(rows_count_update_at);
+        WHERE w.owner IN :usernames AND d.deleted=0 AND org_id=-1
         '''
-        session.execute(user_sql, {'update_at': datetime.utcnow(), 'usernames': list(usernames)})
-        session.commit()
+        user_dtable_uuids = session.execute(sql, {'usernames': list(usernames)}).fetchall()
+        user_dtable_uuids_dict = {}  # {username: [dtable_uuid...]}
+        for username, dtable_uuid in user_dtable_uuids:
+            if user_dtable_uuids_dict.get(username):
+                user_dtable_uuids_dict[username].append(dtable_uuid)
+            else:
+                user_dtable_uuids_dict[username] = [dtable_uuid]
+        for username, dtable_uuids in user_dtable_uuids_dict.items():
+            user_sql = '''
+            INSERT INTO user_rows_count(username, rows_count, rows_count_update_at)
+            SELECT :username, SUM(drc.rows_count) AS rows_count, :update_at FROM dtable_rows_count drc
+            WHERE drc.dtable_uuid in :dtable_uuids
+            ON DUPLICATE KEY UPDATE rows_count=VALUES(rows_count), rows_count_update_at=:update_at;
+            '''
+            try:
+                session.execute(user_sql, {
+                    'username': username,
+                    'update_at': datetime.utcnow(),
+                    'dtable_uuids': dtable_uuids
+                })
+                session.commit()
+            except Exception as e:
+                logger.error('update user rows count: %s error: %s', username, e)
+
     if org_ids:
-        org_sql = '''
-        INSERT INTO org_rows_count(org_id, rows_count, rows_count_update_at)
-        SELECT w.org_id AS org_id, SUM(drc.rows_count) AS rows_count, :update_at FROM dtable_rows_count drc
-        JOIN dtables d ON drc.dtable_uuid=d.uuid
+        sql = '''
+        SELECT w.org_id, d.uuid FROM dtables d
         JOIN workspaces w ON d.workspace_id=w.id
-        WHERE w.org_id IN :org_ids AND d.deleted=0
-        GROUP BY w.org_id
-        ON DUPLICATE KEY UPDATE org_id=VALUES(org_id), rows_count=VALUES(rows_count), rows_count_update_at=VALUES(rows_count_update_at);
+        WHERE d.deleted=0 AND w.org_id in :org_ids
         '''
-        session.execute(org_sql, {'update_at': datetime.utcnow(), 'org_ids': list(org_ids)})
-        session.commit()
+        org_dtable_uuids = session.execute(sql, {'org_ids': list(org_ids)})
+        org_dtable_uuids_dict = {}  # {org_id: [dtable_uuids...]}
+        for org_id, dtable_uuid in org_dtable_uuids:
+            if org_dtable_uuids_dict.get(org_id):
+                org_dtable_uuids_dict[org_id].append(dtable_uuid)
+            else:
+                org_dtable_uuids_dict[org_id] = [dtable_uuid]
+        for org_id, dtable_uuids in org_dtable_uuids_dict.items():
+            org_sql = '''
+            INSERT INTO org_rows_count(org_id, rows_count, rows_count_update_at)
+            SELECT :org_id, SUM(drc.rows_count) AS rows_count, :update_at FROM dtable_rows_count drc
+            WHERE drc.dtable_uuid in :dtable_uuids
+            ON DUPLICATE KEY UPDATE rows_count=VALUES(rows_count), rows_count_update_at=:update_at;
+            '''
+            try:
+                session.execute(org_sql, {
+                    'org_id': org_id,
+                    'update_at': datetime.utcnow(),
+                    'dtable_uuids': dtable_uuids
+                })
+                session.commit()
+            except Exception as e:
+                logger.error('update org rows count: %s, error: %s', org_id, e)
 
 
 class DTableRealTimeRowsCounter(Thread):
