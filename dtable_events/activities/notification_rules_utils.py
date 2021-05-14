@@ -80,7 +80,7 @@ def scan_notifications_rules_per_update(event_data, db_session):
         return
 
     sql = "SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules WHERE run_condition='per_update'" \
-          "AND dtable_uuid=:dtable_uuid"
+          "AND dtable_uuid=:dtable_uuid AND is_valid=1"
     rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid})
 
     dtable_server_access_token = get_dtable_server_token(message_dtable_uuid)
@@ -164,7 +164,6 @@ def is_row_in_view(row_id, view_id, dtable_uuid, table_id, dtable_server_access_
         # perhaps 404 is reason for row_id, we only deal with 'view not found','table not found' and 'dtable not found'
         if not is_view_in_table(view_id, dtable_uuid, table_id, dtable_server_access_token):
             deal_invalid_rule(rule_id, db_session)
-        return False
     if res.status_code != 200:
         logger.error(res.text)
         return False

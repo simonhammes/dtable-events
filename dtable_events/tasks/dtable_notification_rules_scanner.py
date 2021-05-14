@@ -85,9 +85,10 @@ class DTableNofiticationRulesScanner(object):
 def scan_dtable_notification_rules(db_session, timezone):
     sql = '''
             SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules
-            WHERE (run_condition='per_day' AND last_trigger_time<:per_day_check_time)
+            WHERE ((run_condition='per_day' AND last_trigger_time<:per_day_check_time)
             OR (run_condition='per_week' AND last_trigger_time<:per_week_check_time)
-            OR last_trigger_time is null
+            OR last_trigger_time is null)
+            AND is_valid=1
         '''
     per_day_check_time = datetime.utcnow() - timedelta(hours=23)
     per_week_check_time = datetime.utcnow() - timedelta(days=6)
