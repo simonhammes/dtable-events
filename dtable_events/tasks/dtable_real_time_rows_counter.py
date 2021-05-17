@@ -32,7 +32,7 @@ def count_rows_by_uuids(session, dtable_uuids):
         user_sql = '''
         INSERT INTO user_rows_count(username, rows_count, rows_count_update_at)
         SELECT owner AS username, SUM(rows_count) AS rows_count, :update_at FROM dtable_rows_count
-        WHERE owner IN :usernames
+        WHERE owner IN :usernames AND deleted=0
         GROUP BY owner
         ON DUPLICATE KEY UPDATE rows_count=VALUES(rows_count), rows_count_update_at=:update_at;
         '''
@@ -49,7 +49,7 @@ def count_rows_by_uuids(session, dtable_uuids):
         org_sql = '''
         INSERT INTO org_rows_count(org_id, rows_count, rows_count_update_at)
         SELECT org_id, SUM(rows_count) AS rows_count, :update_at FROM dtable_rows_count
-        WHERE org_id IN :org_ids
+        WHERE org_id IN :org_ids AND deleted=0
         GROUP BY org_id
         ON DUPLICATE KEY UPDATE rows_count=VALUES(rows_count), rows_count_update_at=:update_at;
         '''
