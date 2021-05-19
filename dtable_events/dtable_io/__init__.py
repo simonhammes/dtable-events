@@ -267,6 +267,11 @@ def send_email_msg(auth_info, send_info, username, config=None):
         smtp.quit()
 
     session = init_db_session_class(config)()
-    save_email_sending_records(session, username, email_host, msg, success)
-    session.close()
+    try:
+        save_email_sending_records(session, username, email_host, msg, success)
+    except Exception as e:
+        dtable_message_logger.error(
+            'Email sending log record error: %s' % e)
+    finally:
+        session.close()
     return result
