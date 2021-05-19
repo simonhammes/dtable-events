@@ -81,7 +81,7 @@ def get_email_sending_logs(session, start, end):
             EmailSendingLog
         ).order_by(desc(EmailSendingLog.timestamp)).slice(start, end)
     except Exception as e:
-        logger.error('Get daily active users failed:', e)
+        logger.error('Get email sending logs failed:', e)
         total_count = 0
         logs = list()
 
