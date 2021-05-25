@@ -31,15 +31,18 @@ class EmptyCell(object):
 
 
 def parse_checkbox(cell_value):
+    cell_value = str(cell_value)
     return True if cell_value in CHECKBOX_TRUE_LIST else False
 
 
 def parse_multiple_select(cell_value):
+    cell_value = str(cell_value)
     values = cell_value.split('，') if '，' in cell_value else cell_value.split(',')
     return [value.strip(' ') for value in values]
 
 
 def parse_long_text(cell_value):
+    cell_value = str(cell_value)
     checked_count = cell_value.count('[x]')
     unchecked_count = cell_value.count('[ ]')
     total = checked_count + unchecked_count
@@ -87,9 +90,10 @@ def parse_excel_rows(sheet_rows, columns, head_index, max_column):
                 column_type = columns[index]['type']
                 if cell_value is None:
                     continue
-                elif isinstance(cell_value, datetime):  # JSON serializable
-                    row_data[column_name] = str(cell_value)
-                elif column_type == 'number':
+                if isinstance(cell_value, datetime):  # JSON serializable
+                    cell_value = str(cell_value)
+
+                if column_type == 'number':
                     row_data[column_name] = cell_value
                 elif column_type == 'date':
                     row_data[column_name] = str(cell_value)
@@ -144,6 +148,7 @@ def parse_excel_column_type(value_list):
             for cell_value in value_list:
                 if cell_value is None:
                     continue
+                cell_value = str(cell_value)
                 multiple_value = cell_value.split('，') if '，' in cell_value else cell_value.split(',')
                 for value in multiple_value:
                     value = value.strip(' ')
