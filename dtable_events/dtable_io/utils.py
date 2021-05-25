@@ -145,6 +145,30 @@ def prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id):
     with open(path, 'wb') as f:
        f.write(content_json)
 
+def prepare_dtable_json_from_memory(dtable_uuid, username):
+    """
+    Used in dtable file export in real-time from memory by request the api of dtable-server
+    It is more effective than exporting dtable files from seafile-server which will take about 5 minutes
+    for synchronizing the data from memory to seafile-server.
+    :param dtable_uuid:
+    :param username:
+    :return:
+    """
+    dtable_server_access_token = get_dtable_server_token(username, dtable_uuid)
+    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
+    DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
+    json_url = DTABLE_SERVER_URL.rstrip('/') + '/dtables/' + dtable_uuid + '/'
+    content_json = requests.get(json_url, headers=headers).content
+    if content_json:
+        dtable_content = convert_dtable_export_file_and_image_url(json.loads(content_json))
+    else:
+        dtable_content = ''
+    content_json = json.dumps(dtable_content).encode('utf-8')
+    path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_asset', 'content.json')
+
+    with open(path, 'wb') as f:
+        f.write(content_json)
+
 
 def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
     """

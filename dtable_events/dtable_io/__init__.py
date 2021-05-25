@@ -3,7 +3,7 @@ import os
 import requests
 from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
-    download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json
+    download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, prepare_dtable_json_from_memory
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server
 
@@ -17,7 +17,7 @@ def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     if os.path.exists(tmp_zip_path):
         os.remove(tmp_zip_path)
 
-def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable_file_dir_id, asset_dir_id, config):
+def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable_file_dir_id, asset_dir_id, config, source='dtable-server'):
     """
     1. prepare file content at /tmp/dtable-io/<dtable_id>/dtable_asset/...
     2. make zip file
@@ -42,7 +42,10 @@ def get_dtable_export_content(username, repo_id, table_name, dtable_uuid, dtable
     # 1. create 'content.json' from 'xxx.dtable'
     dtable_io_logger.info('Create content.json file.')
     try:
-        prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id)
+        if source == 'dtable-server':
+            prepare_dtable_json_from_memory(dtable_uuid, username)
+        elif source == 'seafile-server':
+            prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id)
     except Exception as e:
         dtable_io_logger.error('prepare dtable json failed. ERROR: {}'.format(e))
 
