@@ -33,6 +33,7 @@ class TaskManager(object):
 
     def add_export_task(self, username, repo_id, dtable_uuid, dtable_name):
         from dtable_events.dtable_io import get_dtable_export_content
+        from dtable_events.utils.constants import SOURCE_FOR_DTABLE_EXPORT
 
         dtable_file_id = seafile_api.get_file_id_by_path(repo_id, '/' + dtable_name + '.dtable')
         asset_dir_path = os.path.join('/asset', dtable_uuid)
@@ -40,7 +41,7 @@ class TaskManager(object):
 
         task_id = str(int(time.time()*1000))
         task = (get_dtable_export_content,
-                (username, repo_id, dtable_name, dtable_uuid, dtable_file_id, asset_dir_id, self.config))
+                (username, repo_id, dtable_name, dtable_uuid, dtable_file_id, asset_dir_id, self.config, SOURCE_FOR_DTABLE_EXPORT))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
 
