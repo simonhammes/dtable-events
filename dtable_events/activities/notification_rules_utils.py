@@ -244,7 +244,15 @@ def get_nickname_by_usernames(usernames, db_session):
     return users_dict
 
 
-def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session):
+def _get_dtable_metadata(dtable_uuid):
+    access_token = get_dtable_server_token(dtable_uuid)
+    metadata_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/metadata/'
+    headers = {'Authorization': 'Token ' + access_token.decode()}
+    response = requests.get(metadata_url, headers=headers)
+    return response.json().get('metadata')
+
+
+def _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata=None):
     for blank in column_blanks:
         if col_name_dict[blank]['type'] in [
             ColumnTypes.TEXT,
@@ -280,7 +288,7 @@ def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session):
                 names = []
             else:
                 names_dict = get_nickname_by_usernames(users, db_session)
-                names = [names_dict.get(user, user) for user in users]
+                names = [names_dict.get(user) for user in users if user in names_dict]
             msg = msg.replace('{' + blank + '}', '[' + ', '.join(names) + ']')
 
         elif col_name_dict[blank]['type'] in [ColumnTypes.CREATOR, ColumnTypes.LAST_MODIFIER]:
@@ -292,13 +300,53 @@ def _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session):
             msg = msg.replace('{' + blank + '}', name)
 
         elif col_name_dict[blank]['type'] in [ColumnTypes.FORMULA, ColumnTypes.LINK_FORMULA]:
+            # Fill formula blanks
+            # If result_type of formula is 'column', which indicates that real result_type is maybe like collaborator
+            # we need to fill blanks with nicknames,
+            # else just transfer value to str to fill blanks.
+            # Judge whether value is like collaborator or not based on metadata of dtable
             value = row.get(blank)
-            if value is None:
-                msg = msg.replace('{' + blank + '}', '')
-            elif isinstance(value, list):
-                msg = msg.replace('{' + blank + '}', '[' + ', '.join([str(v) for v in value]) + ']')
+            formula_data = col_name_dict[blank].get('data')
+            if not formula_data:
+                continue
+            # If not column, just return str(value)
+            if formula_data.get('result_type') != 'column':
+                msg = msg.replace('{' + blank + '}', str(value) if value else '')
+                continue
+
+            # According `display_column_key`, `linked_table_id` and metadata of dtable,
+            # judge whether result_type of formula is like collaborator or not.
+            display_column_key, linked_table_id = formula_data.get('display_column_key'), formula_data.get('linked_table_id')
+            target_column_type = None
+            if not dtable_metadata:
+                dtable_metadata = _get_dtable_metadata(dtable_uuid)
+            for table in dtable_metadata.get('tables', []):
+                if table.get('_id') == linked_table_id:
+                    columns = table.get('columns', [])
+                    for col in columns:
+                        if col.get('key') == display_column_key:
+                            target_column_type = col.get('type')
+                            break
+                if target_column_type:
+                    break
+
+            # If result_type is like collaborator, fill blanks with nicknames
+            if target_column_type in [ColumnTypes.COLLABORATOR, ColumnTypes.CREATOR, ColumnTypes.LAST_MODIFIER]:
+                if value is None:
+                    msg = msg.replace('{' + blank + '}', '[]')
+                    continue
+                names_dict = get_nickname_by_usernames(value, db_session)
+                names = [names_dict.get(user) for user in value if user in names_dict]
+                msg = msg.replace('{' + blank + '}', '[' + ', '.join(names) + ']')
+
+            # else just fill str(value)
             else:
-                msg = msg.replace('{' + blank + '}', str(value))
+                if value is None:
+                    msg = msg.replace('{' + blank + '}', '')
+                elif isinstance(value, list):
+                    msg = msg.replace('{' + blank + '}', '[' + ', '.join([str(v) for v in value]) + ']')
+                else:
+                    msg = msg.replace('{' + blank + '}', str(value))
 
     return msg
 
@@ -344,18 +392,18 @@ def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg
         logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
         return msg, {}
 
-    msg = _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session)
+    msg = _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session)
 
     return msg
 
 
-def gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, db_session):
+def gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name_dict, db_session, dtable_metadata=None):
     if not msg:
         return msg
     if not column_blanks:
         return msg
 
-    return _fill_msg_blanks(msg, column_blanks, col_name_dict, row, db_session)
+    return _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata=dtable_metadata)
 
 
 def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session):
@@ -520,8 +568,9 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
     if not rows_near_deadline:
         return
 
+    dtable_metadata = _get_dtable_metadata(dtable_uuid)
+
     blanks, column_blanks, col_name_dict = set(re.findall(r'\{([^{]*?)\}', msg)), None, None
-    related_users_dict = {}
     if blanks:
         columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
         column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
@@ -541,7 +590,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
             'condition': CONDITION_NEAR_DEADLINE,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row(msg, row, column_blanks, col_name_dict, db_session),
+            'msg': gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name_dict, db_session, dtable_metadata=dtable_metadata),
             'row_id_list': [row_id],
         }
 
