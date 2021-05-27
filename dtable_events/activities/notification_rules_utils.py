@@ -301,15 +301,21 @@ def _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_ses
 
         elif col_name_dict[blank]['type'] in [ColumnTypes.FORMULA, ColumnTypes.LINK_FORMULA]:
             # Fill formula blanks
-            # If result_type of formula is 'column', which indicates that real result_type is maybe like collaborator
+            # If result_type of formula is 'column', which indicates that real result_type could be like collaborator
             # we need to fill blanks with nicknames,
             # else just transfer value to str to fill blanks.
-            # Judge whether value is like collaborator or not based on metadata of dtable
+            # Judge whether value is like collaborator or not is base on metadata of dtable
             value = row.get(blank)
+
+            # If result of formula is a string or None, just replace directly
+            if isinstance(value, str) or value is None:
+                msg = msg.replace('{' + blank + '}', value if value else '')
+                continue
+
             formula_data = col_name_dict[blank].get('data')
             if not formula_data:
                 continue
-            # If not column, just return str(value)
+            # If not result_type is not 'column', just return str(value)
             if formula_data.get('result_type') != 'column':
                 msg = msg.replace('{' + blank + '}', str(value) if value else '')
                 continue
@@ -319,7 +325,11 @@ def _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_ses
             display_column_key, linked_table_id = formula_data.get('display_column_key'), formula_data.get('linked_table_id')
             target_column_type = None
             if not dtable_metadata:
-                dtable_metadata = _get_dtable_metadata(dtable_uuid)
+                try:
+                    dtable_metadata = _get_dtable_metadata(dtable_uuid)
+                except Exception as e:
+                    logger.error('request dtable metadata in fill msg error: %s', e)
+                    continue
             for table in dtable_metadata.get('tables', []):
                 if table.get('_id') == linked_table_id:
                     columns = table.get('columns', [])
@@ -568,7 +578,11 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
     if not rows_near_deadline:
         return
 
-    dtable_metadata = _get_dtable_metadata(dtable_uuid)
+    try:
+        dtable_metadata = _get_dtable_metadata(dtable_uuid)
+    except Exception as e:
+        logger.error('request dtable metadata error: %s', e)
+        return
 
     blanks, column_blanks, col_name_dict = set(re.findall(r'\{([^{]*?)\}', msg)), None, None
     if blanks:
