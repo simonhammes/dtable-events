@@ -41,7 +41,7 @@ class TaskManager(object):
 
         task_id = str(int(time.time()*1000))
         task = (get_dtable_export_content,
-                (username, repo_id, dtable_name, dtable_uuid, dtable_file_id, asset_dir_id, self.config, SOURCE_FOR_DTABLE_EXPORT))
+                (username, repo_id, dtable_uuid, asset_dir_id, self.config))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
 

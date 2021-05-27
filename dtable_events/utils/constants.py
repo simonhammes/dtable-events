@@ -20,5 +20,3 @@ class ColumnTypes:
     CTIME = 'ctime'
     MTIME = 'mtime'
     LINK_FORMULA = 'link-formula'
-
-SOURCE_FOR_DTABLE_EXPORT = 'dtable-server' # set dtable-server or seafile-server for dtable file export
