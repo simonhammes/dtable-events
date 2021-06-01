@@ -15,9 +15,8 @@ def count_rows_by_uuids(session, dtable_uuids):
     dtable_uuids = [uuid.replace('-', '') for uuid in dtable_uuids]
     # select user and org
     sql = '''
-    SELECT w.owner, w.org_id FROM workspaces w
-    JOIN dtables d ON w.id=d.workspace_id
-    WHERE d.uuid in :dtable_uuids
+    SELECT owner, org_id FROM dtable_rows_count
+    WHERE dtable_uuid IN :dtable_uuids
     '''
     results = session.execute(sql, {'dtable_uuids': dtable_uuids}).fetchall()
     usernames, org_ids = set(), set()
@@ -31,9 +30,10 @@ def count_rows_by_uuids(session, dtable_uuids):
     if usernames:
         user_sql = '''
         INSERT INTO user_rows_count(username, rows_count, rows_count_update_at)
-        SELECT owner AS username, SUM(rows_count) AS rows_count, :update_at FROM dtable_rows_count
-        WHERE owner IN :usernames AND deleted=0
-        GROUP BY owner
+        SELECT drc.owner AS username, SUM(drc.rows_count) AS rows_count, :update_at FROM dtable_rows_count drc
+        JOIN dtables d ON drc.dtable_uuid=d.uuid
+        WHERE drc.owner IN :usernames AND d.deleted=0
+        GROUP BY drc.owner
         ON DUPLICATE KEY UPDATE rows_count=VALUES(rows_count), rows_count_update_at=:update_at;
         '''
         try:
@@ -48,9 +48,10 @@ def count_rows_by_uuids(session, dtable_uuids):
     if org_ids:
         org_sql = '''
         INSERT INTO org_rows_count(org_id, rows_count, rows_count_update_at)
-        SELECT org_id, SUM(rows_count) AS rows_count, :update_at FROM dtable_rows_count
-        WHERE org_id IN :org_ids AND deleted=0
-        GROUP BY org_id
+        SELECT drc.org_id, SUM(drc.rows_count) AS rows_count, :update_at FROM dtable_rows_count as drc
+        JOIN dtables d ON drc.dtable_uuid=d.uuid
+        WHERE drc.org_id IN :org_ids AND d.deleted=0
+        GROUP BY drc.org_id
         ON DUPLICATE KEY UPDATE rows_count=VALUES(rows_count), rows_count_update_at=:update_at;
         '''
         try:
