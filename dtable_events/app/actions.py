@@ -109,7 +109,7 @@ class UpdateAction(BaseAction):
         if not self.update_data.get('updates'):
             return False
         if self.auto_rule.run_condition == PER_UPDATE:
-            # For preventing loop updating, if the cell of the columns in action's updates is updated, forbidden action!!!
+            # if the cell of the columns in action's updates is updated, forbidden action!!!
             for cell in self.data.get('row_data', []):
                 if cell.get('column_name') in self.updates:
                     return False
@@ -297,7 +297,7 @@ class AutomationRule:
                 payload={
                     'exp': int(time.time()) + 300,
                     'dtable_uuid': self.dtable_uuid,
-                    'username': 'system',
+                    'username': 'Automation Rule',
                     'permission': 'rw',
                 },
                 key=DTABLE_PRIVATE_KEY
