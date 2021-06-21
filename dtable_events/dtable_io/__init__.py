@@ -214,7 +214,7 @@ def send_wechat_msg(webhook_url, msg):
         dtable_message_logger.info('Wechat sending success!')
     return result
 
-def send_email_msg(auth_info, send_info, username, config=None):
+def send_email_msg(auth_info, send_info, username, config):
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
