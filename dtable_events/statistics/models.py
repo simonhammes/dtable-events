@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text
 
 from dtable_events.db import Base
 
@@ -27,7 +27,7 @@ class EmailSendingLog(Base):
     username = Column(String(length=255), nullable=False)
     timestamp = Column(DateTime, nullable=False, index=True)
     host = Column(String(length=255), nullable=False)
-    message = Column(String(length=255), nullable=False)
+    message = Column(Text, nullable=False)
     success = Column(Boolean, nullable=False, default=False)
 
     def __init__(self, username, timestamp, host, message, success):
