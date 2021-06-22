@@ -26,7 +26,7 @@ class EmailSendingLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(length=255), nullable=False)
     timestamp = Column(DateTime, nullable=False, index=True)
-    host = Column(Integer, nullable=False)
+    host = Column(String(length=255), nullable=False)
     message = Column(String(length=255), nullable=False)
     success = Column(Boolean, nullable=False, default=False)
 
