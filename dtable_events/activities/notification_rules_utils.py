@@ -70,12 +70,12 @@ def get_dtable_server_token(dtable_uuid):
 
 
 def scan_notification_rules_per_update(event_data, db_session):
-    row_id = event_data.get('row_id', '')
+    row = event_data.get('row')
+    converted_row = event_data.get('converted_row')
     message_dtable_uuid = event_data.get('dtable_uuid', '')
     table_id = event_data.get('table_id', '')
-    row_data = event_data.get('row_data', [])
     rule_ids = event_data.get('notification_rule_ids', [])
-    if not row_id or not message_dtable_uuid or not table_id:
+    if not row or not converted_row or not message_dtable_uuid or not table_id:
         logger.error(f'redis event data not valid, event_data = {event_data}')
         return
 
@@ -87,7 +87,7 @@ def scan_notification_rules_per_update(event_data, db_session):
 
     for rule in rules:
         try:
-            check_notification_rule(rule, table_id, row_id, dtable_server_access_token, db_session)
+            check_notification_rule(rule, table_id, row, converted_row, dtable_server_access_token, db_session)
         except Exception as e:
             logger.error(f'check rule failed. {rule}, error: {e}')
     db_session.commit()
@@ -353,39 +353,6 @@ def _get_column_blanks(blanks, columns):
     return column_blanks, col_name_dict
 
 
-def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session):
-    if not msg:
-        return msg
-
-    # checkout all blanks to fill in
-    # if no blanks, just return msg
-    blanks = set(re.findall(r'\{([^{]*?)\}', msg))
-    if not blanks:
-        return msg
-
-    columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
-
-    column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
-
-    if not column_blanks:
-        return msg
-
-    # get row of table-view-row
-    row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
-    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    params = {'table_id': table_id, 'convert_link_id': True}
-    try:
-        response = requests.get(row_url, params=params, headers=headers)
-        row = response.json()
-    except Exception as e:
-        logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
-        return msg, {}
-
-    msg = _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session)
-
-    return msg
-
-
 def gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name_dict, db_session, dtable_metadata=None):
     if not msg:
         return msg
@@ -395,7 +362,7 @@ def gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name
     return _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata=dtable_metadata)
 
 
-def check_notification_rule(rule, message_table_id, row_id, dtable_server_access_token, db_session):
+def check_notification_rule(rule, message_table_id, row, converted_row, dtable_server_access_token, db_session):
 
     rule_id = rule[0]
     trigger = rule[1]
@@ -417,6 +384,11 @@ def check_notification_rule(rule, message_table_id, row_id, dtable_server_access
 
     user_msg_list = []
 
+    blanks, column_blanks, col_name_dict = set(re.findall(r'\{([^{]*?)\}', msg)), None, None
+    if blanks:
+        columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
+        column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
+
     if trigger['condition'] == CONDITION_ROWS_MODIFIED:
         if not is_trigger_time_satisfy(last_trigger_time):
             return
@@ -427,13 +399,12 @@ def check_notification_rule(rule, message_table_id, row_id, dtable_server_access
             'condition': CONDITION_ROWS_MODIFIED,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session),
-            'row_id_list': [row_id],
+            'msg': gen_notification_msg_with_row(dtable_uuid, msg, converted_row, column_blanks, col_name_dict, db_session),
+            'row_id_list': [row['_id']],
         }
 
         if users_column_key:
-            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_key, dtable_server_access_token)
-            users = list(set(users + users_from_cell))
+            users = list(set(users + row.get(users_column_key, [])))
 
         for user in users:
             user_msg_list.append({
@@ -450,12 +421,11 @@ def check_notification_rule(rule, message_table_id, row_id, dtable_server_access
             'condition': CONDITION_FILTERS_SATISFY,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session),
-            'row_id_list': [row_id],
+            'msg': gen_notification_msg_with_row(dtable_uuid, msg, converted_row, column_blanks, col_name_dict, db_session),
+            'row_id_list': [row['_id']],
         }
         if users_column_key:
-            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_key, dtable_server_access_token)
-            users = list(set(users + users_from_cell))
+            users = list(set(users + row.get(users_column_key, [])))
 
         for user in users:
             user_msg_list.append({
