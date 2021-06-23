@@ -268,7 +268,7 @@ def send_email_msg(auth_info, send_info, username, config):
 
     session = init_db_session_class(config)()
     try:
-        save_email_sending_records(session, username, email_host, msg, success)
+        save_email_sending_records(session, username, email_host, success)
     except Exception as e:
         dtable_message_logger.error(
             'Email sending log record error: %s' % e)

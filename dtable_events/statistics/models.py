@@ -27,12 +27,10 @@ class EmailSendingLog(Base):
     username = Column(String(length=255), nullable=False)
     timestamp = Column(DateTime, nullable=False, index=True)
     host = Column(String(length=255), nullable=False)
-    message = Column(Text, nullable=False)
     success = Column(Boolean, nullable=False, default=False)
 
-    def __init__(self, username, timestamp, host, message, success):
+    def __init__(self, username, timestamp, host, success):
         self.username = username
         self.timestamp = timestamp
         self.host = host
-        self.message = message
         self.success = success

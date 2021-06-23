@@ -67,10 +67,10 @@ def get_daily_active_users(session, date_day, start, count):
 
     return active_users, total_count
 
-def save_email_sending_records(session, username, host, message, success):
+def save_email_sending_records(session, username, host, success):
     timestamp = datetime.now()
 
-    new_log = EmailSendingLog(username, timestamp, host, message, success)
+    new_log = EmailSendingLog(username, timestamp, host, success)
     session.add(new_log)
     session.commit()
 
