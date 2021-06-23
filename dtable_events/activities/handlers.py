@@ -51,7 +51,7 @@ class NotificationRuleHandler(Thread):
 
     def run(self):
         logger.info('Starting handle notification rules...')
-        subscriber = self._redis_client.get_subscriber('trigger-notification-rule')
+        subscriber = self._redis_client.get_subscriber('notification-rule-triggered')
         
         while not self._finished.is_set():
             try:

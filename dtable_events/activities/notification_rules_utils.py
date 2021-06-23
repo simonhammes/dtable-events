@@ -74,14 +74,14 @@ def scan_notification_rules_per_update(event_data, db_session):
     converted_row = event_data.get('converted_row')
     message_dtable_uuid = event_data.get('dtable_uuid', '')
     table_id = event_data.get('table_id', '')
-    rule_ids = event_data.get('notification_rule_ids', [])
-    if not row or not converted_row or not message_dtable_uuid or not table_id:
+    rule_id = event_data.get('notification_rule_id')
+    if not row or not converted_row or not message_dtable_uuid or not table_id or not rule_id:
         logger.error(f'redis event data not valid, event_data = {event_data}')
         return
 
     sql = "SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules WHERE run_condition='per_update'" \
-          "AND dtable_uuid=:dtable_uuid AND is_valid=1 AND id IN :rule_ids"
-    rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid, 'rule_ids': rule_ids})
+          "AND dtable_uuid=:dtable_uuid AND is_valid=1 AND id=:rule_id"
+    rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid, 'rule_id': rule_id})
 
     dtable_server_access_token = get_dtable_server_token(message_dtable_uuid)
 
