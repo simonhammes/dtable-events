@@ -69,7 +69,7 @@ def get_dtable_server_token(dtable_uuid):
     return access_token
 
 
-def scan_notification_rules_per_update(event_data, db_session):
+def scan_triggered_notification_rules(event_data, db_session):
     row = event_data.get('row')
     converted_row = event_data.get('converted_row')
     message_dtable_uuid = event_data.get('dtable_uuid', '')
