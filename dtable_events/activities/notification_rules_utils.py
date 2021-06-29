@@ -69,25 +69,25 @@ def get_dtable_server_token(dtable_uuid):
     return access_token
 
 
-def scan_notifications_rules_per_update(event_data, db_session):
-    row_id = event_data.get('row_id', '')
+def scan_triggered_notification_rules(event_data, db_session):
+    row = event_data.get('row')
+    converted_row = event_data.get('converted_row')
     message_dtable_uuid = event_data.get('dtable_uuid', '')
     table_id = event_data.get('table_id', '')
-    row_data = event_data.get('row_data', [])
-    column_keys = [cell.get('column_key') for cell in row_data if 'column_key' in cell]
-    if not row_id or not message_dtable_uuid or not table_id:
+    rule_id = event_data.get('notification_rule_id')
+    if not row or not converted_row or not message_dtable_uuid or not table_id or not rule_id:
         logger.error(f'redis event data not valid, event_data = {event_data}')
         return
 
     sql = "SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules WHERE run_condition='per_update'" \
-          "AND dtable_uuid=:dtable_uuid AND is_valid=1"
-    rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid})
+          "AND dtable_uuid=:dtable_uuid AND is_valid=1 AND id=:rule_id"
+    rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid, 'rule_id': rule_id})
 
     dtable_server_access_token = get_dtable_server_token(message_dtable_uuid)
 
     for rule in rules:
         try:
-            check_notification_rule(rule, table_id, row_id, column_keys, dtable_server_access_token, db_session)
+            check_notification_rule(rule, table_id, row, converted_row, dtable_server_access_token, db_session)
         except Exception as e:
             logger.error(f'check rule failed. {rule}, error: {e}')
     db_session.commit()
@@ -131,61 +131,6 @@ def deal_invalid_rule(rule_id, db_session):
         db_session.execute(sql, {'is_valid': 0, 'rule_id': rule_id})
     except Exception as e:
         logger.error(e)
-
-
-def is_view_in_table(view_id, dtable_uuid, table_id, dtable_server_access_token):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/metadata/'
-    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    res = requests.get(url, headers=headers)
-    # dtable not found
-    if res.status_code == 404:
-        return False
-    if res.status_code != 200:
-        return True
-    tables = json.loads(res.content).get('metadata', {}).get('tables', {})
-    for table in tables:
-        if table['_id'] == table_id:
-            for view in table['views']:
-                if view['_id'] == view_id:
-                    return True
-    return False
-
-
-def is_row_in_view(row_id, view_id, dtable_uuid, table_id, dtable_server_access_token, rule_id=None, db_session=None):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/is-row-in-view/'
-    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    params = {
-        'row_id': row_id,
-        'view_id': view_id,
-    }
-    res = requests.get(url, headers=headers, params=params)
-
-    if res.status_code == 404:
-        # perhaps 404 is reason for row_id, we only deal with 'view not found','table not found' and 'dtable not found'
-        if not is_view_in_table(view_id, dtable_uuid, table_id, dtable_server_access_token):
-            deal_invalid_rule(rule_id, db_session)
-    if res.status_code != 200:
-        logger.error(res.text)
-        return False
-    return json.loads(res.content).get('is_row_in_view')
-
-
-def is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id, dtable_server_access_token, rule_id=None, db_session=None):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/tables/' + table_id + '/is-row-satisfy-filters/'
-    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    data = {
-        'row_id': row_id,
-        'filters': filters,
-        'filter_conjunction': filter_conjuntion
-    }
-    res = requests.get(url, headers=headers, json=data)
-
-    if res.status_code == 404:
-        deal_invalid_rule(rule_id, db_session)
-    if res.status_code != 200:
-        logger.error(res.text)
-        return False
-    return json.loads(res.content).get('is_row_satisfy_filters')
 
 
 def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token, rule_id=None, db_session=None):
@@ -408,39 +353,6 @@ def _get_column_blanks(blanks, columns):
     return column_blanks, col_name_dict
 
 
-def gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session):
-    if not msg:
-        return msg
-
-    # checkout all blanks to fill in
-    # if no blanks, just return msg
-    blanks = set(re.findall(r'\{([^{]*?)\}', msg))
-    if not blanks:
-        return msg
-
-    columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
-
-    column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
-
-    if not column_blanks:
-        return msg
-
-    # get row of table-view-row
-    row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
-    headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    params = {'table_id': table_id, 'convert_link_id': True}
-    try:
-        response = requests.get(row_url, params=params, headers=headers)
-        row = response.json()
-    except Exception as e:
-        logger.error('dtable_uuid: %s, table_id: %s, row_id: %s, request row error: %s', dtable_uuid, table_id, row_id, e)
-        return msg, {}
-
-    msg = _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session)
-
-    return msg
-
-
 def gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name_dict, db_session, dtable_metadata=None):
     if not msg:
         return msg
@@ -450,12 +362,11 @@ def gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name
     return _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata=dtable_metadata)
 
 
-def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_server_access_token, db_session):
+def check_notification_rule(rule, message_table_id, row, converted_row, dtable_server_access_token, db_session):
 
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
-    creator = rule[3]
     last_trigger_time = rule[4]
     dtable_uuid = rule[5]
 
@@ -471,29 +382,16 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
     if message_table_id != table_id:
         return
 
-    if not is_row_in_view(row_id, view_id, dtable_uuid, message_table_id, dtable_server_access_token, rule_id, db_session):
-        return
     user_msg_list = []
+
+    blanks, column_blanks, col_name_dict = set(re.findall(r'\{([^{]*?)\}', msg)), None, None
+    if blanks:
+        columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
+        column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
 
     if trigger['condition'] == CONDITION_ROWS_MODIFIED:
         if not is_trigger_time_satisfy(last_trigger_time):
             return
-
-        target_column_keys = trigger.get('column_keys', [])
-        watch_all_columns = trigger.get('watch_all_columns')
-        if watch_all_columns is not None and not isinstance(watch_all_columns, bool):
-            watch_all_columns = False
-
-        # For compatibility with old code, there is no need to judge whether updated column_keys in target_column_keys when watch_all_columns is None
-        # Only watch_all_columns is not None, need to judge whether send notification or not
-        if watch_all_columns is not None and not watch_all_columns:
-            has_msg_key_in_target_keys = False
-            for msg_key in column_keys:
-                if msg_key in target_column_keys:
-                    has_msg_key_in_target_keys = True
-                    break
-            if not has_msg_key_in_target_keys:
-                return
 
         detail = {
             'table_id': table_id,
@@ -501,13 +399,12 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
             'condition': CONDITION_ROWS_MODIFIED,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session),
-            'row_id_list': [row_id],
+            'msg': gen_notification_msg_with_row(dtable_uuid, msg, converted_row, column_blanks, col_name_dict, db_session),
+            'row_id_list': [row['_id']],
         }
 
         if users_column_key:
-            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_key, dtable_server_access_token)
-            users = list(set(users + users_from_cell))
+            users = list(set(users + row.get(users_column_key, [])))
 
         for user in users:
             user_msg_list.append({
@@ -518,38 +415,17 @@ def check_notification_rule(rule, message_table_id, row_id, column_keys, dtable_
         send_notification(dtable_uuid, user_msg_list, dtable_server_access_token)
 
     elif trigger['condition'] == CONDITION_FILTERS_SATISFY:
-        filters = trigger.get('filters', [])
-        if not filters:
-            return
-
-        target_column_keys = trigger.get('column_keys', [])
-        watch_all_columns = trigger.get('watch_all_columns', False)
-
-        if not watch_all_columns:
-            has_msg_key_in_target_keys = False
-            for msg_key in column_keys:
-                if msg_key in target_column_keys:
-                    has_msg_key_in_target_keys = True
-                    break
-            if not has_msg_key_in_target_keys:
-                return
-
-        filter_conjuntion = trigger.get('filter_conjunction', 'And')
-        if not is_row_satisfy_filters(row_id, filters, filter_conjuntion, dtable_uuid, table_id, dtable_server_access_token, rule_id, db_session):
-            return
-
         detail = {
             'table_id': table_id,
             'view_id': view_id,
             'condition': CONDITION_FILTERS_SATISFY,
             'rule_id': rule.id,
             'rule_name': rule_name,
-            'msg': gen_notification_msg_with_row_id(dtable_uuid, table_id, view_id, row_id, msg, dtable_server_access_token, db_session),
-            'row_id_list': [row_id],
+            'msg': gen_notification_msg_with_row(dtable_uuid, msg, converted_row, column_blanks, col_name_dict, db_session),
+            'row_id_list': [row['_id']],
         }
         if users_column_key:
-            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_key, dtable_server_access_token)
-            users = list(set(users + users_from_cell))
+            users = list(set(users + row.get(users_column_key, [])))
 
         for user in users:
             user_msg_list.append({
