@@ -3,9 +3,9 @@ import logging
 from hashlib import md5
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, desc
 
-from dtable_events.statistics.models import UserActivityStatistics
+from dtable_events.statistics.models import UserActivityStatistics, EmailSendingLog
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def get_user_activity_stats_by_day(session, start, end, offset='+00:00'):
         rows = q.group_by(func.date(func.convert_tz(UserActivityStatistics.timestamp, '+00:00', offset))).\
             order_by("timestamp").all()
     except Exception as e:
-        logger.error('Get user activity statistics failed:', e)
+        logger.error('Get user activity statistics failed: %s' % e)
         rows = list()
 
     res = list()
@@ -61,8 +61,36 @@ def get_daily_active_users(session, date_day, start, count):
         ).filter(UserActivityStatistics.timestamp == date)
         active_users = q.group_by(UserActivityStatistics.username).slice(start, start + count)
     except Exception as e:
-        logger.error('Get daily active users failed:', e)
+        logger.error('Get daily active users failed: %s' % e)
         total_count = 0
         active_users = list()
 
     return active_users, total_count
+
+def save_email_sending_records(session, username, host, success):
+    timestamp = datetime.utcnow()
+
+    new_log = EmailSendingLog(username, timestamp, host, success)
+    session.add(new_log)
+    session.commit()
+
+def get_email_sending_logs(session, start, end):
+    if start < 0:
+        logger.error('start must be non-negative')
+        raise RuntimeError('start must be non-negative')
+
+    if  end < start:
+        logger.error('end must be more than start')
+        raise RuntimeError('end must be more than start')
+
+    try:
+        total_count = session.query(EmailSendingLog).count()
+        logs = session.query(
+            EmailSendingLog
+        ).order_by(desc(EmailSendingLog.timestamp)).slice(start, end)
+    except Exception as e:
+        logger.error('Get email sending logs failed: %s' % e)
+        total_count = 0
+        logs = list()
+
+    return logs, total_count

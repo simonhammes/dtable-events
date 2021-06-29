@@ -6,6 +6,7 @@ from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, prepare_dtable_json_from_memory
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server
+from dtable_events.statistics.db import save_email_sending_records
 
 dtable_io_logger = setup_logger('dtable_events_io.log')
 dtable_message_logger = setup_logger('dtable_events_message.log')
@@ -214,7 +215,7 @@ def send_wechat_msg(webhook_url, msg):
         dtable_message_logger.info('Wechat sending success!')
     return result
 
-def send_email_msg(auth_info, send_info):
+def send_email_msg(auth_info, send_info, username, config):
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -250,12 +251,13 @@ def send_email_msg(auth_info, send_info):
             'Email server configured failed. host: %s, port: %s, error: %s' % (email_host, email_port, e))
         result['err_msg'] = 'Email server host or port invalid'
         return result
-
+    success = False
     try:
         smtp.starttls()
         smtp.login(host_user, password)
         recevers = copy_to and send_to + copy_to or send_to
         smtp.sendmail(host_user, recevers, msg_obj.as_string())
+        success = True
     except Exception as e :
         dtable_message_logger.error(
             'Email sending failed. email: %s, error: %s' % (host_user, e))
@@ -264,4 +266,13 @@ def send_email_msg(auth_info, send_info):
         dtable_message_logger.info('Email sending success!')
     finally:
         smtp.quit()
+
+    session = init_db_session_class(config)()
+    try:
+        save_email_sending_records(session, username, email_host, success)
+    except Exception as e:
+        dtable_message_logger.error(
+            'Email sending log record error: %s' % e)
+    finally:
+        session.close()
     return result

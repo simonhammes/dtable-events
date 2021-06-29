@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text
 
 from dtable_events.db import Base
 
@@ -18,3 +18,19 @@ class UserActivityStatistics(Base):
         self.username = username
         self.timestamp = timestamp
         self.org_id = org_id
+
+
+class EmailSendingLog(Base):
+    __tablename__ = 'email_sending_log'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(length=255), nullable=False)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    host = Column(String(length=255), nullable=False)
+    success = Column(Boolean, nullable=False, default=False)
+
+    def __init__(self, username, timestamp, host, success):
+        self.username = username
+        self.timestamp = timestamp
+        self.host = host
+        self.success = success
