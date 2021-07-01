@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from dtable_events.activities.handlers import MessageHandler, NotificationRuleHandler
+from dtable_events.activities.handlers import AutomationRuleHandler, MessageHandler, NotificationRuleHandler
 from dtable_events.statistics.counter import UserActivityCounter
 from dtable_events.dtable_io.dtable_io_server import DTableIOServer
 from dtable_events.tasks.instant_notices_sender import InstantNoticeSender
@@ -25,6 +25,7 @@ class App(object):
             # redis client subscriber
             self._message_handler = MessageHandler(config)
             self._notification_rule_handler = NotificationRuleHandler(config)
+            self._automation_rule_handler = AutomationRuleHandler(config)
             self._user_activity_counter = UserActivityCounter(config)
             self._dtable_real_time_rows_counter = DTableRealTimeRowsCounter(config)
             self._webhooker = Webhooker(config)
@@ -45,6 +46,7 @@ class App(object):
             # redis client subscriber
             self._message_handler.start()                    # always True
             self._notification_rule_handler.start()          # always True
+            self._automation_rule_handler.start()            # always True
             self._user_activity_counter.start()              # always True
             self._dtable_real_time_rows_counter.start()      # default True
             self._webhooker.start()                          # always True

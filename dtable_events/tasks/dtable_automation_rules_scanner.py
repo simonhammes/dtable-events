@@ -39,10 +39,10 @@ class DTableAutomationRulesScanner(object):
 
     def start(self):
         if not self.is_enabled():
-            logging.warning('Can not start dtable notification rules scanner: it is not enabled!')
+            logging.warning('Can not start dtable automation rules scanner: it is not enabled!')
             return
 
-        logging.info('Start dtable notification rules scanner')
+        logging.info('Start dtable automation rules scanner')
 
         DTableAutomationRulesScannerTimer(self._db_session_class).start()
 
@@ -66,8 +66,6 @@ def scan_dtable_automation_rules(db_session):
     })
 
     for rule in rules:
-        if not rule[-1]:  # filter and ignore non-dtable-uuid records(some old records)
-            continue
         try:
             scan_auto_rules_tasks(rule, db_session)
         except Exception as e:
@@ -82,12 +80,20 @@ class DTableAutomationRulesScannerTimer(Thread):
         super(DTableAutomationRulesScannerTimer, self).__init__()
         self.db_session_class = db_session_class
 
+        db_session = self.db_session_class()
+        try:
+            scan_dtable_automation_rules(db_session)
+        except Exception as e:
+            logging.exception('error when scanning dtable automation rules: %s', e)
+        finally:
+            db_session.close()
+
     def run(self):
         sched = BlockingScheduler()
         # fire at every hour in every day of week
         @sched.scheduled_job('cron', day_of_week='*', hour='*')
         def timed_job():
-            logging.info('Starts to scan notification rules...')
+            logging.info('Starts to scan automation rules...')
 
             db_session = self.db_session_class()
             try:

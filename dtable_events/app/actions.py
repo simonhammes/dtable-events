@@ -67,6 +67,7 @@ class UpdateAction(BaseAction):
         ColumnTypes.MULTIPLE_SELECT,
         ColumnTypes.URL,
         ColumnTypes.DURATION,
+        ColumnTypes.NUMBER,
         ColumnTypes.COLLABORATOR,
         ColumnTypes.EMAIL,
     ]
@@ -82,7 +83,7 @@ class UpdateAction(BaseAction):
         self.updates = updates
         self.update_data = {
             'updates': [],
-            'table_name': self.auto_rule.get_table_name_by_id(auto_rule.table_id)
+            'table_name': self.auto_rule.table_name
         }
         self._init_updates()
 
@@ -92,7 +93,7 @@ class UpdateAction(BaseAction):
         filtered_updates = {key: value for key, value in self.updates.items() if key in valid_view_column_names}
 
         if self.auto_rule.run_condition == PER_UPDATE:
-            row_id = self.data.get('row_id')
+            row_id = self.data['row']['_id']
             self.update_data['updates'].append({
                 'row_id': row_id,
                 'row': filtered_updates
@@ -109,9 +110,11 @@ class UpdateAction(BaseAction):
         if not self.update_data.get('updates'):
             return False
         if self.auto_rule.run_condition == PER_UPDATE:
-            # if the cell of the columns in action's updates is updated, forbidden action!!!
-            for cell in self.data.get('row_data', []):
-                if cell.get('column_name') in self.updates:
+            # if columns in self.updates was updated, forbidden action!!!
+            updated_column_keys = self.data.get('updated_column_keys', [])
+            to_update_keys = [col['key'] for col in self.auto_rule.view_columns if col['name'] in self.updates]
+            for key in updated_column_keys:
+                if key in to_update_keys:
                     return False
         return True
 
@@ -146,9 +149,17 @@ class NotifyAction(BaseAction):
 
         self.column_blanks = []
         self.col_name_dict = {}
-        self._init_msg(msg)
 
-    def _init_msg(self, msg):
+        self.interval_valid = True
+        self._init_notify(msg)
+
+    def _init_notify(self, msg):
+        if self.auto_rule.trigger.get('condition') == CONDITION_ROWS_MODIFIED:
+            last_trigger_time = self.auto_rule.last_trigger_time
+            if last_trigger_time and (datetime.utcnow() - last_trigger_time).seconds < 300:
+                self.interval_valid = False
+                return
+
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
@@ -160,39 +171,26 @@ class NotifyAction(BaseAction):
 
     def _can_do_action(self):
         if self.auto_rule.run_condition == PER_UPDATE:
-            last_trigger_time = self.auto_rule.last_trigger_time
-            if last_trigger_time and (datetime.utcnow() - last_trigger_time).seconds < 300:
+            if not self.interval_valid:
                 return False
         return True
 
     def per_update_notify(self):
-        dtable_uuid, row_id = self.auto_rule.dtable_uuid, self.data.get('row_id')
+        dtable_uuid, row = self.auto_rule.dtable_uuid, self.data['converted_row']
         table_id, view_id = self.auto_rule.table_id, self.auto_rule.view_id
 
         msg = self.msg
         if self.column_blanks:
-            row_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/{dtable_uuid}/rows/{row_id}/'.format(dtable_uuid=dtable_uuid, row_id=row_id)
-            params = {'table_id': table_id, 'convert_link_id': True}
-            try:
-                response = requests.get(row_url, headers=self.auto_rule.headers, params=params)
-                row = response.json()
-            except Exception as e:
-                logger.error('request dtable: %s row: %s error: %s', dtable_uuid, row_id, e)
-                return
-            if response.status_code != 200:
-                logger.error('request dtable: %s row: %s error status code: %s', dtable_uuid, row_id, response.status_code)
-                return
-
             msg = self._fill_msg_blanks(row)
 
         detail = {
             'table_id': table_id,
             'view_id': view_id,
-            'condition': CONDITION_ROWS_MODIFIED,
+            'condition': self.auto_rule.trigger.get('condition'),
             'rule_id': self.auto_rule.rule_id,
             'rule_name': self.auto_rule.rule_name,
             'msg': msg,
-            'row_id_list': [row_id],
+            'row_id_list': [row['_id']],
         }
 
         user_msg_list = []
@@ -220,7 +218,7 @@ class NotifyAction(BaseAction):
             detail = {
                 'table_id': table_id,
                 'view_id': view_id,
-                'condition': CONDITION_ROWS_MODIFIED,
+                'condition': CONDITION_NEAR_DEADLINE,
                 'rule_id': self.auto_rule.rule_id,
                 'rule_name': self.auto_rule.rule_name,
                 'msg': msg,
@@ -272,9 +270,9 @@ class AutomationRule:
         self.table_id = None
         self.view_id = None
 
+        self._table_name = ''
         self._dtable_metadata = None
         self._access_token = None
-        self._table_columns = None
         self._view_columns = None
 
         self.done_actions = False
@@ -285,6 +283,8 @@ class AutomationRule:
         self.trigger = json.loads(raw_trigger)
 
         self.table_id = self.trigger.get('table_id')
+        if self.run_condition == PER_UPDATE:
+            self._table_name = self.data.get('table_name', '')
         self.view_id = self.trigger.get('view_id')
 
         self.rule_name = self.trigger.get('rule_name', '')
@@ -320,17 +320,6 @@ class AutomationRule:
         return self._dtable_metadata
 
     @property
-    def table_columns(self):
-        if not self._table_columns:
-            table_id = self.table_id
-            url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/columns/'
-            response = requests.get(url, params={'table_id': table_id}, headers=self.headers)
-            if response.status_code == 404:
-                raise RuleInvalidException('request table columns 404')
-            self._table_columns = response.json().get('columns')
-        return self._table_columns
-
-    @property
     def view_columns(self):
         """
         columns of view defined in trigger
@@ -343,6 +332,20 @@ class AutomationRule:
                 raise RuleInvalidException('request view columns 404')
             self._view_columns = response.json().get('columns')
         return self._view_columns
+
+    @property
+    def table_name(self):
+        """
+        name of table defined in rule
+        """
+        if not self._table_name and self.run_condition in (PER_DAY, PER_WEEK):
+            dtable_metadata = self.dtable_metadata
+            tables = dtable_metadata.get('tables', [])
+            for table in tables:
+                if table.get('_id') == self.table_id:
+                    self._table_name = table.get('name')
+                    break
+        return self._table_name
 
     def list_rows_near_deadline(self):
         url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/rows/'
@@ -382,107 +385,14 @@ class AutomationRule:
                 rows_near_deadline.append(row)
         return rows_near_deadline
 
-    def is_view_in_table(self, view_id, table_id):
-        dtable_metadata = self.dtable_metadata
-        for table in dtable_metadata.get('tables', []):
-            if table.get('_id') != table_id:
-                continue
-            for view in table.get('views', []):
-                if view.get('_id') == view_id:
-                    return True
-        return False
-
-    def is_row_in_view(self, row_id):
-        url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/tables/' + self.table_id + '/is-row-in-view/'
-        headers = {'Authorization': 'Token ' + self.access_token.decode('utf-8')}
-        params = {
-            'row_id': row_id,
-            'view_id': self.view_id,
-        }
-        res = requests.get(url, headers=headers, params=params)
-
-        if res.status_code == 404:
-            # perhaps 404 is reason for row_id, we only deal with 'view not found','table not found' and 'dtable not found'
-            if not self.is_view_in_table(self.view_id, self.table_id):
-                raise RuleInvalidException('view not in table')
-        if res.status_code != 200:
-            logger.error('request is_row_in_view error status code: %s', res.status_code)
-            return False
-        return json.loads(res.content).get('is_row_in_view')
-
-    def is_row_satisfy_filters(self, row_id):
-        filters = self.trigger.get('filters', [])
-        filter_conjuntion = self.trigger.get('filter_conjunction', 'And')
-
-        url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/tables/' + self.table_id + '/is-row-satisfy-filters/'
-        headers = {'Authorization': 'Token ' + self.access_token.decode('utf-8')}
-        data = {
-            'row_id': row_id,
-            'filters': filters,
-            'filter_conjunction': filter_conjuntion
-        }
-
-        res = requests.get(url, headers=headers, json=data)
-
-        if res.status_code == 404:
-            raise RuleInvalidException('verify filters 404 error')
-        if res.status_code != 200:
-            logger.error(res.text)
-            return False
-
-        return json.loads(res.content).get('is_row_satisfy_filters')
-
-    def get_table_name_by_id(self, table_id):
-        for table in self.dtable_metadata.get('tables'):
-            if table.get('_id') == table_id:
-                 return table.get('name')
-        return None
-
     def can_do_actions(self):
         """
         judge auto rule whether can do actions
         """
-        # if actions are notify type, check last_trigger_time firstly
-        is_all_notify_actions = True
-        for action_info in self.action_infos:
-            if action_info.get('type') != 'notify':
-                is_all_notify_actions = False
-                break
-        if is_all_notify_actions:
-            if self.last_trigger_time and (datetime.utcnow() - self.last_trigger_time).seconds < 300:
-                return False
-
-        if self.trigger.get('condition') in (CONDITION_FILTERS_SATISFY, CONDITION_ROWS_MODIFIED):
-            # row in view
-            row_id, table_id = self.data.get('row_id'), self.data.get('table_id')
-            column_keys = [cell.get('column_key') for cell in self.data.get('row_data', []) if 'column_key' in cell]
-            if not row_id or not table_id:
-                return False
-            if table_id != self.table_id:
-                return False
-
-            if not self.is_row_in_view(row_id):
-                return False
-
-            # watch all columns and target column keys
-            target_column_keys = self.trigger.get('column_keys', [])
-            watch_all_columns = self.trigger.get('watch_all_columns', True)
-            if not watch_all_columns:
-                has_msg_key_in_target_keys = False
-                for msg_key in column_keys:
-                    if msg_key in target_column_keys:
-                        has_msg_key_in_target_keys = True
-                        break
-                if not has_msg_key_in_target_keys:
-                    return False
-
-            if self.trigger.get('condition') == CONDITION_FILTERS_SATISFY:
-                if not self.is_row_satisfy_filters(row_id):
-                    return False
-
+        if self.run_condition == PER_UPDATE:
             return True
 
-        elif self.trigger.get('condition') in (CONDITION_NEAR_DEADLINE,):
+        elif self.run_condition in (PER_DAY, PER_WEEK):
             trigger_hour = self.trigger.get('trigger_hour', 12)
             cur_hour = int(utc_to_tz(datetime.utcnow(), TIME_ZONE).strftime('%H'))
             if cur_hour != trigger_hour:
