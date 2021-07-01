@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from dtable_events.activities.handlers import MessageHandler, NotificationRuleHandler
+from dtable_events.activities.handlers import AutomationRuleHandler, MessageHandler, NotificationRuleHandler
 from dtable_events.statistics.counter import UserActivityCounter
 from dtable_events.dtable_io.dtable_io_server import DTableIOServer
 from dtable_events.tasks.instant_notices_sender import InstantNoticeSender
@@ -7,6 +7,7 @@ from dtable_events.tasks.email_notices_sender import EmailNoticesSender
 from dtable_events.tasks.dtables_cleaner import DTablesCleaner
 from dtable_events.tasks.dtable_updates_sender import DTableUpdatesSender
 from dtable_events.tasks.dtable_notification_rules_scanner import DTableNofiticationRulesScanner
+from dtable_events.tasks.dtable_automation_rules_scanner import DTableAutomationRulesScanner
 from dtable_events.tasks.dtable_real_time_rows_counter import DTableRealTimeRowsCounter
 from dtable_events.tasks.ldap_syncer import LDAPSyncer
 from dtable_events.webhook.webhook import Webhooker
@@ -24,6 +25,7 @@ class App(object):
             # redis client subscriber
             self._message_handler = MessageHandler(config)
             self._notification_rule_handler = NotificationRuleHandler(config)
+            self._automation_rule_handler = AutomationRuleHandler(config)
             self._user_activity_counter = UserActivityCounter(config)
             self._dtable_real_time_rows_counter = DTableRealTimeRowsCounter(config)
             self._webhooker = Webhooker(config)
@@ -33,6 +35,7 @@ class App(object):
             self._dtables_cleaner = DTablesCleaner(config)
             self._dtable_updates_sender = DTableUpdatesSender(config)
             self._dtable_notification_rules_scanner = DTableNofiticationRulesScanner(config)
+            self._dtable_automation_rules_scanner = DTableAutomationRulesScanner(config)
             self._ldap_syncer = LDAPSyncer(config)
 
     def serve_forever(self):
@@ -43,6 +46,7 @@ class App(object):
             # redis client subscriber
             self._message_handler.start()                    # always True
             self._notification_rule_handler.start()          # always True
+            self._automation_rule_handler.start()            # always True
             self._user_activity_counter.start()              # always True
             self._dtable_real_time_rows_counter.start()      # default True
             self._webhooker.start()                          # always True
@@ -52,4 +56,5 @@ class App(object):
             self._dtables_cleaner.start()                    # default True
             self._dtable_updates_sender.start()              # default True
             self._dtable_notification_rules_scanner.start()  # default True
+            self._dtable_automation_rules_scanner.start()    # default True
             self._ldap_syncer.start()                        # default False

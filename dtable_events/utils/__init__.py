@@ -5,6 +5,8 @@ import logging
 import configparser
 import subprocess
 
+import pytz
+
 logger = logging.getLogger(__name__)
 pyexec = None
 
@@ -136,3 +138,16 @@ def run(argv, cwd=None, env=None, suppress_stdout=False, suppress_stderr=False, 
 def run_and_wait(argv, cwd=None, env=None, suppress_stdout=False, suppress_stderr=False, output=None):
     proc = run(argv, cwd, env, suppress_stdout, suppress_stderr, output)
     return proc.wait()
+
+
+def utc_to_tz(dt, tz_str):
+    # change from UTC timezone to another timezone
+    tz = pytz.timezone(tz_str)
+    utc = dt.replace(tzinfo=pytz.utc)
+    # local = timezone.make_naive(utc, tz)
+    # return local
+    value = utc.astimezone(tz)
+    if hasattr(tz, 'normalize'):
+        # This method is available for pytz time zones.
+        value = tz.normalize(value)
+    return value.replace(tzinfo=None)
