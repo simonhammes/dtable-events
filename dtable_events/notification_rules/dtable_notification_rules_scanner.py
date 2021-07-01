@@ -77,6 +77,7 @@ class DTableNofiticationRulesScanner(object):
         logging.info('Start dtable notification rules scanner')
 
         DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class).start()
+        DTableNotificationRulesCleaner(self._db_session_class).start()
 
     def is_enabled(self):
         return self._enabled
@@ -132,3 +133,35 @@ class DTableNofiticationRulesScannerTimer(Thread):
 
         sched.start()
 
+
+class DTableNotificationRulesCleaner(Thread):
+    def __init__(self, db_session_class):
+        super(DTableNotificationRulesCleaner, self).__init__()
+        self.db_session_class = db_session_class
+
+    def run(self):
+        sched = BlockingScheduler()
+        # fire at every hour in every day of week
+        @sched.scheduled_job('cron', day_of_week='*', hour='0')
+        def timed_job():
+            logging.info('Starts to clean inactive notification rules...')
+
+            db_session = self.db_session_class()
+
+            before_half_year = datetime.utcnow() - timedelta(days=180)
+
+            sql = '''
+                DELETE FROM dtable_notification_rules
+                WHERE (ctime < :last_check_time AND last_trigger_time IS NULL)
+                OR (last_trigger_time IS NOT NULL AND last_trigger_time < :last_check_time)
+            '''
+
+            try:
+                db_session.execute(sql, {'last_check_time': before_half_year})
+                db_session.commit()
+            except Exception as e:
+                logging.exception('error when cleaning inactive notification rules: %s', e)
+            finally:
+                db_session.close()
+
+        sched.start()
