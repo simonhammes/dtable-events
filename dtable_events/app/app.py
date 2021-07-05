@@ -7,7 +7,6 @@ from dtable_events.tasks.email_notices_sender import EmailNoticesSender
 from dtable_events.tasks.dtables_cleaner import DTablesCleaner
 from dtable_events.tasks.dtable_updates_sender import DTableUpdatesSender
 from dtable_events.tasks.dtable_notification_rules_scanner import DTableNofiticationRulesScanner
-from dtable_events.tasks.dtable_automation_rules_scanner import DTableAutomationRulesScanner
 from dtable_events.tasks.dtable_real_time_rows_counter import DTableRealTimeRowsCounter
 from dtable_events.tasks.ldap_syncer import LDAPSyncer
 from dtable_events.webhook.webhook import Webhooker
@@ -35,7 +34,6 @@ class App(object):
             self._dtables_cleaner = DTablesCleaner(config)
             self._dtable_updates_sender = DTableUpdatesSender(config)
             self._dtable_notification_rules_scanner = DTableNofiticationRulesScanner(config)
-            self._dtable_automation_rules_scanner = DTableAutomationRulesScanner(config)
             self._ldap_syncer = LDAPSyncer(config)
 
     def serve_forever(self):
@@ -56,5 +54,4 @@ class App(object):
             self._dtables_cleaner.start()                    # default True
             self._dtable_updates_sender.start()              # default True
             self._dtable_notification_rules_scanner.start()  # default True
-            self._dtable_automation_rules_scanner.start()    # default True
             self._ldap_syncer.start()                        # default False
