@@ -48,7 +48,7 @@ MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
 class BaseAction:
 
-    def __init__(self, auto_rule, data):
+    def __init__(self, auto_rule, data=None):
         self.auto_rule = auto_rule
         self.action_type = 'base'
         self.data = data
@@ -134,6 +134,63 @@ class UpdateAction(BaseAction):
         else:
             self.auto_rule.set_done_actions()
 
+class AddAction(BaseAction):
+
+    VALID_COLUMN_TYPES = [
+        ColumnTypes.TEXT,
+        ColumnTypes.DATE,
+        ColumnTypes.LONG_TEXT,
+        ColumnTypes.CHECKBOX,
+        ColumnTypes.SINGLE_SELECT,
+        ColumnTypes.MULTIPLE_SELECT,
+        ColumnTypes.URL,
+        ColumnTypes.DURATION,
+        ColumnTypes.NUMBER,
+        ColumnTypes.COLLABORATOR,
+        ColumnTypes.EMAIL,
+    ]
+
+    def __init__(self, auto_rule, rows):
+        """
+        auto_rule: instance of AutomationRule
+        data: if auto_rule.PER_UPDATE, data is event data from redis
+        updates: {'col_1_name: ', value1, 'col_2_name': value2...}
+        """
+        super().__init__(auto_rule)
+        self.action_type = 'update'
+        self.rows = rows
+        self.rows_data = {
+            'rows': [],
+            'table_name': self.auto_rule.table_name
+        }
+        self._init_updates()
+
+    def _init_updates(self):
+        # filter columns in view and type of column is in VALID_COLUMN_TYPES
+        valid_view_column_names = [col.get('name') for col in self.auto_rule.view_columns if 'name' in col and col.get('type') in self.VALID_COLUMN_TYPES]
+        filtered_updates = {key: value for key, value in self.rows.items() if key in valid_view_column_names}
+        self.rows_data['rows'].append(filtered_updates)
+
+
+    def _can_do_action(self):
+        if not self.rows_data.get('rows'):
+            return False
+
+        return True
+
+    def do_action(self):
+        if not self._can_do_action():
+            return
+        batch_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/batch-append-rows/'
+        try:
+            response = requests.post(batch_update_url, headers=self.auto_rule.headers, json=self.rows_data)
+        except Exception as e:
+            logger.error('update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return
+        if response.status_code != 200:
+            logger.error('update dtable: %s error response status code: %s', self.auto_rule.dtable_uuid, response.status_code)
+        else:
+            self.auto_rule.set_done_actions()
 
 class NotifyAction(BaseAction):
 
@@ -402,6 +459,10 @@ class AutomationRule:
                 if action_info.get('type') == 'update':
                     updates = action_info.get('updates')
                     UpdateAction(self, self.data, updates).do_action()
+
+                if action_info.get('type') == 'append':
+                    rows = action_info.get('rows')
+                    AddAction(self, rows).do_action()
 
                 elif action_info.get('type') == 'notify':
                     default_msg = action_info.get('default_msg', '')
