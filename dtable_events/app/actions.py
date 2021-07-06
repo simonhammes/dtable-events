@@ -41,6 +41,7 @@ PER_UPDATE = 'per_update'
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
+CONDITION_SET_INTERVAL = 'set_interval'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
@@ -99,6 +100,14 @@ class UpdateAction(BaseAction):
                 'row': filtered_updates
             })
 
+        elif self.auto_rule.run_condition in (PER_DAY, PER_WEEK):
+            for row in self.data:
+                row_id = row.get('_id')
+                self.update_data['updates'].append({
+                    'row_id': row_id,
+                    'row': filtered_updates
+                })
+
     def _can_do_action(self):
         if not self.update_data.get('updates'):
             return False
@@ -143,9 +152,12 @@ class NotifyAction(BaseAction):
         self.column_blanks = []
         self.col_name_dict = {}
 
+        self.interval_valid = True
+
         self._init_notify(msg)
 
     def _init_notify(self, msg):
+
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
@@ -154,6 +166,13 @@ class NotifyAction(BaseAction):
         msg, column_blanks, col_name_dict = self.msg, self.column_blanks, self.col_name_dict
         dtable_uuid, db_session, dtable_metadata = self.auto_rule.dtable_uuid, self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
+
+
+    def _can_do_action(self):
+        if self.auto_rule.run_condition == PER_UPDATE:
+            if not self.interval_valid:
+                return False
+        return True
 
     def per_update_notify(self):
         dtable_uuid, row = self.auto_rule.dtable_uuid, self.data['converted_row']
@@ -182,13 +201,49 @@ class NotifyAction(BaseAction):
                 })
         try:
             send_notification(dtable_uuid, user_msg_list, self.auto_rule.access_token)
-            self.auto_rule.set_done_actions()
         except Exception as e:
             logger.error('send users: %s notifications error: %s', e)
 
+    def cron_notify(self):
+        dtable_uuid = self.auto_rule.dtable_uuid
+        table_id, view_id = self.auto_rule.table_id, self.auto_rule.view_id
+
+        rows = self.data
+        for row in rows:
+            msg = self.msg
+            if self.column_blanks:
+                msg = self._fill_msg_blanks(row)
+
+            detail = {
+                'table_id': table_id,
+                'view_id': view_id,
+                'condition': CONDITION_SET_INTERVAL,
+                'rule_id': self.auto_rule.rule_id,
+                'rule_name': self.auto_rule.rule_name,
+                'msg': msg,
+                'row_id_list': [row.get('_id')],
+            }
+            user_msg_list = []
+            for user in self.users:
+                user_msg_list.append({
+                    'to_user': user,
+                    'msg_type': 'notification_rules',
+                    'detail': detail,
+                })
+            try:
+                send_notification(dtable_uuid, user_msg_list, self.auto_rule.access_token)
+            except Exception as e:
+                logger.error('send users: %s notifications error: %s', e)
+
     def do_action(self):
+        if not self._can_do_action():
+            return
         if self.auto_rule.run_condition == PER_UPDATE:
             self.per_update_notify()
+            self.auto_rule.set_done_actions()
+        elif self.auto_rule.run_condition in [PER_DAY, PER_WEEK]:
+            self.cron_notify()
+            self.auto_rule.set_done_actions()
 
 class RuleInvalidException(Exception):
     """
@@ -290,10 +345,54 @@ class AutomationRule:
                     break
         return self._table_name
 
+    def list_rows(self):
+        url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/rows/'
+        query_params = {
+            'table_id': self.table_id,
+            'view_id': self.view_id,
+            'convert_link_id': True
+        }
+        try:
+            response = requests.get(url, params=query_params, headers=self.headers)
+        except Exception as e:
+            logger.error('rule: %s request rows error: %s', self.rule_id, e)
+            return []
+        if response.status_code == 404:
+            raise RuleInvalidException('request rows 404')
+        if response.status_code != 200:
+            logger.error('rule: %s request rows error status code: %s', self.rule_id, response.status_code)
+            return []
+        rows = response.json().get('rows', [])
+        return rows
+
     def can_do_actions(self):
-        if self.trigger.get('condition') != CONDITION_FILTERS_SATISFY:
+        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_SET_INTERVAL):
             return False
-        return True
+
+        if self.run_condition == PER_UPDATE:
+            return True
+
+        elif self.run_condition in (PER_DAY, PER_WEEK):
+            cur_hour = int(utc_to_tz(datetime.utcnow(), TIME_ZONE).strftime('%H'))
+            cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
+            cur_week_day = cur_datetime.isoweekday()
+            if self.run_condition == PER_DAY:
+                trigger_hour = self.trigger.get('notify_hour', 12)
+                if cur_hour != trigger_hour:
+                    return False
+            else:
+                trigger_hour = self.trigger.get('notify_week_hour', 12)
+                trigger_day = self.trigger.get('notify_week_day', 7)
+                if cur_hour != trigger_hour or cur_week_day != trigger_day:
+                    return False
+            rows = self.list_rows()
+            if not rows:
+                return False
+            self.data = rows
+            return True
+
+        return False
+
 
     def do_actions(self):
         if not self.can_do_actions():
@@ -314,7 +413,7 @@ class AutomationRule:
         except Exception as e:
             logger.exception(e)
             logger.error('rule: %s, do actions error: %s', self.rule_id, e)
-        finally:
+        else:
             if self.done_actions:
                 self.update_last_trigger_time()
 
