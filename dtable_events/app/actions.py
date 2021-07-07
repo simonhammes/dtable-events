@@ -460,7 +460,7 @@ class AutomationRule:
                     updates = action_info.get('updates')
                     UpdateAction(self, self.data, updates).do_action()
 
-                if action_info.get('type') == 'append':
+                if action_info.get('type') == 'add':
                     rows = action_info.get('rows')
                     AddAction(self, rows).do_action()
 
