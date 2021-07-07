@@ -157,7 +157,7 @@ class AddAction(BaseAction):
         updates: {'col_1_name: ', value1, 'col_2_name': value2...}
         """
         super().__init__(auto_rule)
-        self.action_type = 'update'
+        self.action_type = 'add'
         self.rows = rows
         self.rows_data = {
             'rows': [],
