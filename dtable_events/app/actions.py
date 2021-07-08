@@ -118,6 +118,9 @@ class UpdateAction(BaseAction):
             for key in updated_column_keys:
                 if key in to_update_keys:
                     return False
+        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK):
+            return False
+
         return True
 
     def do_action(self):
