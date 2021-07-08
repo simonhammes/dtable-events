@@ -227,13 +227,6 @@ class NotifyAction(BaseAction):
         dtable_uuid, db_session, dtable_metadata = self.auto_rule.dtable_uuid, self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
 
-
-    def _can_do_action(self):
-        if self.auto_rule.run_condition == PER_UPDATE:
-            if not self.interval_valid:
-                return False
-        return True
-
     def per_update_notify(self):
         dtable_uuid, row = self.auto_rule.dtable_uuid, self.data['converted_row']
         table_id, view_id = self.auto_rule.table_id, self.auto_rule.view_id
@@ -308,8 +301,7 @@ class NotifyAction(BaseAction):
                 logger.error('send users: %s notifications error: %s', e)
 
     def do_action(self):
-        if not self._can_do_action():
-            return
+
         if self.auto_rule.run_condition == PER_UPDATE:
             self.per_update_notify()
             self.auto_rule.set_done_actions()
