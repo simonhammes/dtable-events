@@ -264,25 +264,37 @@ class NotifyAction(BaseAction):
         except Exception as e:
             logger.error('send users: %s notifications error: %s', e)
 
-    def cron_notify(self):
+    def cron_notify(self, rows=None):
         dtable_uuid = self.auto_rule.dtable_uuid
         table_id, view_id = self.auto_rule.table_id, self.auto_rule.view_id
-
-        rows = self.data
-        for row in rows:
-            msg = self.msg
-            if self.column_blanks:
-                msg = self._fill_msg_blanks(row)
-
-            detail = {
-                'table_id': table_id,
-                'view_id': view_id,
-                'condition': CONDITION_SET_INTERVAL,
-                'rule_id': self.auto_rule.rule_id,
-                'rule_name': self.auto_rule.rule_name,
-                'msg': msg,
-                'row_id_list': [row.get('_id')],
-            }
+        detail = {
+            'table_id': table_id,
+            'view_id': view_id,
+            'condition': CONDITION_SET_INTERVAL,
+            'rule_id': self.auto_rule.rule_id,
+            'rule_name': self.auto_rule.rule_name,
+            'msg': self.msg,
+            'row_id_list': []
+        }
+        if rows:
+            for row in rows:
+                msg = self.msg
+                if self.column_blanks:
+                    msg = self._fill_msg_blanks(row)
+                detail['msg'] = msg
+                detail['row_id_list'] = [row.get('_id')]
+                user_msg_list = []
+                for user in self.users:
+                    user_msg_list.append({
+                        'to_user': user,
+                        'msg_type': 'notification_rules',
+                        'detail': detail,
+                    })
+                try:
+                    send_notification(dtable_uuid, user_msg_list, self.auto_rule.access_token)
+                except Exception as e:
+                    logger.error('send users: %s notifications error: %s', e)
+        else:
             user_msg_list = []
             for user in self.users:
                 user_msg_list.append({
