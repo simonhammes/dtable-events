@@ -449,10 +449,6 @@ class AutomationRule:
                 trigger_day = self.trigger.get('notify_week_day', 7)
                 if cur_hour != trigger_hour or cur_week_day != trigger_day:
                     return False
-            rows = self.list_rows()
-            if not rows:
-                return False
-            self.data = rows
             return True
 
         return False
@@ -481,7 +477,7 @@ class AutomationRule:
         except Exception as e:
             logger.exception(e)
             logger.error('rule: %s, do actions error: %s', self.rule_id, e)
-        else:
+        finally:
             if self.done_actions:
                 self.update_last_trigger_time()
 
