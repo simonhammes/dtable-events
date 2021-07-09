@@ -4,7 +4,7 @@ from threading import Thread
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from dtable_events.activities.auto_rules_utils import scan_auto_rules_tasks
+from dtable_events.automations.auto_rules_utils import scan_auto_rules_tasks
 from dtable_events.db import init_db_session_class
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool
 
