@@ -153,7 +153,7 @@ class AddAction(BaseAction):
         ColumnTypes.EMAIL,
     ]
 
-    def __init__(self, auto_rule, rows):
+    def __init__(self, auto_rule, row):
         """
         auto_rule: instance of AutomationRule
         data: if auto_rule.PER_UPDATE, data is event data from redis
@@ -161,9 +161,9 @@ class AddAction(BaseAction):
         """
         super().__init__(auto_rule)
         self.action_type = 'add'
-        self.rows = rows
-        self.rows_data = {
-            'rows': [],
+        self.row = row
+        self.row_data = {
+            'row': {},
             'table_name': self.auto_rule.table_name
         }
         self._init_updates()
@@ -171,12 +171,12 @@ class AddAction(BaseAction):
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         valid_view_column_names = [col.get('name') for col in self.auto_rule.view_columns if 'name' in col and col.get('type') in self.VALID_COLUMN_TYPES]
-        filtered_updates = {key: value for key, value in self.rows.items() if key in valid_view_column_names}
-        self.rows_data['rows'].append(filtered_updates)
+        filtered_updates = {key: value for key, value in self.row.items() if key in valid_view_column_names}
+        self.row_data['row']=filtered_updates
 
 
     def _can_do_action(self):
-        if not self.rows_data.get('rows'):
+        if not self.row_data.get('row'):
             return False
 
         return True
@@ -184,9 +184,9 @@ class AddAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        batch_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/batch-append-rows/'
+        batch_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
         try:
-            response = requests.post(batch_update_url, headers=self.auto_rule.headers, json=self.rows_data)
+            response = requests.post(batch_update_url, headers=self.auto_rule.headers, json=self.row_data)
         except Exception as e:
             logger.error('update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
             return
@@ -464,8 +464,8 @@ class AutomationRule:
                     UpdateAction(self, self.data, updates).do_action()
 
                 if action_info.get('type') == 'add':
-                    rows = action_info.get('rows')
-                    AddAction(self, rows).do_action()
+                    row = action_info.get('row')
+                    AddAction(self, row).do_action()
 
                 elif action_info.get('type') == 'notify':
                     default_msg = action_info.get('default_msg', '')
