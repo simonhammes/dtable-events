@@ -29,7 +29,7 @@ def scan_triggered_automation_rules(event_data, db_session):
             logger.error('auto rule: %s do actions error: %s', rule_id, e)
 
 
-def scan_auto_rules_tasks(rule, db_session):
+def run_regular_execution_rule(rule, db_session):
     rule_id = rule[0]
     run_condition = rule[1]
     raw_trigger = rule[2]

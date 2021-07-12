@@ -41,7 +41,7 @@ PER_UPDATE = 'per_update'
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
-CONDITION_SET_INTERVAL = 'set_interval'
+CONDITION_REGULAR_EXCUTION = 'regular_excution'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
@@ -137,7 +137,7 @@ class UpdateAction(BaseAction):
         else:
             self.auto_rule.set_done_actions()
 
-class AddAction(BaseAction):
+class AddRowAction(BaseAction):
 
     VALID_COLUMN_TYPES = [
         ColumnTypes.TEXT,
@@ -172,7 +172,7 @@ class AddAction(BaseAction):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         valid_view_column_names = [col.get('name') for col in self.auto_rule.view_columns if 'name' in col and col.get('type') in self.VALID_COLUMN_TYPES]
         filtered_updates = {key: value for key, value in self.row.items() if key in valid_view_column_names}
-        self.row_data['row']=filtered_updates
+        self.row_data['row'] = filtered_updates
 
 
     def _can_do_action(self):
@@ -257,48 +257,29 @@ class NotifyAction(BaseAction):
         except Exception as e:
             logger.error('send users: %s notifications error: %s', e)
 
-    def cron_notify(self, rows=None):
+    def cron_notify(self):
         dtable_uuid = self.auto_rule.dtable_uuid
         table_id, view_id = self.auto_rule.table_id, self.auto_rule.view_id
         detail = {
             'table_id': table_id,
             'view_id': view_id,
-            'condition': CONDITION_SET_INTERVAL,
+            'condition': CONDITION_REGULAR_EXCUTION,
             'rule_id': self.auto_rule.rule_id,
             'rule_name': self.auto_rule.rule_name,
             'msg': self.msg,
             'row_id_list': []
         }
-        if rows:
-            for row in rows:
-                msg = self.msg
-                if self.column_blanks:
-                    msg = self._fill_msg_blanks(row)
-                detail['msg'] = msg
-                detail['row_id_list'] = [row.get('_id')]
-                user_msg_list = []
-                for user in self.users:
-                    user_msg_list.append({
-                        'to_user': user,
-                        'msg_type': 'notification_rules',
-                        'detail': detail,
-                    })
-                try:
-                    send_notification(dtable_uuid, user_msg_list, self.auto_rule.access_token)
-                except Exception as e:
-                    logger.error('send users: %s notifications error: %s', e)
-        else:
-            user_msg_list = []
-            for user in self.users:
-                user_msg_list.append({
-                    'to_user': user,
-                    'msg_type': 'notification_rules',
-                    'detail': detail,
-                })
-            try:
-                send_notification(dtable_uuid, user_msg_list, self.auto_rule.access_token)
-            except Exception as e:
-                logger.error('send users: %s notifications error: %s', e)
+        user_msg_list = []
+        for user in self.users:
+            user_msg_list.append({
+                'to_user': user,
+                'msg_type': 'notification_rules',
+                'detail': detail,
+            })
+        try:
+            send_notification(dtable_uuid, user_msg_list, self.auto_rule.access_token)
+        except Exception as e:
+            logger.error('send users: %s notifications error: %s', e)
 
     def do_action(self):
 
@@ -409,28 +390,8 @@ class AutomationRule:
                     break
         return self._table_name
 
-    def list_rows(self):
-        url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/rows/'
-        query_params = {
-            'table_id': self.table_id,
-            'view_id': self.view_id,
-            'convert_link_id': True
-        }
-        try:
-            response = requests.get(url, params=query_params, headers=self.headers)
-        except Exception as e:
-            logger.error('rule: %s request rows error: %s', self.rule_id, e)
-            return []
-        if response.status_code == 404:
-            raise RuleInvalidException('request rows 404')
-        if response.status_code != 200:
-            logger.error('rule: %s request rows error status code: %s', self.rule_id, response.status_code)
-            return []
-        rows = response.json().get('rows', [])
-        return rows
-
     def can_do_actions(self):
-        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_SET_INTERVAL):
+        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_REGULAR_EXCUTION):
             return False
 
         if self.run_condition == PER_UPDATE:
@@ -465,7 +426,7 @@ class AutomationRule:
 
                 if action_info.get('type') == 'add':
                     row = action_info.get('row')
-                    AddAction(self, row).do_action()
+                    AddRowAction(self, row).do_action()
 
                 elif action_info.get('type') == 'notify':
                     default_msg = action_info.get('default_msg', '')
