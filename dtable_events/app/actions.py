@@ -83,8 +83,9 @@ class UpdateAction(BaseAction):
         self.action_type = 'update'
         self.updates = updates
         self.update_data = {
-            'updates': [],
-            'table_name': self.auto_rule.table_name
+            'row': {},
+            'table_name': self.auto_rule.table_name,
+            'row_id':''
         }
         self._init_updates()
 
@@ -95,21 +96,11 @@ class UpdateAction(BaseAction):
 
         if self.auto_rule.run_condition == PER_UPDATE:
             row_id = self.data['row']['_id']
-            self.update_data['updates'].append({
-                'row_id': row_id,
-                'row': filtered_updates
-            })
-
-        elif self.auto_rule.run_condition in (PER_DAY, PER_WEEK):
-            for row in self.data:
-                row_id = row.get('_id')
-                self.update_data['updates'].append({
-                    'row_id': row_id,
-                    'row': filtered_updates
-                })
+            self.update_data['row'] = filtered_updates
+            self.update_data['row_id'] = row_id
 
     def _can_do_action(self):
-        if not self.update_data.get('updates'):
+        if not self.update_data.get('row') or not self.update_data.get('row_id'):
             return False
         if self.auto_rule.run_condition == PER_UPDATE:
             # if columns in self.updates was updated, forbidden action!!!
@@ -126,7 +117,7 @@ class UpdateAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        batch_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/batch-update-rows/'
+        batch_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
         try:
             response = requests.put(batch_update_url, headers=self.auto_rule.headers, json=self.update_data)
         except Exception as e:
