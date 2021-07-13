@@ -411,11 +411,11 @@ class AutomationRule:
             return
         try:
             for action_info in self.action_infos:
-                if action_info.get('type') == 'update':
+                if action_info.get('type') == 'update_record':
                     updates = action_info.get('updates')
                     UpdateAction(self, self.data, updates).do_action()
 
-                if action_info.get('type') == 'add':
+                if action_info.get('type') == 'add_record':
                     row = action_info.get('row')
                     AddRowAction(self, row).do_action()
 
