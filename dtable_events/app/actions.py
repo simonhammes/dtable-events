@@ -41,7 +41,7 @@ PER_UPDATE = 'per_update'
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
-CONDITION_REGULAR_EXCUTION = 'regular_excution'
+CONDITION_PERIODICALLY = 'run_periodically'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
@@ -254,7 +254,7 @@ class NotifyAction(BaseAction):
         detail = {
             'table_id': table_id,
             'view_id': view_id,
-            'condition': CONDITION_REGULAR_EXCUTION,
+            'condition': CONDITION_PERIODICALLY,
             'rule_id': self.auto_rule.rule_id,
             'rule_name': self.auto_rule.rule_name,
             'msg': self.msg,
@@ -382,7 +382,7 @@ class AutomationRule:
         return self._table_name
 
     def can_do_actions(self):
-        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_REGULAR_EXCUTION):
+        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY):
             return False
 
         if self.run_condition == PER_UPDATE:
