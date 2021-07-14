@@ -135,6 +135,55 @@ class UpdateAction(BaseAction):
         else:
             self.auto_rule.set_done_actions()
 
+class LockRowAction(BaseAction):
+
+
+    def __init__(self, auto_rule, data, is_locked):
+        """
+        auto_rule: instance of AutomationRule
+        data: if auto_rule.PER_UPDATE, data is event data from redis
+        updates: {'col_1_name: ', value1, 'col_2_name': value2...}
+        """
+        super().__init__(auto_rule, data)
+        self.action_type = 'lock'
+        self.update_data = {
+            'table_name': self.auto_rule.table_name,
+            'row_id':'',
+            'is_locked': is_locked
+        }
+        self._init_updates()
+
+    def _init_updates(self):
+        # filter columns in view and type of column is in VALID_COLUMN_TYPES
+
+
+        if self.auto_rule.run_condition == PER_UPDATE:
+            row_id = self.data['row']['_id']
+            self.update_data['row_id'] = row_id
+
+    def _can_do_action(self):
+        if not self.update_data.get('row_id'):
+            return False
+
+        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK):
+            return False
+
+        return True
+
+    def do_action(self):
+        if not self._can_do_action():
+            return
+        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        try:
+            response = requests.put(row_update_url, headers=self.auto_rule.headers, json=self.update_data)
+        except Exception as e:
+            logger.error('lock dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return
+        if response.status_code != 200:
+            logger.error('lock dtable: %s error response status code: %s', self.auto_rule.dtable_uuid, response.status_code)
+        else:
+            self.auto_rule.set_done_actions()
+
 class AddRowAction(BaseAction):
 
     VALID_COLUMN_TYPES = [
@@ -459,6 +508,11 @@ class AutomationRule:
                     default_msg = action_info.get('default_msg', '')
                     users = action_info.get('users', [])
                     NotifyAction(self, self.data, default_msg, users).do_action()
+
+                elif action_info.get('type') == 'lock_record':
+                    is_locked = action_info.get('is_locked', False)
+                    LockRowAction(self, self.data, is_locked).do_action()
+
         except RuleInvalidException as e:
             logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
             self.set_invalid()
