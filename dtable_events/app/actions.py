@@ -148,7 +148,7 @@ class AddRowAction(BaseAction):
         """
         auto_rule: instance of AutomationRule
         data: if auto_rule.PER_UPDATE, data is event data from redis
-        updates: {'col_1_name: ', value1, 'col_2_name': value2...}
+        row: {'col_1_name: ', value1, 'col_2_name': value2...}
         """
         super().__init__(auto_rule)
         self.action_type = 'add'
