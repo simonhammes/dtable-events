@@ -159,12 +159,35 @@ class AddRowAction(BaseAction):
         }
         self._init_updates()
 
+    def format_time_by_offset(self, offset):
+        cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
+        cur_datetime_offset = cur_datetime + timedelta(days=offset)
+        return cur_datetime_offset.strftime("%Y-%m-%d %H:%M")
+
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
-        valid_view_column_names = [col.get('name') for col in self.auto_rule.view_columns if 'name' in col and col.get('type') in self.VALID_COLUMN_TYPES]
-        filtered_updates = {key: value for key, value in self.row.items() if key in valid_view_column_names}
+        valid_view_column_names = []
+        filtered_updates = {}
+        for col in self.auto_rule.view_columns:
+            if 'name' in col and col.get('type') in self.VALID_COLUMN_TYPES:
+                col_name = col.get('name')
+                col_type = col.get('type')
+                if col_name in self.row.keys():
+                    if col_type == ColumnTypes.DATE:
+                        try:
+                            time_dict = self.row.get(col_name)
+                            time_value = time_dict.get('value', '')
+                            offset = time_dict.get('offset', None)
+                            if time_value:
+                                filtered_updates[col_name] = time_value
+                            else:
+                                filtered_updates[col_name] = self.format_time_by_offset(int(offset))
+                        except Exception as e:
+                            logger.error(e)
+                            filtered_updates[col_name] = self.row.get(col_name)
+                    else:
+                        filtered_updates[col_name] = self.row.get(col_name)
         self.row_data['row'] = filtered_updates
-
 
     def _can_do_action(self):
         if not self.row_data.get('row'):
