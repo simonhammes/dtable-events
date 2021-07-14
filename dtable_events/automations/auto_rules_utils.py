@@ -27,3 +27,17 @@ def scan_triggered_automation_rules(event_data, db_session):
             auto_rule.do_actions()
         except Exception as e:
             logger.error('auto rule: %s do actions error: %s', rule_id, e)
+
+
+def run_regular_execution_rule(rule, db_session):
+    rule_id = rule[0]
+    run_condition = rule[1]
+    raw_trigger = rule[2]
+    raw_actions = rule[3]
+    last_trigger_time = rule[4]
+    dtable_uuid = rule[5]
+    try:
+        auto_rule = AutomationRule(rule_id, run_condition, dtable_uuid, raw_trigger, raw_actions, last_trigger_time, None, db_session)
+        auto_rule.do_actions()
+    except Exception as e:
+        logger.error('auto rule: %s do actions error: %s', rule_id, e)

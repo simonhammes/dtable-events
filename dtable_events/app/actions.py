@@ -41,13 +41,14 @@ PER_UPDATE = 'per_update'
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
+CONDITION_PERIODICALLY = 'run_periodically'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
 
 class BaseAction:
 
-    def __init__(self, auto_rule, data):
+    def __init__(self, auto_rule, data=None):
         self.auto_rule = auto_rule
         self.action_type = 'base'
         self.data = data
@@ -82,8 +83,9 @@ class UpdateAction(BaseAction):
         self.action_type = 'update'
         self.updates = updates
         self.update_data = {
-            'updates': [],
-            'table_name': self.auto_rule.table_name
+            'row': {},
+            'table_name': self.auto_rule.table_name,
+            'row_id':''
         }
         self._init_updates()
 
@@ -94,13 +96,11 @@ class UpdateAction(BaseAction):
 
         if self.auto_rule.run_condition == PER_UPDATE:
             row_id = self.data['row']['_id']
-            self.update_data['updates'].append({
-                'row_id': row_id,
-                'row': filtered_updates
-            })
+            self.update_data['row'] = filtered_updates
+            self.update_data['row_id'] = row_id
 
     def _can_do_action(self):
-        if not self.update_data.get('updates'):
+        if not self.update_data.get('row') or not self.update_data.get('row_id'):
             return False
         if self.auto_rule.run_condition == PER_UPDATE:
             # if columns in self.updates was updated, forbidden action!!!
@@ -109,14 +109,17 @@ class UpdateAction(BaseAction):
             for key in updated_column_keys:
                 if key in to_update_keys:
                     return False
+        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK):
+            return False
+
         return True
 
     def do_action(self):
         if not self._can_do_action():
             return
-        batch_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/batch-update-rows/'
+        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
         try:
-            response = requests.put(batch_update_url, headers=self.auto_rule.headers, json=self.update_data)
+            response = requests.put(row_update_url, headers=self.auto_rule.headers, json=self.update_data)
         except Exception as e:
             logger.error('update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
             return
@@ -125,6 +128,63 @@ class UpdateAction(BaseAction):
         else:
             self.auto_rule.set_done_actions()
 
+class AddRowAction(BaseAction):
+
+    VALID_COLUMN_TYPES = [
+        ColumnTypes.TEXT,
+        ColumnTypes.DATE,
+        ColumnTypes.LONG_TEXT,
+        ColumnTypes.CHECKBOX,
+        ColumnTypes.SINGLE_SELECT,
+        ColumnTypes.MULTIPLE_SELECT,
+        ColumnTypes.URL,
+        ColumnTypes.DURATION,
+        ColumnTypes.NUMBER,
+        ColumnTypes.COLLABORATOR,
+        ColumnTypes.EMAIL,
+    ]
+
+    def __init__(self, auto_rule, row):
+        """
+        auto_rule: instance of AutomationRule
+        data: if auto_rule.PER_UPDATE, data is event data from redis
+        row: {'col_1_name: ', value1, 'col_2_name': value2...}
+        """
+        super().__init__(auto_rule)
+        self.action_type = 'add'
+        self.row = row
+        self.row_data = {
+            'row': {},
+            'table_name': self.auto_rule.table_name
+        }
+        self._init_updates()
+
+    def _init_updates(self):
+        # filter columns in view and type of column is in VALID_COLUMN_TYPES
+        valid_view_column_names = [col.get('name') for col in self.auto_rule.view_columns if 'name' in col and col.get('type') in self.VALID_COLUMN_TYPES]
+        filtered_updates = {key: value for key, value in self.row.items() if key in valid_view_column_names}
+        self.row_data['row'] = filtered_updates
+
+
+    def _can_do_action(self):
+        if not self.row_data.get('row'):
+            return False
+
+        return True
+
+    def do_action(self):
+        if not self._can_do_action():
+            return
+        row_add_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        try:
+            response = requests.post(row_add_url, headers=self.auto_rule.headers, json=self.row_data)
+        except Exception as e:
+            logger.error('update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return
+        if response.status_code != 200:
+            logger.error('update dtable: %s error response status code: %s', self.auto_rule.dtable_uuid, response.status_code)
+        else:
+            self.auto_rule.set_done_actions()
 
 class NotifyAction(BaseAction):
 
@@ -142,6 +202,7 @@ class NotifyAction(BaseAction):
 
         self.column_blanks = []
         self.col_name_dict = {}
+
 
         self._init_notify(msg)
 
@@ -182,13 +243,40 @@ class NotifyAction(BaseAction):
                 })
         try:
             send_notification(dtable_uuid, user_msg_list, self.auto_rule.access_token)
-            self.auto_rule.set_done_actions()
+        except Exception as e:
+            logger.error('send users: %s notifications error: %s', e)
+
+    def cron_notify(self):
+        dtable_uuid = self.auto_rule.dtable_uuid
+        table_id, view_id = self.auto_rule.table_id, self.auto_rule.view_id
+        detail = {
+            'table_id': table_id,
+            'view_id': view_id,
+            'condition': CONDITION_PERIODICALLY,
+            'rule_id': self.auto_rule.rule_id,
+            'rule_name': self.auto_rule.rule_name,
+            'msg': self.msg,
+            'row_id_list': []
+        }
+        user_msg_list = []
+        for user in self.users:
+            user_msg_list.append({
+                'to_user': user,
+                'msg_type': 'notification_rules',
+                'detail': detail,
+            })
+        try:
+            send_notification(dtable_uuid, user_msg_list, self.auto_rule.access_token)
         except Exception as e:
             logger.error('send users: %s notifications error: %s', e)
 
     def do_action(self):
         if self.auto_rule.run_condition == PER_UPDATE:
             self.per_update_notify()
+            self.auto_rule.set_done_actions()
+        elif self.auto_rule.run_condition in [PER_DAY, PER_WEEK]:
+            self.cron_notify()
+            self.auto_rule.set_done_actions()
 
 class RuleInvalidException(Exception):
     """
@@ -291,18 +379,42 @@ class AutomationRule:
         return self._table_name
 
     def can_do_actions(self):
-        if self.trigger.get('condition') != CONDITION_FILTERS_SATISFY:
+        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY):
             return False
-        return True
+
+        if self.run_condition == PER_UPDATE:
+            return True
+
+        elif self.run_condition in (PER_DAY, PER_WEEK):
+            cur_hour = int(utc_to_tz(datetime.utcnow(), TIME_ZONE).strftime('%H'))
+            cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
+            cur_week_day = cur_datetime.isoweekday()
+            if self.run_condition == PER_DAY:
+                trigger_hour = self.trigger.get('notify_hour', 12)
+                if cur_hour != trigger_hour:
+                    return False
+            else:
+                trigger_hour = self.trigger.get('notify_week_hour', 12)
+                trigger_day = self.trigger.get('notify_week_day', 7)
+                if cur_hour != trigger_hour or cur_week_day != trigger_day:
+                    return False
+            return True
+
+        return False
+
 
     def do_actions(self):
         if not self.can_do_actions():
             return
         try:
             for action_info in self.action_infos:
-                if action_info.get('type') == 'update':
+                if action_info.get('type') == 'update_record':
                     updates = action_info.get('updates')
                     UpdateAction(self, self.data, updates).do_action()
+
+                if action_info.get('type') == 'add_record':
+                    row = action_info.get('row')
+                    AddRowAction(self, row).do_action()
 
                 elif action_info.get('type') == 'notify':
                     default_msg = action_info.get('default_msg', '')
