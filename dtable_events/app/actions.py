@@ -117,9 +117,9 @@ class UpdateAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        batch_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
         try:
-            response = requests.put(batch_update_url, headers=self.auto_rule.headers, json=self.update_data)
+            response = requests.put(row_update_url, headers=self.auto_rule.headers, json=self.update_data)
         except Exception as e:
             logger.error('update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
             return
@@ -175,9 +175,9 @@ class AddRowAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        batch_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        row_add_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
         try:
-            response = requests.post(batch_update_url, headers=self.auto_rule.headers, json=self.row_data)
+            response = requests.post(row_add_url, headers=self.auto_rule.headers, json=self.row_data)
         except Exception as e:
             logger.error('update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
             return
