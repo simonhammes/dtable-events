@@ -203,12 +203,10 @@ class NotifyAction(BaseAction):
         self.column_blanks = []
         self.col_name_dict = {}
 
-        self.interval_valid = True
 
         self._init_notify(msg)
 
     def _init_notify(self, msg):
-
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
@@ -273,7 +271,6 @@ class NotifyAction(BaseAction):
             logger.error('send users: %s notifications error: %s', e)
 
     def do_action(self):
-
         if self.auto_rule.run_condition == PER_UPDATE:
             self.per_update_notify()
             self.auto_rule.set_done_actions()
