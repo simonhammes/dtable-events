@@ -91,10 +91,14 @@ class UpdateAction(BaseAction):
 
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
-        valid_view_column_names = [col.get('name') for col in self.auto_rule.view_columns if 'name' in col and col.get('type') in self.VALID_COLUMN_TYPES]
-        filtered_updates = {key: value for key, value in self.updates.items() if key in valid_view_column_names}
-
+        filtered_updates = {}
         if self.auto_rule.run_condition == PER_UPDATE:
+            for col in self.auto_rule.view_columns:
+                if 'key' in col and col.get('type') in self.VALID_COLUMN_TYPES:
+                    col_name = col.get('name')
+                    col_key = col.get('key')
+                    if col_key in self.updates.keys():
+                        filtered_updates[col_name] = self.updates.get(col_key)
             row_id = self.data['row']['_id']
             self.update_data['row'] = filtered_updates
             self.update_data['row_id'] = row_id
@@ -159,35 +163,40 @@ class AddRowAction(BaseAction):
         }
         self._init_updates()
 
-    def format_time_by_offset(self, offset):
+    def format_time_by_offset(self, offset, format_length):
         cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
         cur_datetime_offset = cur_datetime + timedelta(days=offset)
-        return cur_datetime_offset.strftime("%Y-%m-%d %H:%M")
+        if format_length == 2:
+            return cur_datetime_offset.strftime("%Y-%m-%d %H:%M")
+        if format_length == 1:
+            return cur_datetime_offset.strftime("%Y-%m-%d")
 
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
-        valid_view_column_names = []
         filtered_updates = {}
         for col in self.auto_rule.view_columns:
-            if 'name' in col and col.get('type') in self.VALID_COLUMN_TYPES:
+            if 'key' in col and col.get('type') in self.VALID_COLUMN_TYPES:
                 col_name = col.get('name')
                 col_type = col.get('type')
-                if col_name in self.row.keys():
+                col_key = col.get('key')
+                if col_key in self.row.keys():
                     if col_type == ColumnTypes.DATE:
+                        time_format = col.get('data', {}).get('format', '')
+                        format_length = len(time_format.split(" "))
                         try:
-                            time_dict = self.row.get(col_name)
+                            time_dict = self.row.get(col_key)
                             set_type = time_dict.get('set_type')
                             if set_type == 'specific_value':
                                 time_value = time_dict.get('value')
                                 filtered_updates[col_name] = time_value
                             elif set_type == 'relative_date':
                                 offset = time_dict.get('offset')
-                                filtered_updates[col_name] = self.format_time_by_offset(int(offset))
+                                filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
                         except Exception as e:
                             logger.error(e)
-                            filtered_updates[col_name] = self.row.get(col_name)
+                            filtered_updates[col_name] = self.row.get(col_key)
                     else:
-                        filtered_updates[col_name] = self.row.get(col_name)
+                        filtered_updates[col_name] = self.row.get(col_key)
         self.row_data['row'] = filtered_updates
 
     def _can_do_action(self):
