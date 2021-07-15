@@ -176,11 +176,12 @@ class AddRowAction(BaseAction):
                     if col_type == ColumnTypes.DATE:
                         try:
                             time_dict = self.row.get(col_name)
-                            time_value = time_dict.get('value', '')
-                            offset = time_dict.get('offset', None)
-                            if time_value:
+                            set_type = time_dict.get('set_type')
+                            if set_type == 'specific_value':
+                                time_value = time_dict.get('value')
                                 filtered_updates[col_name] = time_value
-                            else:
+                            elif set_type == 'relative_date':
+                                offset = time_dict.get('offset')
                                 filtered_updates[col_name] = self.format_time_by_offset(int(offset))
                         except Exception as e:
                             logger.error(e)
