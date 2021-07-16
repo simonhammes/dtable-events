@@ -27,7 +27,8 @@ if not os.path.exists(dtable_web_dir):
 
 sys.path.insert(0, dtable_web_dir)
 try:
-    from seahub.settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
+    from seahub.settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL, \
+        ENABLE_DTABLE_SERVER_CLUSTER, DTABLE_PROXY_SERVER_URL
 except ImportError as e:
     logger.critical("Can not import dtable_web settings: %s." % e)
     raise RuntimeError("Can not import dtable_web settings: %s" % e)
@@ -94,7 +95,8 @@ def scan_triggered_notification_rules(event_data, db_session):
 
 
 def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_key, dtable_server_access_token):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/' + row_id + '/'
+    api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+    url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/' + row_id + '/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     params = {
         'table_id': table_id,
@@ -114,7 +116,8 @@ def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_key,
 
 
 def send_notification(dtable_uuid, user_msg_list, dtable_server_access_token):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/notifications-batch/'
+    api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+    url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/notifications-batch/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     body = {
         'user_messages': user_msg_list,
@@ -134,7 +137,8 @@ def deal_invalid_rule(rule_id, db_session):
 
 
 def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token, rule_id=None, db_session=None):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/'
+    api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+    url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     query_params = {
         'table_id': table_id,
@@ -174,7 +178,8 @@ def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, al
 
 
 def get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token):
-    url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/columns/'
+    api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+    url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/columns/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     query_params = {
         'table_id': table_id,
@@ -224,8 +229,9 @@ def get_nickname_by_usernames(usernames, db_session):
 
 
 def _get_dtable_metadata(dtable_uuid):
+    api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
     access_token = get_dtable_server_token(dtable_uuid)
-    metadata_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/metadata/'
+    metadata_url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/metadata/'
     headers = {'Authorization': 'Token ' + access_token.decode()}
     response = requests.get(metadata_url, headers=headers)
     return response.json().get('metadata')

@@ -17,7 +17,7 @@ class DTableIOServer(Thread):
         self._parse_config(config, dtable_server_config)
         task_manager.init(
             self._workers, self._dtable_private_key, self._dtable_web_service_url,
-            self._file_server_port, self._dtable_server_url,
+            self._file_server_port, self._dtable_server_url, self._enable_dtable_server_cluster, self._dtable_proxy_server_url,
             self._io_task_timeout, config
         )
         message_task_manager.init(
@@ -62,18 +62,24 @@ class DTableIOServer(Thread):
             try:
                 if os.path.exists(central_conf_dir):
                     sys.path.insert(0, central_conf_dir)
-                    from dtable_web_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
+                    from dtable_web_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL, \
+                        ENABLE_DTABLE_SERVER_CLUSTER, DTABLE_PROXY_SERVER_URL
                     self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
                     self._dtable_private_key = DTABLE_PRIVATE_KEY
                     self._dtable_server_url = DTABLE_SERVER_URL
+                    self._enable_dtable_server_cluster = ENABLE_DTABLE_SERVER_CLUSTER
+                    self._dtable_proxy_server_url = DTABLE_PROXY_SERVER_URL
             except ImportError:
                 dtable_web_seahub_dir = os.path.join(os.environ.get('DTABLE_WEB_DIR', ''), 'seahub')
                 if os.path.exists(dtable_web_seahub_dir):
                     sys.path.insert(0, dtable_web_seahub_dir)
-                    from local_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
+                    from local_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL, \
+                        ENABLE_DTABLE_SERVER_CLUSTER, DTABLE_PROXY_SERVER_URL
                     self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
                     self._dtable_private_key = DTABLE_PRIVATE_KEY 
                     self._dtable_server_url = DTABLE_SERVER_URL
+                    self._enable_dtable_server_cluster = ENABLE_DTABLE_SERVER_CLUSTER
+                    self._dtable_proxy_server_url = DTABLE_PROXY_SERVER_URL
             except Exception as e:
                 logging.error(f'import settings from SEAFILE_CENTRAL_CONF_DIR/dtable_web_settings.py failed {e}')
 

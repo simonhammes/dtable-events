@@ -30,6 +30,8 @@ try:
     DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
     DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
     TIME_ZONE = getattr(seahub_settings, 'TIME_ZONE', 'UTC')
+    ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
+    DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
 except ImportError as e:
     logger.critical("Can not import dtable_web settings: %s." % e)
     raise RuntimeError("Can not import dtable_web settings: %s" % e)
@@ -121,7 +123,8 @@ class UpdateAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        row_update_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
         try:
             response = requests.put(row_update_url, headers=self.auto_rule.headers, json=self.update_data)
         except Exception as e:
@@ -208,7 +211,8 @@ class AddRowAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        row_add_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        row_add_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
         try:
             response = requests.post(row_add_url, headers=self.auto_rule.headers, json=self.row_data)
         except Exception as e:
@@ -376,7 +380,8 @@ class AutomationRule:
     @property
     def dtable_metadata(self):
         if not self._dtable_metadata:
-            url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/metadata/'
+            api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+            url = api_url.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/metadata/'
             response = requests.get(url, headers=self.headers)
             if response.status_code == 404:
                 raise RuleInvalidException('request metadata 404')
@@ -390,7 +395,8 @@ class AutomationRule:
         """
         if not self._view_columns:
             table_id, view_id = self.table_id, self.view_id
-            url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/columns/'
+            api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+            url = api_url.rstrip('/') + '/api/v1/dtables/' + self.dtable_uuid + '/columns/'
             response = requests.get(url, params={'table_id': table_id, 'view_id': view_id}, headers=self.headers)
             if response.status_code == 404:
                 raise RuleInvalidException('request view columns 404')
