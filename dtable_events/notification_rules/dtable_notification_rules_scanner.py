@@ -151,7 +151,8 @@ class DTableNotificationRulesCleaner(Thread):
             before_half_year = datetime.utcnow() - timedelta(days=180)
 
             sql = '''
-                DELETE FROM dtable_notification_rules
+                UPDATE dtable_notification_rules
+                SET is_valid=0
                 WHERE (ctime < :last_check_time AND last_trigger_time IS NULL)
                 OR (last_trigger_time IS NOT NULL AND last_trigger_time < :last_check_time)
             '''
