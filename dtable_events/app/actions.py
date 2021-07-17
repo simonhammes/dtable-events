@@ -138,7 +138,7 @@ class UpdateAction(BaseAction):
 class LockRowAction(BaseAction):
 
 
-    def __init__(self, auto_rule, data, is_locked):
+    def __init__(self, auto_rule, data):
         """
         auto_rule: instance of AutomationRule
         data: if auto_rule.PER_UPDATE, data is event data from redis
@@ -149,7 +149,6 @@ class LockRowAction(BaseAction):
         self.update_data = {
             'table_name': self.auto_rule.table_name,
             'row_id':'',
-            'is_locked': is_locked
         }
         self._init_updates()
 
@@ -173,7 +172,7 @@ class LockRowAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/lock-rows/'
         try:
             response = requests.put(row_update_url, headers=self.auto_rule.headers, json=self.update_data)
         except Exception as e:
@@ -510,8 +509,7 @@ class AutomationRule:
                     NotifyAction(self, self.data, default_msg, users).do_action()
 
                 elif action_info.get('type') == 'lock_record':
-                    is_locked = action_info.get('is_locked', False)
-                    LockRowAction(self, self.data, is_locked).do_action()
+                    LockRowAction(self, self.data).do_action()
 
         except RuleInvalidException as e:
             logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
