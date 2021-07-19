@@ -62,8 +62,12 @@ class DTableIOServer(Thread):
             try:
                 if os.path.exists(central_conf_dir):
                     sys.path.insert(0, central_conf_dir)
-                    from dtable_web_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL, \
-                        ENABLE_DTABLE_SERVER_CLUSTER, DTABLE_PROXY_SERVER_URL
+                    import dtable_web_settings as seahub_settings
+                    DTABLE_WEB_SERVICE_URL = getattr(seahub_settings, 'DTABLE_WEB_SERVICE_URL')
+                    DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
+                    DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
+                    ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
+                    DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
                     self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
                     self._dtable_private_key = DTABLE_PRIVATE_KEY
                     self._dtable_server_url = DTABLE_SERVER_URL
@@ -73,8 +77,12 @@ class DTableIOServer(Thread):
                 dtable_web_seahub_dir = os.path.join(os.environ.get('DTABLE_WEB_DIR', ''), 'seahub')
                 if os.path.exists(dtable_web_seahub_dir):
                     sys.path.insert(0, dtable_web_seahub_dir)
-                    from local_settings import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL, \
-                        ENABLE_DTABLE_SERVER_CLUSTER, DTABLE_PROXY_SERVER_URL
+                    import local_settings as seahub_settings
+                    DTABLE_WEB_SERVICE_URL = getattr(seahub_settings, 'DTABLE_WEB_SERVICE_URL')
+                    DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
+                    DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
+                    ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
+                    DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
                     self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
                     self._dtable_private_key = DTABLE_PRIVATE_KEY 
                     self._dtable_server_url = DTABLE_SERVER_URL
