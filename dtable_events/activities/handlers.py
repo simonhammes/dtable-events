@@ -7,7 +7,7 @@ from threading import Thread, Event
 from dtable_events.app.event_redis import RedisClient
 from dtable_events.activities.db import save_or_update_or_delete
 from dtable_events.db import init_db_session_class
-from dtable_events.activities.notification_rules_utils import scan_triggered_notification_rules
+from dtable_events.notification_rules.notification_rules_utils import scan_triggered_notification_rules
 from dtable_events.automations.auto_rules_utils import scan_triggered_automation_rules
 
 logger = logging.getLogger(__name__)

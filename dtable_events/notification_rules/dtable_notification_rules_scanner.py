@@ -6,7 +6,7 @@ from threading import Thread
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from dtable_events.activities.notification_rules_utils import check_near_deadline_notification_rule
+from dtable_events.notification_rules.notification_rules_utils import check_near_deadline_notification_rule
 from dtable_events.db import init_db_session_class
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool
 

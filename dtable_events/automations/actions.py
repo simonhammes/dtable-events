@@ -8,7 +8,7 @@ from datetime import datetime, date, timedelta
 import jwt
 import requests
 
-from dtable_events.activities.notification_rules_utils import _fill_msg_blanks as fill_msg_blanks, \
+from dtable_events.notification_rules.notification_rules_utils import _fill_msg_blanks as fill_msg_blanks, \
     send_notification
 from dtable_events.utils import utc_to_tz
 from dtable_events.utils.constants import ColumnTypes

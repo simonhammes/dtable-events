@@ -6,10 +6,10 @@ from dtable_events.tasks.instant_notices_sender import InstantNoticeSender
 from dtable_events.tasks.email_notices_sender import EmailNoticesSender
 from dtable_events.tasks.dtables_cleaner import DTablesCleaner
 from dtable_events.tasks.dtable_updates_sender import DTableUpdatesSender
-from dtable_events.tasks.dtable_notification_rules_scanner import DTableNofiticationRulesScanner
-from dtable_events.automations.dtable_automation_rules_scanner import DTableAutomationRulesScanner
 from dtable_events.tasks.dtable_real_time_rows_counter import DTableRealTimeRowsCounter
 from dtable_events.tasks.ldap_syncer import LDAPSyncer
+from dtable_events.notification_rules.dtable_notification_rules_scanner import DTableNofiticationRulesScanner
+from dtable_events.automations.dtable_automation_rules_scanner import DTableAutomationRulesScanner
 from dtable_events.webhook.webhook import Webhooker
 
 

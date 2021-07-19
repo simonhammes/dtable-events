@@ -1,6 +1,6 @@
 import logging
 
-from dtable_events.app.actions import AutomationRule
+from dtable_events.automations.actions import AutomationRule
 
 logger = logging.getLogger(__name__)
 
