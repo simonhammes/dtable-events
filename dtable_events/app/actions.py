@@ -124,7 +124,7 @@ class UpdateAction(BaseAction):
         if not self._can_do_action():
             return
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-        row_update_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        row_update_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/?from=dtable-events'
         try:
             response = requests.put(row_update_url, headers=self.auto_rule.headers, json=self.update_data)
         except Exception as e:
@@ -170,7 +170,7 @@ class LockRowAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/lock-rows/'
+        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/lock-rows/?from=dtable-events'
         try:
             response = requests.put(row_update_url, headers=self.auto_rule.headers, json=self.update_data)
         except Exception as e:
@@ -258,7 +258,7 @@ class AddRowAction(BaseAction):
         if not self._can_do_action():
             return
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-        row_add_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/'
+        row_add_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/rows/?from=dtable-events'
         try:
             response = requests.post(row_add_url, headers=self.auto_rule.headers, json=self.row_data)
         except Exception as e:
