@@ -148,20 +148,18 @@ class LockRowAction(BaseAction):
         self.action_type = 'lock'
         self.update_data = {
             'table_name': self.auto_rule.table_name,
-            'row_id':'',
+            'row_ids':[],
         }
         self._init_updates()
 
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
-
-
         if self.auto_rule.run_condition == PER_UPDATE:
             row_id = self.data['row']['_id']
-            self.update_data['row_id'] = row_id
+            self.update_data['row_ids'].append(row_id)
 
     def _can_do_action(self):
-        if not self.update_data.get('row_id'):
+        if not self.update_data.get('row_ids'):
             return False
 
         if self.auto_rule.run_condition in (PER_DAY, PER_WEEK):
