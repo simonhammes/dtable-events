@@ -10,6 +10,7 @@ import sys
 import re
 import pytz
 
+from dtable_events.utils import utc_to_tz
 from dtable_events.utils.constants import ColumnTypes
 from dtable_events.cache import redis_cache as cache
 
@@ -27,8 +28,12 @@ if not os.path.exists(dtable_web_dir):
 
 sys.path.insert(0, dtable_web_dir)
 try:
-    from seahub.settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL, \
-        ENABLE_DTABLE_SERVER_CLUSTER, DTABLE_PROXY_SERVER_URL
+    import seahub.settings as seahub_settings
+    DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
+    DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
+    TIME_ZONE = getattr(seahub_settings, 'TIME_ZONE', 'UTC')
+    ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
+    DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
 except ImportError as e:
     logger.critical("Can not import dtable_web settings: %s." % e)
     raise RuntimeError("Can not import dtable_web settings: %s" % e)
@@ -138,12 +143,17 @@ def deal_invalid_rule(rule_id, db_session):
 
 def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token, rule_id=None, db_session=None):
     api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-    url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/'
+    url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + dtable_uuid + '/list-rows-near-deadline/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
+    now_date = utc_to_tz(datetime.utcnow(), TIME_ZONE).date()
+    now_plus_alarm_date = date.today() + timedelta(days=int(alarm_days))
     query_params = {
         'table_id': table_id,
         'view_id': view_id,
-        'convert_link_id': True
+        'date_column_name': date_column_name,
+        'now_date': str(now_date),
+        'end_date': str(now_plus_alarm_date),
+        'limit': 25
     }
     try:
         res = requests.get(url, headers=headers, params=query_params)
@@ -158,23 +168,7 @@ def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, al
         return []
 
     rows = json.loads(res.content).get('rows', [])
-    rows_near_deadline = []
-    for row in rows:
-        deadline_date_date_str = row.get(date_column_name, '')
-        if not deadline_date_date_str:
-            continue
-        if ' ' in deadline_date_date_str:
-            deadline_date_date_str = deadline_date_date_str.split(' ')[0]
-        try:
-            deadline_date = datetime.strptime(deadline_date_date_str, '%Y-%m-%d').date()
-        except Exception as e:
-            # perhaps result-type of fomular column has been changed to non-date
-            logger.warning('date_column_name: %s value: %s, transfer to date error: %s', date_column_name, deadline_date_date_str, e)
-            continue
-        now_plus_alarm_date = date.today() + timedelta(days=int(alarm_days))
-        if date.today() <= deadline_date <= now_plus_alarm_date:
-            rows_near_deadline.append(row)
-    return rows_near_deadline
+    return rows
 
 
 def get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token):
