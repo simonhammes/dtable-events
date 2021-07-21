@@ -58,6 +58,25 @@ class BaseAction:
     def do_action(self):
         pass
 
+    def parse_column_value(self, column, value):
+        if column.get('type') == ColumnTypes.SINGLE_SELECT:
+            select_options = column.get('data', {}).get('options', [])
+            for option in select_options:
+                if value == option.get('id'):
+                    return option.get('name')
+
+        elif column.get('type') == ColumnTypes.MULTIPLE_SELECT:
+            m_select_options = column.get('data', {}).get('options', [])
+            if isinstance(value, list):
+                parse_value_list = []
+                for option in m_select_options:
+                    if option.get('id') in value:
+                        option_name = option.get('name')
+                        parse_value_list.append(option_name)
+                return parse_value_list
+        else:
+            return value
+
 
 class UpdateAction(BaseAction):
 
@@ -100,7 +119,7 @@ class UpdateAction(BaseAction):
                     col_name = col.get('name')
                     col_key = col.get('key')
                     if col_key in self.updates.keys():
-                        filtered_updates[col_name] = self.updates.get(col_key)
+                        filtered_updates[col_name] = self.parse_column_value(col, self.updates.get(col_key))
             row_id = self.data['row']['_id']
             self.update_data['row'] = filtered_updates
             self.update_data['row_id'] = row_id
@@ -245,7 +264,7 @@ class AddRowAction(BaseAction):
                             logger.error(e)
                             filtered_updates[col_name] = self.row.get(col_key)
                     else:
-                        filtered_updates[col_name] = self.row.get(col_key)
+                        filtered_updates[col_name] = self.parse_column_value(col, self.row.get(col_key))
         self.row_data['row'] = filtered_updates
 
     def _can_do_action(self):
