@@ -1,17 +1,16 @@
-# -*- coding: utf-8 -*-
+import json
 import logging
 import time
-import json
 from threading import Thread, Event
 
 from dtable_events.app.event_redis import RedisClient
-from dtable_events.activities.db import save_or_update_or_delete
+from dtable_events.automations.auto_rules_utils import scan_triggered_automation_rules
 from dtable_events.db import init_db_session_class
 
 logger = logging.getLogger(__name__)
 
 
-class MessageHandler(Thread):
+class AutomationRuleHandler(Thread):
     def __init__(self, config):
         Thread.__init__(self)
         self._finished = Event()
@@ -19,8 +18,8 @@ class MessageHandler(Thread):
         self._redis_client = RedisClient(config)
 
     def run(self):
-        logger.info('Starting handle table activities...')
-        subscriber = self._redis_client.get_subscriber('table-events')
+        logger.info('Starting handle automation rules...')
+        subscriber = self._redis_client.get_subscriber('automation-rule-triggered')
         
         while not self._finished.is_set():
             try:
@@ -29,13 +28,13 @@ class MessageHandler(Thread):
                     event = json.loads(message['data'])
                     session = self._db_session_class()
                     try:
-                        save_or_update_or_delete(session, event)
+                        scan_triggered_automation_rules(event, db_session=session)
                     except Exception as e:
-                        logger.error('Handle activities message failed: %s' % e)
+                        logger.error('Handle automation rules failed: %s' % e)
                     finally:
                         session.close()
                 else:
                     time.sleep(0.5)
             except Exception as e:
-                logger.error('Failed get message from redis: %s' % e)
-                subscriber = self._redis_client.get_subscriber('table-events')
+                logger.error('Failed get automation rules message from redis: %s' % e)
+                subscriber = self._redis_client.get_subscriber('automation-rule-triggered')
