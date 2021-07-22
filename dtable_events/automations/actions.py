@@ -189,7 +189,8 @@ class LockRowAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
-        row_update_url = DTABLE_SERVER_URL.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/lock-rows/?from=dtable-events'
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        row_update_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/lock-rows/?from=dtable-events'
         try:
             response = requests.put(row_update_url, headers=self.auto_rule.headers, json=self.update_data)
         except Exception as e:
