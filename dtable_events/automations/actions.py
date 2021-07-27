@@ -8,6 +8,8 @@ from datetime import datetime, date, timedelta
 import jwt
 import requests
 
+from dtable_events.automations.models import BoundThirdPartyAccounts
+from dtable_events.dtable_io import send_wechat_msg
 from dtable_events.notification_rules.notification_rules_utils import _fill_msg_blanks as fill_msg_blanks, \
     send_notification
 from dtable_events.utils import utc_to_tz
@@ -47,6 +49,16 @@ CONDITION_NEAR_DEADLINE = 'near_deadline'
 CONDITION_PERIODICALLY = 'run_periodically'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
+
+
+def get_third_party_account(session, account_id):
+    account_query = session.query(BoundThirdPartyAccounts).filter(
+        BoundThirdPartyAccounts.id == account_id
+    )
+    if account_query:
+        account = account_query.first()
+        return account.to_dict()
+    return None
 
 
 class BaseAction:
@@ -382,6 +394,60 @@ class NotifyAction(BaseAction):
             self.cron_notify()
             self.auto_rule.set_done_actions()
 
+class SendWechatAction(BaseAction):
+
+    def __init__(self, auto_rule, data, msg, account_id):
+
+        super().__init__(auto_rule, data)
+        self.action_type = 'send_wechat'
+        self.msg = msg
+        self.account_id = account_id
+
+        self.webhook_url = ''
+        self.column_blanks = []
+        self.col_name_dict = {}
+
+        self._init_notify(msg)
+
+
+    def _init_notify(self, msg):
+        blanks = set(re.findall(r'\{([^{]*?)\}', msg))
+        self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
+        self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
+        account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
+        if account_dict:
+            self.webhook_url = account_dict.get('detail', {}).get('webhook_url', '')
+
+
+    def _fill_msg_blanks(self, row):
+        msg, column_blanks, col_name_dict = self.msg, self.column_blanks, self.col_name_dict
+        dtable_uuid, db_session, dtable_metadata = self.auto_rule.dtable_uuid, self.auto_rule.db_session, self.auto_rule.dtable_metadata
+        return fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
+
+    def per_update_notify(self):
+        row = self.data['converted_row']
+        msg = self.msg
+        if self.column_blanks:
+            msg = self._fill_msg_blanks(row)
+        try:
+            send_wechat_msg(self.webhook_url, msg)
+        except Exception as e:
+            logger.error('send wechat error: %s', e)
+
+    def cron_notify(self):
+        try:
+            send_wechat_msg(self.webhook_url, self.msg)
+        except Exception as e:
+            logger.error('send users: %s notifications error: %s', e)
+
+    def do_action(self):
+        if self.auto_rule.run_condition == PER_UPDATE:
+            self.per_update_notify()
+            self.auto_rule.set_done_actions()
+        elif self.auto_rule.run_condition in [PER_DAY, PER_WEEK]:
+            self.cron_notify()
+            self.auto_rule.set_done_actions()
+
 class RuleInvalidException(Exception):
     """
     Exception which indicates rule need to be set is_valid=Fasle
@@ -535,6 +601,11 @@ class AutomationRule:
 
                 elif action_info.get('type') == 'lock_record':
                     LockRowAction(self, self.data).do_action()
+
+                elif action_info.get('type') == 'send_wechat':
+                    account_id = int(action_info.get('account_id'))
+                    default_msg = action_info.get('default_msg', '')
+                    SendWechatAction(self, self.data, default_msg, account_id).do_action()
 
         except RuleInvalidException as e:
             logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
