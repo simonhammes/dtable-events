@@ -39,6 +39,7 @@ except ImportError as e:
 PER_DAY = 'per_day'
 PER_WEEK = 'per_week'
 PER_UPDATE = 'per_update'
+PER_MONTH = 'per_month'
 
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
@@ -134,7 +135,7 @@ class UpdateAction(BaseAction):
             for key in updated_column_keys:
                 if key in to_update_keys:
                     return False
-        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK):
+        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
             return False
 
         return True
@@ -181,7 +182,7 @@ class LockRowAction(BaseAction):
         if not self.update_data.get('row_ids'):
             return False
 
-        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK):
+        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
             return False
 
         return True
@@ -377,7 +378,7 @@ class NotifyAction(BaseAction):
         if self.auto_rule.run_condition == PER_UPDATE:
             self.per_update_notify()
             self.auto_rule.set_done_actions()
-        elif self.auto_rule.run_condition in [PER_DAY, PER_WEEK]:
+        elif self.auto_rule.run_condition in [PER_DAY, PER_WEEK, PER_MONTH]:
             self.cron_notify()
             self.auto_rule.set_done_actions()
 
@@ -474,7 +475,7 @@ class AutomationRule:
         """
         name of table defined in rule
         """
-        if not self._table_name and self.run_condition in (PER_DAY, PER_WEEK):
+        if not self._table_name and self.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
             dtable_metadata = self.dtable_metadata
             tables = dtable_metadata.get('tables', [])
             for table in tables:
@@ -490,18 +491,24 @@ class AutomationRule:
         if self.run_condition == PER_UPDATE:
             return True
 
-        elif self.run_condition in (PER_DAY, PER_WEEK):
+        elif self.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
             cur_hour = int(utc_to_tz(datetime.utcnow(), TIME_ZONE).strftime('%H'))
             cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
             cur_week_day = cur_datetime.isoweekday()
+            cur_month_day = cur_datetime.day
             if self.run_condition == PER_DAY:
                 trigger_hour = self.trigger.get('notify_hour', 12)
                 if cur_hour != trigger_hour:
                     return False
-            else:
+            elif self.run_condition == PER_WEEK:
                 trigger_hour = self.trigger.get('notify_week_hour', 12)
                 trigger_day = self.trigger.get('notify_week_day', 7)
                 if cur_hour != trigger_hour or cur_week_day != trigger_day:
+                    return False
+            else:
+                trigger_hour = self.trigger.get('notify_month_hour', 12)
+                trigger_day = self.trigger.get('notify_month_day', 1)
+                if cur_hour != trigger_hour or cur_month_day != trigger_day:
                     return False
             return True
 
