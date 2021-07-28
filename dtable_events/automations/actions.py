@@ -9,7 +9,7 @@ import jwt
 import requests
 
 from dtable_events.automations.models import BoundThirdPartyAccounts
-from dtable_events.dtable_io import send_wechat_msg
+from dtable_events.dtable_io import send_wechat_msg, send_email_msg
 from dtable_events.notification_rules.notification_rules_utils import _fill_msg_blanks as fill_msg_blanks, \
     send_notification
 from dtable_events.utils import utc_to_tz
@@ -59,6 +59,10 @@ def get_third_party_account(session, account_id):
         account = account_query.first()
         return account.to_dict()
     return None
+
+def email2list(email_str, split_pattern='[,，]'):
+    email_list = [value.strip() for value in re.split(split_pattern, email_str) if value.strip()]
+    return email_list
 
 
 class BaseAction:
@@ -438,7 +442,97 @@ class SendWechatAction(BaseAction):
         try:
             send_wechat_msg(self.webhook_url, self.msg)
         except Exception as e:
-            logger.error('send users: %s notifications error: %s', e)
+            logger.error('send wechat error: %s', e)
+
+    def do_action(self):
+        if self.auto_rule.run_condition == PER_UPDATE:
+            self.per_update_notify()
+            self.auto_rule.set_done_actions()
+        elif self.auto_rule.run_condition in [PER_DAY, PER_WEEK]:
+            self.cron_notify()
+            self.auto_rule.set_done_actions()
+
+
+class SendEmailAction(BaseAction):
+
+    def __init__(self,
+                 auto_rule,
+                 data,
+                 send_info,
+                 account_id,
+                 ):
+
+        super().__init__(auto_rule, data)
+        self.action_type = 'send_email'
+        self.account_id = account_id
+
+        # send info
+        self.send_info = send_info
+
+        # auth info
+        self.auth_info = {}
+
+
+        self.column_blanks = []
+        self.col_name_dict = {}
+
+        self._init_notify()
+
+    def _init_notify(self):
+        msg = self.send_info.get('message')
+        blanks = set(re.findall(r'\{([^{]*?)\}', msg))
+        self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
+        self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
+        account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
+        if account_dict:
+            account_detail = account_dict.get('detail', {})
+
+            email_host = account_detail.get('email_host', '')
+            email_port = account_detail.get('email_port', 0)
+            host_user = account_detail.get('host_user', '')
+            password = account_detail.get('password', '')
+            self.auth_info = {
+                'email_host': email_host,
+                'email_port': int(email_port),
+                'host_user': host_user,
+                'password' : password
+            }
+
+    def _fill_msg_blanks(self, row):
+
+        msg, column_blanks, col_name_dict = self.send_info.get('message', ''), self.column_blanks, self.col_name_dict
+        dtable_uuid, db_session, dtable_metadata = self.auto_rule.dtable_uuid, self.auto_rule.db_session, self.auto_rule.dtable_metadata
+        return fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
+
+    def per_update_notify(self):
+        row = self.data['converted_row']
+        msg = self.send_info.get('message', '')
+        if self.column_blanks:
+            msg = self._fill_msg_blanks(row)
+
+        self.send_info.update({
+            'message': msg
+        })
+        try:
+            send_email_msg(
+                auth_info=self.auth_info,
+                send_info=self.send_info,
+                username='automation-rules',  # username send by automation rules,
+                db_session=self.auto_rule.db_session
+            )
+        except Exception as e:
+            logger.error('send email error: %s', e)
+
+    def cron_notify(self):
+        try:
+            send_email_msg(
+                auth_info=self.auth_info,
+                send_info=self.send_info,
+                username='automation-rules',  # username send by automation rules,
+                db_session=self.auto_rule.db_session
+            )
+        except Exception as e:
+            logger.error('send email error: %s', e)
 
     def do_action(self):
         if self.auto_rule.run_condition == PER_UPDATE:
@@ -606,6 +700,21 @@ class AutomationRule:
                     account_id = int(action_info.get('account_id'))
                     default_msg = action_info.get('default_msg', '')
                     SendWechatAction(self, self.data, default_msg, account_id).do_action()
+
+                elif action_info.get('type') == 'send_email':
+                    account_id = int(action_info.get('account_id'))
+                    msg = action_info.get('default_msg', '')
+                    subject = action_info.get('subject', '')
+                    send_to_list = email2list(action_info.get('send_to', ''))
+                    copy_to_list = email2list(action_info.get('copy_to', ''))
+
+                    send_info = {
+                        'message': msg,
+                        'send_to': send_to_list,
+                        'copy_to': copy_to_list,
+                        'subject': subject
+                    }
+                    SendEmailAction(self, self.data, send_info, account_id).do_action()
 
         except RuleInvalidException as e:
             logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)

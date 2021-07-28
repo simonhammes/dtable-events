@@ -215,7 +215,7 @@ def send_wechat_msg(webhook_url, msg):
         dtable_message_logger.info('Wechat sending success!')
     return result
 
-def send_email_msg(auth_info, send_info, username, config):
+def send_email_msg(auth_info, send_info, username, config=None, db_session=None):
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -267,7 +267,7 @@ def send_email_msg(auth_info, send_info, username, config):
     finally:
         smtp.quit()
 
-    session = init_db_session_class(config)()
+    session = db_session or init_db_session_class(config)()
     try:
         save_email_sending_records(session, username, email_host, success)
     except Exception as e:
