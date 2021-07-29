@@ -157,7 +157,10 @@ def prepare_dtable_json_from_memory(dtable_uuid, username):
     dtable_server_access_token = get_dtable_server_token(username, dtable_uuid)
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
     DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
-    json_url = DTABLE_SERVER_URL.rstrip('/') + '/dtables/' + dtable_uuid + '/'
+    ENABLE_DTABLE_SERVER_CLUSTER = task_manager.conf['enable_dtable_server_cluster']
+    DTABLE_PROXY_SERVER_URL = task_manager.conf['dtable_proxy_server_url']
+    api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+    json_url = api_url.rstrip('/') + '/dtables/' + dtable_uuid + '/'
     content_json = requests.get(json_url, headers=headers).content
     if content_json:
         dtable_content = convert_dtable_export_file_and_image_url(json.loads(content_json))
