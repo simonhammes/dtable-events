@@ -391,7 +391,7 @@ class RuleInvalidException(Exception):
 
 class AutomationRule:
 
-    def __init__(self, rule_id, run_condition, dtable_uuid, raw_trigger, raw_actions, last_trigger_time, data, db_session):
+    def __init__(self, rule_id, run_condition, dtable_uuid, trigger_count, raw_trigger, raw_actions, last_trigger_time, data, db_session):
         self.rule_id = rule_id
         self.rule_name = ''
         self.run_condition = run_condition
@@ -399,6 +399,7 @@ class AutomationRule:
         self.trigger = None
         self.action_infos = []
         self.last_trigger_time = last_trigger_time
+        self.trigger_count = trigger_count
         self.data = data
         self.db_session = db_session
 
@@ -552,9 +553,9 @@ class AutomationRule:
     def update_last_trigger_time(self):
         try:
             set_invalid_sql = '''
-                UPDATE dtable_automation_rules SET last_trigger_time=:trigger_time WHERE id=:rule_id
+                UPDATE dtable_automation_rules SET last_trigger_time=:trigger_time, trigger_count=:trigger_count WHERE id=:rule_id
             '''
-            self.db_session.execute(set_invalid_sql, {'rule_id': self.rule_id, 'trigger_time': datetime.utcnow()})
+            self.db_session.execute(set_invalid_sql, {'rule_id': self.rule_id, 'trigger_time': datetime.utcnow(), 'trigger_count': self.trigger_count + 1})
             self.db_session.commit()
         except Exception as e:
             logger.error('set rule: %s invalid error: %s', self.rule_id, e)

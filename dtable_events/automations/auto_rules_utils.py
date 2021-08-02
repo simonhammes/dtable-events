@@ -12,7 +12,7 @@ def scan_triggered_automation_rules(event_data, db_session):
     dtable_uuid = event_data.get('dtable_uuid')
     automation_rule_id = event_data.get('automation_rule_id')
     sql = """
-        SELECT `id`, `run_condition`, `trigger`, `actions`, `last_trigger_time`, `dtable_uuid` FROM `dtable_automation_rules`
+        SELECT `id`, `run_condition`, `trigger`, `actions`, `last_trigger_time`, `dtable_uuid`, `trigger_count` FROM `dtable_automation_rules`
         WHERE dtable_uuid=:dtable_uuid AND run_condition='per_update' AND is_valid=1 AND id=:rule_id
     """
     try:
@@ -21,9 +21,9 @@ def scan_triggered_automation_rules(event_data, db_session):
         logger.error('checkout auto rules error: %s', e)
         return
 
-    for rule_id, run_condition, trigger, actions, last_trigger_time, dtable_uuid in rules:
+    for rule_id, run_condition, trigger, actions, last_trigger_time, dtable_uuid, trigger_count in rules:
         try:
-            auto_rule = AutomationRule(rule_id, run_condition, dtable_uuid, trigger, actions, last_trigger_time, event_data, db_session)
+            auto_rule = AutomationRule(rule_id, run_condition, dtable_uuid, trigger_count, trigger, actions, last_trigger_time, event_data, db_session)
             auto_rule.do_actions()
         except Exception as e:
             logger.error('auto rule: %s do actions error: %s', rule_id, e)
@@ -36,8 +36,9 @@ def run_regular_execution_rule(rule, db_session):
     raw_actions = rule[3]
     last_trigger_time = rule[4]
     dtable_uuid = rule[5]
+    trigger_count = rule[6]
     try:
-        auto_rule = AutomationRule(rule_id, run_condition, dtable_uuid, raw_trigger, raw_actions, last_trigger_time, None, db_session)
+        auto_rule = AutomationRule(rule_id, run_condition, dtable_uuid, trigger_count, raw_trigger, raw_actions, last_trigger_time, None, db_session)
         auto_rule.do_actions()
     except Exception as e:
         logger.error('auto rule: %s do actions error: %s', rule_id, e)
