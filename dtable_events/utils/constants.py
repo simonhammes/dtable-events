@@ -20,3 +20,4 @@ class ColumnTypes:
     CTIME = 'ctime'
     MTIME = 'mtime'
     LINK_FORMULA = 'link-formula'
+    RATE = 'rate'
