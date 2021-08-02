@@ -93,6 +93,7 @@ class UpdateAction(BaseAction):
         ColumnTypes.NUMBER,
         ColumnTypes.COLLABORATOR,
         ColumnTypes.EMAIL,
+        ColumnTypes.RATE,
     ]
 
     def __init__(self, auto_rule, data, updates):
@@ -216,6 +217,7 @@ class AddRowAction(BaseAction):
         ColumnTypes.NUMBER,
         ColumnTypes.COLLABORATOR,
         ColumnTypes.EMAIL,
+        ColumnTypes.RATE,
     ]
 
     def __init__(self, auto_rule, row):
