@@ -10,7 +10,6 @@ import sys
 import re
 import pytz
 
-from dtable_events.utils import utc_to_tz
 from dtable_events.utils.constants import ColumnTypes
 from dtable_events.cache import redis_cache as cache
 
@@ -31,7 +30,6 @@ try:
     import seahub.settings as seahub_settings
     DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
     DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
-    TIME_ZONE = getattr(seahub_settings, 'TIME_ZONE', 'UTC')
     ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
     DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
 except ImportError as e:
@@ -145,8 +143,8 @@ def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, al
     api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
     url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + dtable_uuid + '/list-rows-near-deadline/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    now_date = utc_to_tz(datetime.utcnow(), TIME_ZONE).date()
-    now_plus_alarm_date = date.today() + timedelta(days=int(alarm_days))
+    now_date = date.today()
+    now_plus_alarm_date = now_date + timedelta(days=int(alarm_days))
     query_params = {
         'table_id': table_id,
         'view_id': view_id,
