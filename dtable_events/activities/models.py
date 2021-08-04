@@ -26,19 +26,3 @@ class Activities(Base):
         self.op_time = op_time
         self.detail = detail
         self.op_app = op_app
-
-
-class UserDTables(Base):
-    __tablename__ = 'user_dtables'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_uuid_date_md5 = Column(String(length=32), nullable=False, unique=True)
-    username = Column(String(length=255), nullable=False, index=True)
-    dtable_uuid = Column(String(length=36), nullable=False)
-    op_date = Column(DateTime, nullable=False, index=True)
-
-    def __init__(self, user_uuid_date_md5, username, dtable_uuid, op_date):
-        self.user_uuid_date_md5 = user_uuid_date_md5
-        self.username = username
-        self.dtable_uuid = dtable_uuid
-        self.op_date = op_date
