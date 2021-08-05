@@ -77,6 +77,7 @@ class DTableNofiticationRulesScanner(object):
         logging.info('Start dtable notification rules scanner')
 
         DTableNofiticationRulesScannerTimer(self._logfile, self._db_session_class).start()
+        DTableNotificationRulesCleaner(self._db_session_class).start()
 
     def is_enabled(self):
         return self._enabled
@@ -132,3 +133,37 @@ class DTableNofiticationRulesScannerTimer(Thread):
 
         sched.start()
 
+
+class DTableNotificationRulesCleaner(Thread):
+    def __init__(self, db_session_class):
+        super(DTableNotificationRulesCleaner, self).__init__()
+        self.db_session_class = db_session_class
+
+    def run(self):
+        sched = BlockingScheduler()
+        # fire at 0 o'clock in every day of week
+        @sched.scheduled_job('cron', day_of_week='*', hour='0')
+        def timed_job():
+            logging.info('Starts to clean inactive notification rules...')
+
+            db_session = self.db_session_class()
+
+            inactive_time_limit = datetime.utcnow() - timedelta(days=180)
+
+            # update rules that are only created but not triggered for too long or not triggered for too long is_valid=0
+            sql = '''
+                UPDATE dtable_notification_rules
+                SET is_valid=0
+                WHERE (last_trigger_time IS NULL AND ctime < :inactive_time_limit)
+                OR (last_trigger_time IS NOT NULL AND last_trigger_time < :inactive_time_limit)
+            '''
+
+            try:
+                db_session.execute(sql, {'inactive_time_limit': inactive_time_limit})
+                db_session.commit()
+            except Exception as e:
+                logging.exception('error when cleaning inactive notification rules: %s', e)
+            finally:
+                db_session.close()
+
+        sched.start()
