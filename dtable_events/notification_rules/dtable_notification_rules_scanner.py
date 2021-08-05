@@ -148,17 +148,18 @@ class DTableNotificationRulesCleaner(Thread):
 
             db_session = self.db_session_class()
 
-            before_half_year = datetime.utcnow() - timedelta(days=180)
+            inactive_time_limit = datetime.utcnow() - timedelta(days=180)
 
+            # update rules that are only created but not triggered for too long or not triggered for too long is_valid=0
             sql = '''
                 UPDATE dtable_notification_rules
                 SET is_valid=0
-                WHERE (ctime < :last_check_time AND last_trigger_time IS NULL)
-                OR (last_trigger_time IS NOT NULL AND last_trigger_time < :last_check_time)
+                WHERE (last_trigger_time IS NULL AND ctime < :inactive_time_limit)
+                OR (last_trigger_time IS NOT NULL AND last_trigger_time < :inactive_time_limit)
             '''
 
             try:
-                db_session.execute(sql, {'last_check_time': before_half_year})
+                db_session.execute(sql, {'inactive_time_limit': inactive_time_limit})
                 db_session.commit()
             except Exception as e:
                 logging.exception('error when cleaning inactive notification rules: %s', e)
