@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import os
+import sys
 import json
 import logging
 from datetime import datetime, timedelta
@@ -8,6 +10,22 @@ from sqlalchemy import desc, func, case
 from dtable_events.activities.models import Activities
 
 logger = logging.getLogger(__name__)
+
+# DTABLE_WEB_DIR
+dtable_web_dir = os.environ.get('DTABLE_WEB_DIR', '')
+if not dtable_web_dir:
+    logger.critical('dtable_web_dir is not set')
+    raise RuntimeError('dtable_web_dir is not set')
+if not os.path.exists(dtable_web_dir):
+    logger.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
+    raise RuntimeError('dtable_web_dir does not exist')
+
+sys.path.insert(0, dtable_web_dir)
+try:
+    from seahub.settings import TIME_ZONE
+except Exception as error:
+    TIME_ZONE = 'UTC'
+    logger.warning('Can not import seahub.settings: %s.' % error)
 
 
 class TableActivityDetail(object):
@@ -115,7 +133,7 @@ def get_table_activities(session, uuid_list, start, limit):
     try:
         q = session.query(
             Activities.dtable_uuid, Activities.op_time.label('op_date'),
-            func.date_format(Activities.op_time, '%Y-%m-%d 00:00:00').label('date'),
+            func.date_format(func.convert_tz(Activities.op_time, 'UTC', TIME_ZONE), '%Y-%m-%d 00:00:00').label('date'),
             func.count(case([(Activities.op_type == 'insert_row', 1)])).label('insert_row'),
             func.count(case([(Activities.op_type == 'modify_row', 1)])).label('modify_row'),
             func.count(case([(Activities.op_type == 'delete_row', 1)])).label('delete_row'))
@@ -141,7 +159,7 @@ def get_activities_detail(session, dtable_uuid, start_time, end_time, start, lim
     activities = list()
     try:
         q = session.query(Activities).filter(Activities.dtable_uuid == dtable_uuid).\
-            filter(Activities.op_time.between(start_time, end_time))
+            filter(func.convert_tz(Activities.op_time, 'UTC', TIME_ZONE).between(start_time, end_time))
         activities = q.order_by(desc(Activities.op_time)).slice(start, start + limit).all()
     except Exception as e:
         logger.error('Get table activities detail failed: %s' % e)
