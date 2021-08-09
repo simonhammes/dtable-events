@@ -310,7 +310,7 @@ class AddRowAction(BaseAction):
 
 class NotifyAction(BaseAction):
 
-    def __init__(self, auto_rule, data, msg, users):
+    def __init__(self, auto_rule, data, msg, users, users_column_key):
         """
         auto_rule: instance of AutomationRule
         data: if auto_rule.PER_UPDATE, data is event data from redis
@@ -321,6 +321,7 @@ class NotifyAction(BaseAction):
         self.action_type = 'notify'
         self.msg = msg
         self.users = users
+        self.users_column_key = users_column_key
 
         self.column_blanks = []
         self.col_name_dict = {}
@@ -357,7 +358,13 @@ class NotifyAction(BaseAction):
         }
 
         user_msg_list = []
-        for user in self.users:
+        users = self.users
+        if self.users_column_key:
+            users_from_column = row.get(self.users_column_key, [])
+            if not isinstance(users_from_column, list):
+                users_from_column = [users_from_column, ]
+            users = list(set(self.users + users_from_column))
+        for user in users:
             user_msg_list.append({
                 'to_user': user,
                 'msg_type': 'notification_rules',
@@ -694,7 +701,8 @@ class AutomationRule:
                 elif action_info.get('type') == 'notify':
                     default_msg = action_info.get('default_msg', '')
                     users = action_info.get('users', [])
-                    NotifyAction(self, self.data, default_msg, users).do_action()
+                    users_column_key = action_info.get('users_column_key', '')
+                    NotifyAction(self, self.data, default_msg, users, users_column_key).do_action()
 
                 elif action_info.get('type') == 'lock_record':
                     LockRowAction(self, self.data).do_action()
