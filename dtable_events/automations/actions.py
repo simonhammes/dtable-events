@@ -340,7 +340,7 @@ class NotifyAction(BaseAction):
         return fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
 
     def per_update_notify(self):
-        dtable_uuid, row = self.auto_rule.dtable_uuid, self.data['converted_row']
+        dtable_uuid, row, raw_row = self.auto_rule.dtable_uuid, self.data['converted_row'], self.data['row']
         table_id, view_id = self.auto_rule.table_id, self.auto_rule.view_id
 
         msg = self.msg
@@ -360,7 +360,7 @@ class NotifyAction(BaseAction):
         user_msg_list = []
         users = self.users
         if self.users_column_key:
-            users_from_column = row.get(self.users_column_key, [])
+            users_from_column = raw_row.get(self.users_column_key, [])
             if not isinstance(users_from_column, list):
                 users_from_column = [users_from_column, ]
             users = list(set(self.users + users_from_column))
