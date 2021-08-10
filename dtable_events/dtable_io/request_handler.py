@@ -234,6 +234,38 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp = {'success': True}
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
+        elif path == '/convert-page-to-pdf':
+            if task_manager.tasks_queue.full():
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current task: %s, thread.is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.t.is_alive()))
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            dtable_uuid = arguments['dtable_uuid'][0]
+            page_id = arguments['page_id'][0]
+            row_id = arguments['row_id'][0] if arguments.get('row_id') else None
+            access_token = arguments['access_token'][0]
+            session_id = arguments['session_id'][0]
+
+            try:
+                task_id = task_manager.convert_page_to_pdf(
+                    dtable_uuid,
+                    page_id,
+                    row_id,
+                    access_token,
+                    session_id
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {'task_id': task_id}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
         else:
             self.send_error(400, 'path %s invalid.' % path)
 

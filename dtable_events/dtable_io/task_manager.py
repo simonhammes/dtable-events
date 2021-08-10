@@ -114,6 +114,17 @@ class TaskManager(object):
             return True
         return False
 
+    def convert_page_to_pdf(self, dtable_uuid, page_id, row_id, access_token, session_id):
+        from dtable_events.dtable_io import convert_page_to_pdf
+
+        task_id = str(int(time.time()*1000))
+        task = (convert_page_to_pdf,
+                (dtable_uuid, page_id, row_id, access_token, session_id))
+        self.tasks_queue.put(task_id)
+        self.tasks_map[task_id] = task
+
+        return task_id
+
     def handle_task(self):
         from dtable_events.dtable_io import dtable_io_logger
 

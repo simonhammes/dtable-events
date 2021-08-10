@@ -1,11 +1,20 @@
-import shutil
+import base64
+import json
 import os
+import shutil
+
 import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.expected_conditions import staleness_of
+from selenium.webdriver.support.ui import WebDriverWait
+
 from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, prepare_dtable_json_from_memory
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server
+from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.statistics.db import save_email_sending_records
 
 dtable_io_logger = setup_logger('dtable_events_io.log')
@@ -276,3 +285,60 @@ def send_email_msg(auth_info, send_info, username, config=None, db_session=None)
     finally:
         session.close()
     return result
+
+
+def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
+    if not row_id:
+        url = task_manager.conf['dtable_web_service_url'].strip('/') + '/dtable/%s/page-design/%s/' % (dtable_uuid, page_id)
+    if row_id:
+        url = task_manager.conf['dtable_web_service_url'].strip('/') + '/dtable/%s/page-design/%s/row/%s/' % (dtable_uuid, page_id, row_id)
+    url += '?access-token=%s&need_convert=%s' % (access_token, 0)
+    target_dir = '/tmp/dtable-io/convert-page-to-pdf'
+    if not os.path.isdir(target_dir):
+        os.makedirs(target_dir)
+    target_path = os.path.join(target_dir, '%s_%s_%s.pdf' % (dtable_uuid, page_id, row_id))
+
+    webdriver_options = Options()
+    driver = None
+
+    webdriver_options.add_argument('--no-sandbox')
+    webdriver_options.add_argument('--headless')
+    webdriver_options.add_argument('--disable-gpu')
+
+    driver = webdriver.Chrome('/usr/local/bin/chromedriver', options=webdriver_options)
+
+    driver.get(task_manager.conf['dtable_web_service_url'])
+    cookies = [{
+        'name': 'dtablesid',
+        'value': session_id
+    }]
+    for cookie in cookies:
+        driver.add_cookie(cookie)
+    driver.get(url)
+
+    try:
+        WebDriverWait(driver, 60).until(lambda driver: driver.find_element_by_id('page-design-content') is not None)
+    finally:
+        calculated_print_options = {
+            'landscape': False,
+            'displayHeaderFooter': False,
+            'printBackground': True,
+            'preferCSSPageSize': True,
+        }
+        
+        resource = "/session/%s/chromium/send_command_and_get_result" % driver.session_id
+        url = driver.command_executor._url + resource
+        body = json.dumps({'cmd': 'Page.printToPDF', 'params': calculated_print_options})
+
+        try:
+            response = driver.command_executor._request('POST', url, body)
+            if not response:
+                dtable_io_logger.error('execute printToPDF error no response')
+            v = response.get('value')['data']
+            with open(target_path, 'wb') as f:
+                f.write(base64.b64decode(v))
+            dtable_io_logger.info('convert page to pdf success!')
+        except Exception as e:
+            dtable_io_logger.error('execute printToPDF error: {}'.format(e))
+
+        driver.quit()
