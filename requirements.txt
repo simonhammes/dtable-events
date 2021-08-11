@@ -2,3 +2,4 @@ redis
 SQLAlchemy
 apscheduler
 openpyxl
+selenium
