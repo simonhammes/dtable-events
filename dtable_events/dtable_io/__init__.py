@@ -316,8 +316,20 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
         driver.add_cookie(cookie)
     driver.get(url)
 
+    def check_images_loaded_complete(driver):
+        result = driver.execute_script('''
+            let images = Array.from(document.images).filter(image => image.src.indexOf('/asset/') !== -1);
+            if (images.length === 0) return true;
+            let targetNumber = parseInt(images.length * 4 / 5);  // at least 4/5 images from asset are loaded completely
+            return images.filter(image => image.complete).length >= targetNumber
+        ''')
+        return result
+
     try:
+        # make sure react is rendered, timeout 60s
         WebDriverWait(driver, 60).until(lambda driver: driver.find_element_by_id('page-design-content') is not None)
+        # make sure images from asset are rendered, timeout 120s
+        WebDriverWait(driver, 120).until(lambda driver: check_images_loaded_complete(driver))
     finally:
         calculated_print_options = {
             'landscape': False,
