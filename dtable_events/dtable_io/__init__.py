@@ -309,7 +309,7 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
 
     driver.get(task_manager.conf['dtable_web_service_url'])
     cookies = [{
-        'name': 'dtablesid',
+        'name': task_manager.conf['session_cookie_name'],
         'value': session_id
     }]
     for cookie in cookies:
@@ -330,6 +330,8 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
         WebDriverWait(driver, 60).until(lambda driver: driver.find_element_by_id('page-design-content') is not None)
         # make sure images from asset are rendered, timeout 120s
         WebDriverWait(driver, 120).until(lambda driver: check_images_loaded_complete(driver))
+    except Exception as e:
+        dtable_io_logger.warning('wait for page design error: %s', e)
     finally:
         calculated_print_options = {
             'landscape': False,
