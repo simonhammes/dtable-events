@@ -2,11 +2,11 @@ import base64
 import json
 import os
 import shutil
+import time
 
 import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.expected_conditions import staleness_of
 from selenium.webdriver.support.ui import WebDriverWait
 
 from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
@@ -316,20 +316,39 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
         driver.add_cookie(cookie)
     driver.get(url)
 
-    def check_images_loaded_complete(driver):
-        result = driver.execute_script('''
+    def check_images_and_networks(driver, frequency=0.5):
+        images_done = driver.execute_script('''
+            let p = window.performance || window.mozPerformance || window.msPerformance || window.webkitPerformance || {};
+            let entries = p.getEntries();
             let images = Array.from(document.images).filter(image => image.src.indexOf('/asset/') !== -1);
             if (images.length === 0) return true;
-            let targetNumber = parseInt(images.length * 4 / 5);  // at least 4/5 images from asset are loaded completely
-            return images.filter(image => image.complete).length >= targetNumber
+            return images.filter(image => image.complete).length == images.length;
         ''')
-        return result
+        if not images_done:
+            return False
+        entries_count = None
+        while True:
+            now_entries_count = driver.execute_script('''
+                let p = window.performance || window.mozPerformance || window.msPerformance || window.webkitPerformance || {};
+                return p.getEntries().length;
+            ''')
+            if entries_count is None:
+                entries_count = now_entries_count
+                time.sleep(frequency)
+                continue
+            else:
+                if now_entries_count == entries_count and \
+                    driver.execute_script("return document.readyState === 'complete'"):
+                    return True
+                break
+        return False
 
     try:
         # make sure react is rendered, timeout 60s
         WebDriverWait(driver, 60).until(lambda driver: driver.find_element_by_id('page-design-content') is not None)
         # make sure images from asset are rendered, timeout 120s
-        WebDriverWait(driver, 120).until(lambda driver: check_images_loaded_complete(driver))
+        WebDriverWait(driver, 120, poll_frequency=1).until(lambda driver: check_images_and_networks(driver))
+        time.sleep(2) # wait for fonts rendering
     except Exception as e:
         dtable_io_logger.warning('wait for page design error: %s', e)
     finally:
