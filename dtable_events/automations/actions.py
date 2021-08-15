@@ -3,10 +3,14 @@ import logging
 import re
 import time
 import os
+from urllib import parse
+from uuid import UUID
 from datetime import datetime, date, timedelta
 
 import jwt
 import requests
+
+from seaserv import seafile_api
 
 from dtable_events.automations.models import BoundThirdPartyAccounts
 from dtable_events.dtable_io import send_wechat_msg, send_email_msg
@@ -27,13 +31,16 @@ if not os.path.exists(dtable_web_dir):
     logging.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
     raise RuntimeError('dtable_web_dir does not exist')
 try:
-    # from seahub.settings import DTABLE_PRIVATE_KEY, DTABLE_SERVER_URL
     import seahub.settings as seahub_settings
+    DTABLE_WEB_SERVICE_URL = getattr(seahub_settings, 'DTABLE_WEB_SERVICE_URL')
     DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
     DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
     TIME_ZONE = getattr(seahub_settings, 'TIME_ZONE', 'UTC')
     ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
     DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
+    FILE_SERVER_ROOT = getattr(seahub_settings, 'FILE_SERVER_ROOT', 'http://127.0.0.1:8082')
+    SEATABLE_FAAS_AUTH_TOKEN = getattr(seahub_settings, 'SEATABLE_FAAS_AUTH_TOKEN')
+    SEATABLE_FAAS_URL = getattr(seahub_settings, 'SEATABLE_FAAS_URL')
 except ImportError as e:
     logger.critical("Can not import dtable_web settings: %s." % e)
     raise RuntimeError("Can not import dtable_web settings: %s" % e)
@@ -632,6 +639,129 @@ class SendEmailAction(BaseAction):
             self.cron_notify()
             self.auto_rule.set_done_actions()
 
+
+class RunPythonScriptAction(BaseAction):
+
+    def __init__(self, auto_rule, data, script_name, workspace_id, owner, org_id, repo_id):
+        super().__init__(auto_rule, data=data)
+        self.action_type = 'run_python_script'
+        self.script_name = script_name
+        self.workspace_id = workspace_id
+        self.owner = owner
+        self.org_id = org_id
+        self.repo_id = repo_id
+
+    def _can_do_action(self):
+        if not SEATABLE_FAAS_URL:
+            return False
+        if self.auto_rule.can_run_python is not None:
+            return self.auto_rule.can_run_python
+
+        permission_url = DTABLE_WEB_SERVICE_URL.strip('/') + '/api/v2.1/script-permissions/'
+        headers = {'Authorization': 'Token ' + SEATABLE_FAAS_AUTH_TOKEN}
+        if self.org_id != -1:
+            json_data = {'org_ids': [self.org_id]}
+        elif self.org_id == -1 and '@seafile_group' not in self.owner:
+            json_data = {'users': [self.owner]}
+        else:
+            return True
+        try:
+            resp = requests.get(permission_url, headers=headers, json=json_data)
+            if resp.status_code != 200:
+                logger.error('check run script permission error response: %s', resp.status_code)
+                return False
+            permission_dict = resp.json()
+        except Exception as e:
+            logger.error('check run script permission error: %s', e)
+            return False
+
+        # response dict like
+        # {
+        #   'user_script_permissions': {username1: {'can_run_python_script': True/False}}
+        #   'can_schedule_run_script': {org1: {'can_run_python_script': True/False}}
+        # }
+        if self.org_id != -1:
+            can_run_python = permission_dict['org_script_permissions'][self.org_id]['can_run_python_script']
+        else:
+            can_run_python = permission_dict['user_script_permissions'][self.owner]['can_run_python_script']
+
+        self.auto_rule.can_run_python = can_run_python
+        return can_run_python
+
+    def _get_scripts_running_limit(self):
+        if self.auto_rule.scripts_running_limit is not None:
+            return self.auto_rule.scripts_running_limit
+        if self.org_id != -1:
+            params = {'org_id': self.org_id}
+        elif self.org_id == -1 and '@seafile_group' not in self.owner:
+            params = {'username': self.owner}
+        else:
+            return -1
+        url = DTABLE_WEB_SERVICE_URL.strip('/') + '/api/v2.1/scripts-running-limit/'
+        headers = {'Authorization': 'Token ' + SEATABLE_FAAS_AUTH_TOKEN}
+        try:
+            resp = requests.get(url, headers=headers, params=params)
+            if resp.status_code != 200:
+                logger.error('get scripts running limit error response: %s', resp.status_code)
+                return 0
+            scripts_running_limit = resp.json()['scripts_running_limit']
+        except Exception as e:
+            logger.error('get script running limit error: %s', e)
+            return 0
+        self.auto_rule.scripts_running_limit = scripts_running_limit
+        return scripts_running_limit
+
+    def do_action(self):
+        if not self._can_do_action():
+            return
+
+        # prepare params to request faas url
+        script_path = os.path.join(
+            '/asset', str(UUID(self.auto_rule.dtable_uuid)), 'scripts', self.script_name)
+        asset_id = seafile_api.get_file_id_by_path(self.repo_id, script_path)
+        if not asset_id:
+            logger.warning('script %s not found!', self.script_name)
+            return
+
+        token = seafile_api.get_fileserver_access_token(
+            self.repo_id, asset_id, 'download', '', use_onetime=True)
+        if not token:
+            logger.error('script %s cant get file server token!', self.script_name)
+            return
+
+        script_url = '%s/files/%s/%s' % (FILE_SERVER_ROOT.strip('/'), token, parse.quote(self.script_name))
+
+        context_data = {'table': self.auto_rule.table_name}
+        if self.auto_rule.run_condition == PER_UPDATE:
+            context_data['row'] = self.data['converted_row']
+        scripts_running_limit = self._get_scripts_running_limit()
+
+        # request faas url
+        headers = {'Authorization': 'Token ' + SEATABLE_FAAS_AUTH_TOKEN}
+        url = SEATABLE_FAAS_URL.strip('/') + '/run-script/'
+        try:
+            response = requests.post(url, json={
+                'dtable_uuid': str(UUID(self.auto_rule.dtable_uuid)),
+                'script_name': self.script_name,
+                'context_data': context_data,
+                'owner': self.owner,
+                'org_id': self.org_id,
+                'script_url': script_url,
+                'temp_api_token': self.auto_rule.get_temp_api_token(app_name=self.script_name),
+                'scripts_running_limit': scripts_running_limit,
+                'operate_from': 'automation-rule',
+                'operator': self.auto_rule.rule_id
+            }, headers=headers, timeout=10)
+        except Exception as e:
+            logger.exception(e)
+            logger.error(e)
+        else:
+            if response.status_code != 200:
+                logger.warning('run script error status code: %s', response.status_code)
+            else:
+                self.auto_rule.set_done_actions()
+
+
 class RuleInvalidException(Exception):
     """
     Exception which indicates rule need to be set is_valid=Fasle
@@ -662,6 +792,8 @@ class AutomationRule:
         self._dtable_metadata = None
         self._access_token = None
         self._view_columns = None
+        self.can_run_python = None
+        self.scripts_running_limit = None
 
         self.done_actions = False
         self._load_trigger_and_actions(raw_trigger, raw_actions)
@@ -736,6 +868,18 @@ class AutomationRule:
                     break
         return self._table_name
 
+    def get_temp_api_token(self, username=None, app_name=None):
+        payload = {
+            'dtable_uuid': self.dtable_uuid,
+            'exp': int(time.time()) + 60 * 60,
+        }
+        if username:
+            payload['username'] = username
+        if app_name:
+            payload['app_name'] = app_name
+        temp_api_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256').decode()
+        return temp_api_token
+
     def can_do_actions(self):
         if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY, CONDITION_ROWS_ADDED, CONDITION_PERIODICALLY_BY_CONDITION):
             return False
@@ -778,8 +922,8 @@ class AutomationRule:
     def do_actions(self):
         if not self.can_do_actions():
             return
-        try:
-            for action_info in self.action_infos:
+        for action_info in self.action_infos:
+            try:
                 if action_info.get('type') == 'update_record':
                     updates = action_info.get('updates')
                     UpdateAction(self, self.data, updates).do_action()
@@ -817,15 +961,24 @@ class AutomationRule:
                     }
                     SendEmailAction(self, self.data, send_info, account_id).do_action()
 
-        except RuleInvalidException as e:
-            logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
-            self.set_invalid()
-        except Exception as e:
-            logger.exception(e)
-            logger.error('rule: %s, do actions error: %s', self.rule_id, e)
-        finally:
-            if self.done_actions:
-                self.update_last_trigger_time()
+                elif action_info.get('type') == 'run_python_script':
+                    script_name = action_info.get('script_name')
+                    workspace_id = action_info.get('workspace_id')
+                    owner = action_info.get('owner')
+                    org_id = action_info.get('org_id')
+                    repo_id = action_info.get('repo_id')
+                    RunPythonScriptAction(self, self.data, script_name, workspace_id, owner, org_id, repo_id).do_action()
+
+            except RuleInvalidException as e:
+                logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
+                self.set_invalid()
+                break
+            except Exception as e:
+                logger.exception(e)
+                logger.error('rule: %s, do actions error: %s', self.rule_id, e)
+
+        if self.done_actions:
+            self.update_last_trigger_time()
 
     def set_done_actions(self, done=True):
         self.done_actions = done
