@@ -402,7 +402,10 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
         }
 
         if users_column_key:
-            users = list(set(users + row.get(users_column_key, [])))
+            users_from_column = row.get(users_column_key, [])
+            if not isinstance(users_from_column, list):
+                users_from_column = [users_from_column, ]
+            users = list(set(users + users_from_column))
 
         for user in users:
             user_msg_list.append({
@@ -423,7 +426,10 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
             'row_id_list': [row['_id']],
         }
         if users_column_key:
-            users = list(set(users + row.get(users_column_key, [])))
+            users_from_column = row.get(users_column_key, [])
+            if not isinstance(users_from_column, list):
+                users_from_column = [users_from_column, ]
+            users = list(set(users + users_from_column))
 
         for user in users:
             user_msg_list.append({
