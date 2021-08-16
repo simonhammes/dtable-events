@@ -17,7 +17,7 @@ class TaskManager(object):
         self.current_task_info = None
         self.t = None
 
-    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, dtable_server_url, enable_dtable_server_cluster, dtable_proxy_server_url, io_task_timeout, config):
+    def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, dtable_server_url, enable_dtable_server_cluster, dtable_proxy_server_url, io_task_timeout, session_cookie_name, config):
         self.conf = {
             'dtable_private_key': dtable_private_key,
             'dtable_web_service_url': dtable_web_service_url,
@@ -27,6 +27,7 @@ class TaskManager(object):
             'dtable_proxy_server_url': dtable_proxy_server_url,
             'io_task_timeout': io_task_timeout,
             'workers': workers,
+            'session_cookie_name': session_cookie_name
         }
         self.config = config
 
