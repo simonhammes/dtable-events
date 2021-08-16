@@ -22,6 +22,7 @@ class TableActivityDetail(object):
         self.id = activity.id
         self.dtable_uuid = activity.dtable_uuid
         self.row_id = activity.row_id
+        self.row_count = activity.row_count
         self.op_user = activity.op_user
         self.op_type = activity.op_type
         self.op_time = activity.op_time
@@ -123,9 +124,9 @@ def get_table_activities(session, uuid_list, start, limit):
         q = session.query(
             Activities.dtable_uuid, Activities.op_time.label('op_date'),
             func.date_format(func.convert_tz(Activities.op_time, '+00:00', to_tz), '%Y-%m-%d 00:00:00').label('date'),
-            func.count(case([(Activities.op_type == 'insert_row', 1)])).label('insert_row'),
-            func.count(case([(Activities.op_type == 'modify_row', 1)])).label('modify_row'),
-            func.count(case([(Activities.op_type == 'delete_row', 1)])).label('delete_row'))
+            func.sum(case([(Activities.op_type == 'insert_row', Activities.row_count)])).label('insert_row'),
+            func.sum(case([(Activities.op_type == 'modify_row', Activities.row_count)])).label('modify_row'),
+            func.sum(case([(Activities.op_type == 'delete_row', Activities.row_count)])).label('delete_row'))
         q = q.filter(
             Activities.op_time > (datetime.utcnow() - timedelta(days=7)),
             Activities.dtable_uuid.in_(uuid_list)).group_by(Activities.dtable_uuid, 'date')
@@ -184,9 +185,8 @@ def save_user_activities(session, event):
     detail_dict["table_name"] = table_name
     detail_dict["row_name"] = row_name
     detail_dict["row_data"] = row_data
-    detail_dict["row_count"] = row_count
     detail = json.dumps(detail_dict)
 
-    activity = Activities(dtable_uuid, row_id, op_user, op_type, op_time, detail, op_app)
+    activity = Activities(dtable_uuid, row_id, row_count, op_user, op_type, op_time, detail, op_app)
     session.add(activity)
     session.commit()
