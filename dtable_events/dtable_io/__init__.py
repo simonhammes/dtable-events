@@ -326,6 +326,8 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
         ''')
         if not images_done:
             return False
+
+        # make sure no new connections in 0.5s. TODO: Fake and need to be completed
         entries_count = None
         while True:
             now_entries_count = driver.execute_script('''
