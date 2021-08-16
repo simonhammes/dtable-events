@@ -317,6 +317,11 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
     driver.get(url)
 
     def check_images_and_networks(driver, frequency=0.5):
+        """
+        make sure all images complete
+        make sure no new connections in 0.5s.
+        TODO: Unreliable and need to be continuously updated.
+        """
         images_done = driver.execute_script('''
             let p = window.performance || window.mozPerformance || window.msPerformance || window.webkitPerformance || {};
             let entries = p.getEntries();
@@ -327,7 +332,6 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
         if not images_done:
             return False
 
-        # make sure no new connections in 0.5s. TODO: Fake and need to be completed
         entries_count = None
         while True:
             now_entries_count = driver.execute_script('''
@@ -347,9 +351,9 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
 
     try:
         # make sure react is rendered, timeout 60s
-        WebDriverWait(driver, 60).until(lambda driver: driver.find_element_by_id('page-design-content') is not None)
+        WebDriverWait(driver, 60).until(lambda driver: driver.find_element_by_class_name('page-design-record') is not None, message='wait react timeout')
         # make sure images from asset are rendered, timeout 120s
-        WebDriverWait(driver, 120, poll_frequency=1).until(lambda driver: check_images_and_networks(driver))
+        WebDriverWait(driver, 120, poll_frequency=1).until(lambda driver: check_images_and_networks(driver), message='wait images and networks timeout')
         time.sleep(2) # wait for fonts rendering
     except Exception as e:
         dtable_io_logger.warning('wait for page design error: %s', e)
