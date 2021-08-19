@@ -560,7 +560,7 @@ class RuleInvalidException(Exception):
 
 class AutomationRule:
 
-    def __init__(self, rule_id, run_condition, dtable_uuid, trigger_count, raw_trigger, raw_actions, last_trigger_time, data, db_session):
+    def __init__(self, rule_id, run_condition, dtable_uuid, trigger_count, org_id, creator, raw_trigger, raw_actions, last_trigger_time, data, db_session):
         self.rule_id = rule_id
         self.rule_name = ''
         self.run_condition = run_condition
@@ -569,6 +569,8 @@ class AutomationRule:
         self.action_infos = []
         self.last_trigger_time = last_trigger_time
         self.trigger_count = trigger_count
+        self.org_id = org_id
+        self.creator = creator
         self.data = data
         self.db_session = db_session
 
@@ -742,10 +744,37 @@ class AutomationRule:
 
     def update_last_trigger_time(self):
         try:
-            set_invalid_sql = '''
-                UPDATE dtable_automation_rules SET last_trigger_time=:trigger_time, trigger_count=:trigger_count WHERE id=:rule_id
+            set_statistic_sql_user = '''
+                INSERT INTO user_auto_rules_statistics (username, trigger_date, trigger_count, update_at) VALUES 
+                (:username, :trigger_date, 1, :trigger_time)
+                ON DUPLICATE KEY UPDATE
+                trigger_count=trigger_count+1,
+                update_at=:trigger_time
             '''
-            self.db_session.execute(set_invalid_sql, {'rule_id': self.rule_id, 'trigger_time': datetime.utcnow(), 'trigger_count': self.trigger_count + 1})
+
+            set_statistic_sql_org = '''
+                INSERT INTO org_auto_rules_statistics (org_id, trigger_date, trigger_count, update_at) VALUES
+                (:org_id, :trigger_date, 1, :trigger_time)
+                ON DUPLICATE KEY UPDATE
+                trigger_count=trigger_count+1,
+                update_at=:trigger_time
+            '''
+            set_last_trigger_time_sql = '''
+                UPDATE dtable_automation_rules SET last_trigger_time=:trigger_time, trigger_count=:trigger_count WHERE id=:rule_id;
+            '''
+
+            org_id = self.org_id
+            if not org_id:
+                sql = set_last_trigger_time_sql
+            else:
+                sql = "%s%s" % (set_last_trigger_time_sql, set_statistic_sql_user if self.org_id == -1 else set_statistic_sql_org)
+            self.db_session.execute(sql, {'rule_id': self.rule_id,
+                                                      'trigger_time': datetime.utcnow(),
+                                                      'trigger_date': datetime.utcnow().date(),
+                                                      'trigger_count': self.trigger_count + 1,
+                                                      'username': self.creator,
+                                                      'org_id': self.org_id
+                                                      })
             self.db_session.commit()
         except Exception as e:
             logger.error('set rule: %s invalid error: %s', self.rule_id, e)
