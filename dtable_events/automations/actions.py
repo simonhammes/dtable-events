@@ -768,13 +768,14 @@ class AutomationRule:
                 sql = set_last_trigger_time_sql
             else:
                 sql = "%s%s" % (set_last_trigger_time_sql, set_statistic_sql_user if self.org_id == -1 else set_statistic_sql_org)
-            self.db_session.execute(sql, {'rule_id': self.rule_id,
-                                                      'trigger_time': datetime.utcnow(),
-                                                      'trigger_date': datetime.utcnow().date(),
-                                                      'trigger_count': self.trigger_count + 1,
-                                                      'username': self.creator,
-                                                      'org_id': self.org_id
-                                                      })
+            self.db_session.execute(sql, {
+                'rule_id': self.rule_id,
+                'trigger_time': datetime.utcnow(),
+                'trigger_date': datetime.utcnow().date(),
+                'trigger_count': self.trigger_count + 1,
+                'username': self.creator,
+                'org_id': self.org_id
+            })
             self.db_session.commit()
         except Exception as e:
             logger.error('set rule: %s invalid error: %s', self.rule_id, e)
