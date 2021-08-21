@@ -14,8 +14,8 @@ class TaskManager(object):
         self.tasks_queue = queue.Queue(10)
         self.conf = None
         self.config = None
-        self.current_task_info = None
-        self.t = None
+        self.current_task_info = {}
+        self.threads = []
 
     def init(self, workers, dtable_private_key, dtable_web_service_url, file_server_port, dtable_server_url, enable_dtable_server_cluster, dtable_proxy_server_url, io_task_timeout, session_cookie_name, config):
         self.conf = {
@@ -126,6 +126,12 @@ class TaskManager(object):
 
         return task_id
 
+    def threads_is_alive(self):
+        info = {}
+        for t in self.threads:
+            info[t.name] = t.is_alive()
+        return info
+
     def handle_task(self):
         from dtable_events.dtable_io import dtable_io_logger
 
@@ -140,8 +146,9 @@ class TaskManager(object):
 
             try:
                 task = self.tasks_map[task_id]
-                self.current_task_info = task_id + ' ' + str(task[0])
-                dtable_io_logger.info('Run task: %s' % self.current_task_info)
+                task_info = task_id + ' ' + str(task[0])
+                self.current_task_info[task_id] = task_info
+                dtable_io_logger.info('Run task: %s' % task_info)
                 start_time = time.time()
 
                 # run
@@ -149,17 +156,21 @@ class TaskManager(object):
                 self.tasks_map[task_id] = 'success'
 
                 finish_time = time.time()
-                dtable_io_logger.info('Run task success: %s cost %ds \n' % (self.current_task_info, int(finish_time - start_time)))
-                self.current_task_info = None
+                dtable_io_logger.info('Run task success: %s cost %ds \n' % (task_info, int(finish_time - start_time)))
+                self.current_task_info.pop(task_id, None)
             except Exception as e:
                 dtable_io_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
                 self.tasks_map.pop(task_id, None)
-                self.current_task_info = None
+                self.current_task_info.pop(task_id, None)
 
     def run(self):
-        self.t = threading.Thread(target=self.handle_task)
-        self.t.setDaemon(True)
-        self.t.start()
+        thread_num = self.conf['workers']
+        for i in range(thread_num):
+            t_name = 'TaskManager Thread-' + str(i)
+            t = threading.Thread(target=self.handle_task, name=t_name)
+            self.threads.append(t)
+            t.setDaemon(True)
+            t.start()
 
     def cancel_task(self, task_id):
         self.tasks_map.pop(task_id, None)
