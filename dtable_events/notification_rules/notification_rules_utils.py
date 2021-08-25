@@ -449,7 +449,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
-    dtable_uuid = rule[5]
+    dtable_uuid = rule[4]
 
     trigger = json.loads(trigger)
     action = json.loads(action)

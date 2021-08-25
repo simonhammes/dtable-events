@@ -85,11 +85,11 @@ class DTableNofiticationRulesScanner(object):
 
 def scan_dtable_notification_rules(db_session, timezone):
     sql = '''
-            SELECT `id`, `trigger`, `action`, `creator`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules
-            WHERE ((run_condition='per_day' AND last_trigger_time<:per_day_check_time)
-            OR (run_condition='per_week' AND last_trigger_time<:per_week_check_time)
-            OR last_trigger_time is null)
-            AND is_valid=1
+            SELECT `dnr`.`id`, `trigger`, `action`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules dnr
+            JOIN dtables d ON dnr.dtable_uuid=d.uuid
+            WHERE ((run_condition='per_day' AND (last_trigger_time<:per_day_check_time OR last_trigger_time IS NULL))
+            OR (run_condition='per_week' AND (last_trigger_time<:per_week_check_time OR last_trigger_time IS NULL)))
+            AND is_valid=1 AND d.deleted=0
         '''
     per_day_check_time = datetime.utcnow() - timedelta(hours=23)
     per_week_check_time = datetime.utcnow() - timedelta(days=6)
@@ -99,7 +99,7 @@ def scan_dtable_notification_rules(db_session, timezone):
     })
 
     for rule in rules:
-        if not rule[5]:  # filter and ignore non-dtable-uuid records(some old records)
+        if not rule[4]:  # filter and ignore non-dtable-uuid records(some old records)
             continue
         try:
             check_near_deadline_notification_rule(rule, db_session, timezone)
