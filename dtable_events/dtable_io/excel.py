@@ -178,7 +178,7 @@ def parse_excel_columns(sheet_rows, head_index, max_column):
         value_list = [row[index].value for row in value_rows]
         column_type, column_data = parse_excel_column_type(value_list)
         column = {
-            'name': column_name,
+            'name': column_name.replace('\ufeff', '').strip(),  # remove whitespace from both ends of name and BOM char(\ufeff)
             'type': column_type,
             'data': column_data,
         }
