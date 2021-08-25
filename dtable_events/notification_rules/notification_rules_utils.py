@@ -109,7 +109,7 @@ def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_key,
     res = requests.get(url, headers=headers, params=params)
 
     if res.status_code != 200:
-        logger.error(f'failed to list_users_by_column_key {res.text}')
+        logger.error(f'dtable {dtable_uuid} failed to list_users_by_column_key {res.text}')
 
     rowdict = json.loads(res.content)
     user_list = rowdict.get(column_key, [])
@@ -128,7 +128,7 @@ def send_notification(dtable_uuid, user_msg_list, dtable_server_access_token):
     res = requests.post(url, headers=headers, json=body)
 
     if res.status_code != 200:
-        logger.error(f'failed to send_notification {res.text}')
+        logger.error(f'dtable {dtable_uuid} failed to send_notification {res.text}')
 
 
 def deal_invalid_rule(rule_id, db_session):
@@ -156,13 +156,13 @@ def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, al
     try:
         res = requests.get(url, headers=headers, params=query_params)
     except Exception as e:
-        logger.error(e)
+        logger.error('dtable: %s request list-rows-near-deadline error: %s', dtable_uuid, e)
         return []
 
     if res.status_code == 404:
         deal_invalid_rule(rule_id, db_session)
     if res.status_code != 200:
-        logger.error(res.text)
+        logger.error('dtable: %s request list-rows-near-deadline error status code: %s, response text: %s', dtable_uuid, res.status_code, res.text)
         return []
 
     rows = json.loads(res.content).get('rows', [])
@@ -486,7 +486,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
     try:
         rows_near_deadline = list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token, rule_id, db_session)
     except Exception as e:
-        logger.error('list rows_near_deadline failed. error: {}'.format(e))
+        logger.error('dtable: %s list rows_near_deadline failed. error: %s', dtable_uuid, e)
         return
 
     if not rows_near_deadline:
@@ -495,7 +495,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
     try:
         dtable_metadata = _get_dtable_metadata(dtable_uuid)
     except Exception as e:
-        logger.error('request dtable metadata error: %s', e)
+        logger.error('dtable: %s, request dtable metadata error: %s', dtable_uuid, e)
         return
 
     blanks, column_blanks, col_name_dict = set(re.findall(r'\{([^{]*?)\}', msg)), None, None
