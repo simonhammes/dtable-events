@@ -22,25 +22,36 @@ def scan_triggered_automation_rules(event_data, db_session):
         return
 
     for rule_id, run_condition, trigger, actions, last_trigger_time, dtable_uuid, trigger_count, org_id, creator in rules:
+        options = {
+            'rule_id': rule_id,
+            'run_condition': run_condition,
+            'dtable_uuid': dtable_uuid,
+            'trigger_count': trigger_count,
+            'org_id': org_id,
+            'creator': creator,
+            'last_trigger_time': last_trigger_time,
+        }
         try:
-            auto_rule = AutomationRule(rule_id, run_condition, dtable_uuid, trigger_count, org_id, creator, trigger, actions, last_trigger_time, event_data, db_session)
+            auto_rule = AutomationRule(event_data, db_session, trigger, actions, options)
             auto_rule.do_actions()
         except Exception as e:
             logger.error('auto rule: %s do actions error: %s', rule_id, e)
 
 
 def run_regular_execution_rule(rule, db_session):
-    rule_id = rule[0]
-    run_condition = rule[1]
-    raw_trigger = rule[2]
-    raw_actions = rule[3]
-    last_trigger_time = rule[4]
-    dtable_uuid = rule[5]
-    trigger_count = rule[6]
-    org_id = rule[7]
-    creator = rule[8]
+    trigger = rule[2]
+    actions = rule[3]
+
+    options = {}
+    options['rule_id'] = rule[0]
+    options['run_condition'] = rule[1]
+    options['last_trigger_time'] = rule[4]
+    options['dtable_uuid'] = rule[5]
+    options['trigger_count'] = rule[6]
+    options['org_id'] = rule[7]
+    options['creator'] = rule[8]
     try:
-        auto_rule = AutomationRule(rule_id, run_condition, dtable_uuid, trigger_count, org_id, creator, raw_trigger, raw_actions, last_trigger_time, None, db_session)
+        auto_rule = AutomationRule(None, db_session, trigger, actions, options)
         auto_rule.do_actions()
     except Exception as e:
-        logger.error('auto rule: %s do actions error: %s', rule_id, e)
+        logger.error('auto rule: %s do actions error: %s', options['rule_id'], e)

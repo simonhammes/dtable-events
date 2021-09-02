@@ -560,17 +560,17 @@ class RuleInvalidException(Exception):
 
 class AutomationRule:
 
-    def __init__(self, rule_id, run_condition, dtable_uuid, trigger_count, org_id, creator, raw_trigger, raw_actions, last_trigger_time, data, db_session):
-        self.rule_id = rule_id
+    def __init__(self, data, db_session, raw_trigger, raw_actions, options):
+        self.rule_id = options.get('rule_id', None)
         self.rule_name = ''
-        self.run_condition = run_condition
-        self.dtable_uuid = dtable_uuid
+        self.run_condition = options.get('run_condition', None)
+        self.dtable_uuid = options.get('dtable_uuid', None)
         self.trigger = None
         self.action_infos = []
-        self.last_trigger_time = last_trigger_time
-        self.trigger_count = trigger_count
-        self.org_id = org_id
-        self.creator = creator
+        self.last_trigger_time = options.get('last_trigger_time', None)
+        self.trigger_count = options.get('trigger_count', None)
+        self.org_id = options.get('org_id', None)
+        self.creator = options.get('creator', None)
         self.data = data
         self.db_session = db_session
 
@@ -583,7 +583,6 @@ class AutomationRule:
         self._view_columns = None
 
         self.done_actions = False
-
         self._load_trigger_and_actions(raw_trigger, raw_actions)
 
     def _load_trigger_and_actions(self, raw_trigger, raw_actions):
