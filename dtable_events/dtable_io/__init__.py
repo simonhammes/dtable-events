@@ -13,7 +13,7 @@ from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, prepare_dtable_json_from_memory
 from dtable_events.db import init_db_session_class
-from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server
+from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server, append_excel_by_dtable_server
 from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.statistics.db import save_email_sending_records
 
@@ -172,6 +172,18 @@ def import_excel(username, repo_id, workspace_id, dtable_uuid, dtable_name, conf
     dtable_io_logger.info('Start import excel: {}.'.format(dtable_uuid))
     try:
         import_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name)
+    except Exception as e:
+        dtable_io_logger.error('import excel failed. ERROR: {}'.format(e))
+    else:
+        dtable_io_logger.info('import excel %s.xlsx success!' % dtable_name)
+
+def append_excel(username, repo_id, workspace_id, dtable_uuid, dtable_name, table_name, config):
+    """
+    upload excel json file to dtable-server
+    """
+    dtable_io_logger.info('Start import excel: {}.'.format(dtable_uuid))
+    try:
+        append_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name, table_name)
     except Exception as e:
         dtable_io_logger.error('import excel failed. ERROR: {}'.format(e))
     else:

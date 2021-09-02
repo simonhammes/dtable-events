@@ -257,3 +257,15 @@ def import_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name):
     delete_excel_file(username, repo_id, dtable_name)
     # upload json file to dtable-server
     upload_excel_json_to_dtable_server(username, dtable_uuid, json_file)
+
+
+def append_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name, table_name):
+    from dtable_events.dtable_io.utils import get_excel_json_file, \
+        append_excel_json_to_dtable_server, delete_excel_file
+
+    # get json file
+    json_file = get_excel_json_file(repo_id, dtable_name)
+    # delete excel file
+    delete_excel_file(username, repo_id, dtable_name)
+    # upload json file to dtable-server
+    append_excel_json_to_dtable_server(username, dtable_uuid, json_file, table_name)
