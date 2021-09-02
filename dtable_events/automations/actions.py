@@ -768,10 +768,14 @@ class AutomationRule:
                 sql = set_last_trigger_time_sql
             else:
                 sql = "%s%s" % (set_last_trigger_time_sql, set_statistic_sql_user if self.org_id == -1 else set_statistic_sql_org)
+
+            cur_date = datetime.utcnow().date()
+            cur_year, cur_month = cur_date.year, cur_date.month
+            trigger_date = date(year=cur_year, month=cur_month, day=1)
             self.db_session.execute(sql, {
                 'rule_id': self.rule_id,
                 'trigger_time': datetime.utcnow(),
-                'trigger_date': datetime.utcnow().date(),
+                'trigger_date': trigger_date,
                 'trigger_count': self.trigger_count + 1,
                 'username': self.creator,
                 'org_id': self.org_id
