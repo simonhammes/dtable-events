@@ -768,7 +768,7 @@ class AutomationRule:
             else:
                 sql = "%s%s" % (set_last_trigger_time_sql, set_statistic_sql_user if self.org_id == -1 else set_statistic_sql_org)
 
-            cur_date = datetime.utcnow().date()
+            cur_date = datetime.now().date()
             cur_year, cur_month = cur_date.year, cur_date.month
             trigger_date = date(year=cur_year, month=cur_month, day=1)
             self.db_session.execute(sql, {
