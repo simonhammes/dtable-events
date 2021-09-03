@@ -560,15 +560,17 @@ class RuleInvalidException(Exception):
 
 class AutomationRule:
 
-    def __init__(self, rule_id, run_condition, dtable_uuid, trigger_count, raw_trigger, raw_actions, last_trigger_time, data, db_session):
-        self.rule_id = rule_id
+    def __init__(self, data, db_session, raw_trigger, raw_actions, options):
+        self.rule_id = options.get('rule_id', None)
         self.rule_name = ''
-        self.run_condition = run_condition
-        self.dtable_uuid = dtable_uuid
+        self.run_condition = options.get('run_condition', None)
+        self.dtable_uuid = options.get('dtable_uuid', None)
         self.trigger = None
         self.action_infos = []
-        self.last_trigger_time = last_trigger_time
-        self.trigger_count = trigger_count
+        self.last_trigger_time = options.get('last_trigger_time', None)
+        self.trigger_count = options.get('trigger_count', None)
+        self.org_id = options.get('org_id', None)
+        self.creator = options.get('creator', None)
         self.data = data
         self.db_session = db_session
 
@@ -581,7 +583,6 @@ class AutomationRule:
         self._view_columns = None
 
         self.done_actions = False
-
         self._load_trigger_and_actions(raw_trigger, raw_actions)
 
     def _load_trigger_and_actions(self, raw_trigger, raw_actions):
@@ -742,10 +743,42 @@ class AutomationRule:
 
     def update_last_trigger_time(self):
         try:
-            set_invalid_sql = '''
-                UPDATE dtable_automation_rules SET last_trigger_time=:trigger_time, trigger_count=:trigger_count WHERE id=:rule_id
+            set_statistic_sql_user = '''
+                INSERT INTO user_auto_rules_statistics (username, trigger_date, trigger_count, update_at) VALUES 
+                (:username, :trigger_date, 1, :trigger_time)
+                ON DUPLICATE KEY UPDATE
+                trigger_count=trigger_count+1,
+                update_at=:trigger_time
             '''
-            self.db_session.execute(set_invalid_sql, {'rule_id': self.rule_id, 'trigger_time': datetime.utcnow(), 'trigger_count': self.trigger_count + 1})
+
+            set_statistic_sql_org = '''
+                INSERT INTO org_auto_rules_statistics (org_id, trigger_date, trigger_count, update_at) VALUES
+                (:org_id, :trigger_date, 1, :trigger_time)
+                ON DUPLICATE KEY UPDATE
+                trigger_count=trigger_count+1,
+                update_at=:trigger_time
+            '''
+            set_last_trigger_time_sql = '''
+                UPDATE dtable_automation_rules SET last_trigger_time=:trigger_time, trigger_count=:trigger_count WHERE id=:rule_id;
+            '''
+
+            org_id = self.org_id
+            if not org_id:
+                sql = set_last_trigger_time_sql
+            else:
+                sql = "%s%s" % (set_last_trigger_time_sql, set_statistic_sql_user if self.org_id == -1 else set_statistic_sql_org)
+
+            cur_date = datetime.now().date()
+            cur_year, cur_month = cur_date.year, cur_date.month
+            trigger_date = date(year=cur_year, month=cur_month, day=1)
+            self.db_session.execute(sql, {
+                'rule_id': self.rule_id,
+                'trigger_time': datetime.utcnow(),
+                'trigger_date': trigger_date,
+                'trigger_count': self.trigger_count + 1,
+                'username': self.creator,
+                'org_id': self.org_id
+            })
             self.db_session.commit()
         except Exception as e:
             logger.error('set rule: %s invalid error: %s', self.rule_id, e)
