@@ -200,6 +200,41 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['task_id'] = task_id
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
+        elif path == '/add-parse-append-excel-task':
+
+            if task_manager.tasks_queue.full():
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            username = arguments['username'][0]
+            repo_id = arguments['repo_id'][0]
+            workspace_id = arguments['workspace_id'][0]
+            dtable_name = arguments['dtable_name'][0]
+            custom = arguments['custom'][0]
+            custom = bool(int(custom))
+
+            try:
+                task_id = task_manager.add_parse_append_excel_task(
+                    username,
+                    repo_id,
+                    workspace_id,
+                    dtable_name,
+                    custom,
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {}
+            resp['task_id'] = task_id
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
         elif path == '/query-status':
             task_id = arguments['task_id'][0]
             if not task_manager.is_valid_task_id(task_id):

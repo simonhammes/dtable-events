@@ -486,13 +486,22 @@ def append_excel_json_to_dtable_server(username, dtable_uuid, json_file, table_n
     ENABLE_DTABLE_SERVER_CLUSTER = task_manager.conf['enable_dtable_server_cluster']
     DTABLE_PROXY_SERVER_URL = task_manager.conf['dtable_proxy_server_url']
     api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-    url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/append-excel/'
+    url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/batch-append-rows/'
     dtable_server_access_token = get_dtable_server_token(username, dtable_uuid)
     headers = {'Authorization': 'Token ' + dtable_server_access_token.decode('utf-8')}
-    files = {
-        'excel_json': json_file
-    }
-    data = {'table_name': table_name}
-    res = requests.post(url, headers=headers, data=data, files=files)
-    if res.status_code != 200:
-        raise ConnectionError('failed to append excel json %s %s' % (dtable_uuid, res.text))
+    rows_data = json.loads(json_file.decode())[0]['rows']
+    offset = 0
+    while True:
+        rows = rows_data[offset: offset + 1000]
+        offset = offset + 1000
+        if not rows:
+            break
+        json_data = {
+            'table_name': table_name,
+            'rows': rows,
+        }
+        res = requests.post(url, headers=headers, json=json_data)
+        if res.status_code != 200:
+            raise ConnectionError('failed to append excel json %s %s' % (dtable_uuid, res.text))
+        time.sleep(0.5)
+

@@ -13,7 +13,7 @@ from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, prepare_dtable_json_from_memory
 from dtable_events.db import init_db_session_class
-from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server, append_excel_by_dtable_server
+from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server, append_excel_by_dtable_server, parse_append_excel_to_json
 from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.statistics.db import save_email_sending_records
 
@@ -185,9 +185,21 @@ def append_excel(username, repo_id, workspace_id, dtable_uuid, dtable_name, tabl
     try:
         append_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name, table_name)
     except Exception as e:
-        dtable_io_logger.error('import excel failed. ERROR: {}'.format(e))
+        dtable_io_logger.error('append excel failed. ERROR: {}'.format(e))
     else:
-        dtable_io_logger.info('import excel %s.xlsx success!' % dtable_name)
+        dtable_io_logger.info('append excel %s.xlsx success!' % dtable_name)
+
+def parse_append_excel(username, repo_id, workspace_id, dtable_name, custom, config):
+    """
+    parse excel to json file, then upload json file to file server
+    """
+    dtable_io_logger.info('Start parse append excel: %s.xlsx.' % dtable_name)
+    try:
+        parse_append_excel_to_json(repo_id, dtable_name, custom)
+    except Exception as e:
+        dtable_io_logger.exception('parse append excel failed. ERROR: {}'.format(e))
+    else:
+        dtable_io_logger.info('parse append excel %s.xlsx success!' % dtable_name)
 
 def _get_upload_link_to_seafile(seafile_server_url, access_token, parent_dir="/"):
     upload_link_api_url = "%s%s" % (seafile_server_url.rstrip('/'),  '/api/v2.1/via-repo-token/upload-link/')

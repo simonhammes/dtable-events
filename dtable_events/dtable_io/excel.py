@@ -269,3 +269,161 @@ def append_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name, t
     delete_excel_file(username, repo_id, dtable_name)
     # upload json file to dtable-server
     append_excel_json_to_dtable_server(username, dtable_uuid, json_file, table_name)
+
+def parse_append_excel_to_json(repo_id, dtable_name, custom=False):
+    from dtable_events.dtable_io.utils import get_excel_file, \
+        upload_excel_json_file, get_excel_json_file
+    from dtable_events.dtable_io import dtable_io_logger
+
+    # user custom columns
+    if custom:
+        json_file = get_excel_json_file(repo_id, dtable_name)
+        tables = json.loads(json_file)
+        head_index_map = {table['name']: table['head_index'] for table in tables}
+    else:
+        head_index_map = {}
+
+    # parse
+    excel_file = get_excel_file(repo_id, dtable_name)
+    tables = []
+    wb = load_workbook(excel_file, read_only=True)
+    for sheet in wb:
+        dtable_io_logger.info(
+            'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
+
+        sheet_rows = list(sheet.rows)
+        max_row = len(sheet_rows)
+        max_column = sheet.max_column
+        if max_row > 50000:
+            max_row = 50000  # rows limit
+        if max_column > 300:
+            max_column = 300  # columns limit
+        if max_row == 0:
+            continue
+
+        if custom:
+            head_index = head_index_map.get(sheet.title, 0)
+            if head_index > max_row - 1:
+                head_index = 0
+        else:
+            head_index = 0
+
+        columns = parse_excel_columns(sheet_rows, head_index, max_column)
+        rows = parse_append_excel_rows(sheet_rows, columns, head_index, max_column)
+
+        dtable_io_logger.info(
+            'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), len(columns)))
+
+        # table = {
+        #     'rows': rows
+        # }
+
+        table = {
+            'name': sheet.title,
+            'rows': rows,
+            'columns': columns,
+            'head_index': head_index,
+            'max_row': max_row,
+            'max_column': max_column,
+        }
+        tables.append(table)
+    wb.close()
+
+    # upload json to file server
+    content = json.dumps(tables)
+    upload_excel_json_file(repo_id, dtable_name, content)
+
+
+def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
+    from dtable_events.dtable_io import dtable_io_logger
+
+    if head_index < 0:
+        value_rows = sheet_rows
+    else:
+        value_rows = sheet_rows[head_index + 1:]
+    rows = []
+    for row in value_rows:
+        row_data = {}
+        for index in range(max_column):
+            try:
+                cell_value = row[index].value
+                column_name = columns[index]['name']
+                column_type = columns[index]['type']
+                if cell_value is None:
+                    continue
+                if isinstance(cell_value, datetime):  # JSON serializable
+                    cell_value = str(cell_value)
+
+                if column_type in ('number', 'duration', 'rate'):
+                    row_data[column_name] = cell_value
+                elif column_type == 'date':
+                    row_data[column_name] = parse_date(cell_value)
+                elif column_type == 'long-text':
+                    row_data[column_name] = parse_long_text(cell_value)
+                elif column_type == 'checkbox':
+                    row_data[column_name] = parse_checkbox(cell_value)
+                elif column_type == 'multiple-select':
+                    row_data[column_name] = parse_multiple_select(cell_value)
+                elif column_type in ('url', 'email'):
+                    row_data[column_name] = str(cell_value)
+                elif column_type == 'text':
+                    row_data[column_name] = parse_text(cell_value)
+                elif column_type == 'file':
+                    row_data[column_name] = parse_file(cell_value)
+                elif column_type == 'image':
+                    row_data[column_name] = parse_image(cell_value)
+                elif column_type == 'single_select':
+                    row_data[column_name] = parse_single_select(cell_value)
+                elif column_type == 'link':
+                    row_data[column_name] = None
+                elif column_type == 'button':
+                    row_data[column_name] = None
+                elif column_type == 'geolocation':
+                    row_data[column_name] = None
+                elif column_type in ('collaborator', 'creator', 'last_modifier', 'ctime', 'mtime', 'formula',
+                                     'link_formula', 'auto_number'):
+                    row_data[column_name] = None
+                else:
+                    row_data[column_name] = str(cell_value)
+            except Exception as e:
+                dtable_io_logger.exception(e)
+        rows.append(row_data)
+    return rows
+
+
+def parse_date(value):
+    DATE_FORMAT = '%Y-%m-%d'
+    DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
+    value = str(value)
+    if len(value) == 10:
+        value = str(datetime.strptime(value, DATE_FORMAT))
+    elif len(value) == 24:
+        value = str(datetime.strptime(value, DATETIME_FORMAT))
+    return value
+
+
+def parse_text(value):
+    if isinstance(value, dict) and 'text' in value:
+        return value['text']  # barcode
+    value = str(value)
+    return value
+
+
+def parse_file(value):
+    return [{
+            'name': item['filename'],
+            'size': item['size'],
+            'type': 'file',
+            'url': item['url'],
+            } for item in value]
+
+
+def parse_image(value):
+    return [item['url'] for item in value]
+
+
+def parse_single_select(value):
+    if isinstance(value, dict) and 'name' in value:
+        return value['name']  # collaborator
+    value = str(value)
+    return value
