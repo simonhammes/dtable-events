@@ -212,6 +212,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             repo_id = arguments['repo_id'][0]
             workspace_id = arguments['workspace_id'][0]
             dtable_name = arguments['dtable_name'][0]
+            dtable_uuid = arguments['dtable_uuid'][0]
+            table_name = arguments['table_name'][0]
             custom = arguments['custom'][0]
             custom = bool(int(custom))
 
@@ -221,6 +223,8 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                     repo_id,
                     workspace_id,
                     dtable_name,
+                    dtable_uuid,
+                    table_name,
                     custom,
                 )
             except Exception as e:

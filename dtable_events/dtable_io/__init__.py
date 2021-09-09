@@ -189,13 +189,13 @@ def append_excel(username, repo_id, workspace_id, dtable_uuid, dtable_name, tabl
     else:
         dtable_io_logger.info('append excel %s.xlsx success!' % dtable_name)
 
-def parse_append_excel(username, repo_id, workspace_id, dtable_name, custom, config):
+def parse_append_excel(username, repo_id, workspace_id, dtable_name, dtable_uuid, table_name, custom, config):
     """
     parse excel to json file, then upload json file to file server
     """
     dtable_io_logger.info('Start parse append excel: %s.xlsx.' % dtable_name)
     try:
-        parse_append_excel_to_json(repo_id, dtable_name, custom)
+        parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, table_name, custom)
     except Exception as e:
         dtable_io_logger.exception('parse append excel failed. ERROR: {}'.format(e))
     else:

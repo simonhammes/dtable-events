@@ -4,7 +4,6 @@ from datetime import datetime
 
 from openpyxl import load_workbook
 
-
 CHECKBOX_TUPLE = (
     ('√', 'x'),
     ('checked', 'unchecked'),
@@ -178,7 +177,8 @@ def parse_excel_columns(sheet_rows, head_index, max_column):
         value_list = [row[index].value for row in value_rows]
         column_type, column_data = parse_excel_column_type(value_list)
         column = {
-            'name': column_name.replace('\ufeff', '').strip(),  # remove whitespace from both ends of name and BOM char(\ufeff)
+            'name': column_name.replace('\ufeff', '').strip(),
+            # remove whitespace from both ends of name and BOM char(\ufeff)
             'type': column_type,
             'data': column_data,
         }
@@ -270,9 +270,10 @@ def append_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name, t
     # upload json file to dtable-server
     append_excel_json_to_dtable_server(username, dtable_uuid, json_file, table_name)
 
-def parse_append_excel_to_json(repo_id, dtable_name, custom=False):
+
+def parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, table_name, custom=False):
     from dtable_events.dtable_io.utils import get_excel_file, \
-        upload_excel_json_file, get_excel_json_file
+        upload_excel_json_file, get_excel_json_file, get_columns_from_dtable_server
     from dtable_events.dtable_io import dtable_io_logger
 
     # user custom columns
@@ -287,46 +288,43 @@ def parse_append_excel_to_json(repo_id, dtable_name, custom=False):
     excel_file = get_excel_file(repo_id, dtable_name)
     tables = []
     wb = load_workbook(excel_file, read_only=True)
-    for sheet in wb:
-        dtable_io_logger.info(
-            'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
+    sheet = wb.get_sheet_by_name(wb.sheetnames[0])
+    # for sheet in wb:
+    dtable_io_logger.info(
+        'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
 
-        sheet_rows = list(sheet.rows)
-        max_row = len(sheet_rows)
-        max_column = sheet.max_column
-        if max_row > 50000:
-            max_row = 50000  # rows limit
-        if max_column > 300:
-            max_column = 300  # columns limit
-        if max_row == 0:
-            continue
+    sheet_rows = list(sheet.rows)
+    max_row = len(sheet_rows)
+    max_column = sheet.max_column
+    if max_row > 50000:
+        max_row = 50000  # rows limit
+    if max_column > 300:
+        max_column = 300  # columns limit
 
-        if custom:
-            head_index = head_index_map.get(sheet.title, 0)
-            if head_index > max_row - 1:
-                head_index = 0
-        else:
+    if custom:
+        head_index = head_index_map.get(sheet.title, 0)
+        if head_index > max_row - 1:
             head_index = 0
+    else:
+        head_index = 0
 
-        columns = parse_excel_columns(sheet_rows, head_index, max_column)
-        rows = parse_append_excel_rows(sheet_rows, columns, head_index, max_column)
+    excel_columns = parse_excel_columns(sheet_rows, head_index, max_column)
+    columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
+    max_column = len(columns)
+    rows = parse_append_excel_rows(sheet_rows, columns, head_index, max_column)
 
-        dtable_io_logger.info(
-            'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), len(columns)))
+    dtable_io_logger.info(
+        'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), len(excel_columns)))
 
-        # table = {
-        #     'rows': rows
-        # }
-
-        table = {
-            'name': sheet.title,
-            'rows': rows,
-            'columns': columns,
-            'head_index': head_index,
-            'max_row': max_row,
-            'max_column': max_column,
-        }
-        tables.append(table)
+    table = {
+        'name': sheet.title,
+        'rows': rows,
+        'columns': columns,
+        'head_index': head_index,
+        'max_row': max_row,
+        'max_column': max_column,
+    }
+    tables.append(table)
     wb.close()
 
     # upload json to file server
@@ -345,16 +343,16 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
     for row in value_rows:
         row_data = {}
         for index in range(max_column):
+            column_name = columns[index]['name']
             try:
                 cell_value = row[index].value
-                column_name = columns[index]['name']
                 column_type = columns[index]['type']
                 if cell_value is None:
                     continue
                 if isinstance(cell_value, datetime):  # JSON serializable
                     cell_value = str(cell_value)
 
-                if column_type in ('number', 'duration', 'rate'):
+                if column_type in ('number', 'duration', 'rating'):
                     row_data[column_name] = cell_value
                 elif column_type == 'date':
                     row_data[column_name] = parse_date(cell_value)
@@ -362,9 +360,9 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
                     row_data[column_name] = parse_long_text(cell_value)
                 elif column_type == 'checkbox':
                     row_data[column_name] = parse_checkbox(cell_value)
-                elif column_type == 'multiple-select':
+                elif column_type == 'multi-select':
                     row_data[column_name] = parse_multiple_select(cell_value)
-                elif column_type in ('url', 'email'):
+                elif column_type in ('URL', 'email'):
                     row_data[column_name] = str(cell_value)
                 elif column_type == 'text':
                     row_data[column_name] = parse_text(cell_value)
@@ -387,6 +385,7 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
                     row_data[column_name] = str(cell_value)
             except Exception as e:
                 dtable_io_logger.exception(e)
+                row_data[column_name] = None
         rows.append(row_data)
     return rows
 
@@ -394,11 +393,16 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
 def parse_date(value):
     DATE_FORMAT = '%Y-%m-%d'
     DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
+    EXCEL_DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
     value = str(value)
     if len(value) == 10:
         value = str(datetime.strptime(value, DATE_FORMAT))
     elif len(value) == 24:
         value = str(datetime.strptime(value, DATETIME_FORMAT))
+    elif len(value) == 19:
+        value = str(datetime.strptime(value, EXCEL_DATETIME_FORMAT))
+    else:
+        value = None
     return value
 
 
@@ -411,11 +415,11 @@ def parse_text(value):
 
 def parse_file(value):
     return [{
-            'name': item['filename'],
-            'size': item['size'],
-            'type': 'file',
-            'url': item['url'],
-            } for item in value]
+        'name': item['filename'],
+        'size': item['size'],
+        'type': 'file',
+        'url': item['url'],
+    } for item in value]
 
 
 def parse_image(value):
