@@ -310,8 +310,10 @@ def parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, tabl
 
     excel_columns = parse_excel_columns(sheet_rows, head_index, max_column)
     columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
-    max_column = len(columns)
+    if max_column > len(columns):
+        max_column = len(columns)
     rows = parse_append_excel_rows(sheet_rows, columns, head_index, max_column)
+    max_row = len(rows)
 
     dtable_io_logger.info(
         'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), len(excel_columns)))
@@ -340,6 +342,7 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
     else:
         value_rows = sheet_rows[head_index + 1:]
     rows = []
+
     for row in value_rows:
         row_data = {}
         for index in range(max_column):
@@ -351,7 +354,6 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
                     continue
                 if isinstance(cell_value, datetime):  # JSON serializable
                     cell_value = str(cell_value)
-
                 if column_type in ('number', 'duration', 'rating'):
                     row_data[column_name] = cell_value
                 elif column_type == 'date':
