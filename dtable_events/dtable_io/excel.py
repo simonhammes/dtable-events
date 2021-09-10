@@ -271,21 +271,21 @@ def append_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name, t
     append_excel_json_to_dtable_server(username, dtable_uuid, json_file, table_name)
 
 
-def parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, table_name, custom=False):
+def parse_append_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name, custom=False):
     from dtable_events.dtable_io.utils import get_excel_file, \
         upload_excel_json_file, get_excel_json_file, get_columns_from_dtable_server
     from dtable_events.dtable_io import dtable_io_logger
 
     # user custom columns
     if custom:
-        json_file = get_excel_json_file(repo_id, dtable_name)
+        json_file = get_excel_json_file(repo_id, file_name)
         tables = json.loads(json_file)
         head_index_map = {table['name']: table['head_index'] for table in tables}
     else:
         head_index_map = {}
 
     # parse
-    excel_file = get_excel_file(repo_id, dtable_name)
+    excel_file = get_excel_file(repo_id, file_name)
     tables = []
     wb = load_workbook(excel_file, read_only=True)
     sheet = wb.get_sheet_by_name(wb.sheetnames[0])
@@ -304,7 +304,7 @@ def parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, tabl
         wb.close()
         # upload empty json to file server
         content = json.dumps(tables)
-        upload_excel_json_file(repo_id, dtable_name, content)
+        upload_excel_json_file(repo_id, file_name, content)
         return
 
     if custom:
@@ -336,7 +336,7 @@ def parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, tabl
 
     # upload json to file server
     content = json.dumps(tables)
-    upload_excel_json_file(repo_id, dtable_name, content)
+    upload_excel_json_file(repo_id, file_name, content)
 
 
 def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):

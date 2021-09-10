@@ -189,17 +189,17 @@ def append_excel(username, repo_id, workspace_id, dtable_uuid, dtable_name, tabl
     else:
         dtable_io_logger.info('append excel %s.xlsx success!' % dtable_name)
 
-def parse_append_excel(username, repo_id, workspace_id, dtable_name, dtable_uuid, table_name, custom, config):
+def parse_append_excel(username, repo_id, workspace_id, file_name, dtable_uuid, table_name, custom, config):
     """
     parse excel to json file, then upload json file to file server
     """
-    dtable_io_logger.info('Start parse append excel: %s.xlsx.' % dtable_name)
+    dtable_io_logger.info('Start parse append excel: %s.xlsx.' % file_name)
     try:
-        parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, table_name, custom)
+        parse_append_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name, custom)
     except Exception as e:
         dtable_io_logger.exception('parse append excel failed. ERROR: {}'.format(e))
     else:
-        dtable_io_logger.info('parse append excel %s.xlsx success!' % dtable_name)
+        dtable_io_logger.info('parse append excel %s.xlsx success!' % file_name)
 
 def _get_upload_link_to_seafile(seafile_server_url, access_token, parent_dir="/"):
     upload_link_api_url = "%s%s" % (seafile_server_url.rstrip('/'),  '/api/v2.1/via-repo-token/upload-link/')

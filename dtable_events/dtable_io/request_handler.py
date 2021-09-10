@@ -211,7 +211,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             username = arguments['username'][0]
             repo_id = arguments['repo_id'][0]
             workspace_id = arguments['workspace_id'][0]
-            dtable_name = arguments['dtable_name'][0]
+            file_name = arguments['file_name'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
             table_name = arguments['table_name'][0]
             custom = arguments['custom'][0]
@@ -222,7 +222,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                     username,
                     repo_id,
                     workspace_id,
-                    dtable_name,
+                    file_name,
                     dtable_uuid,
                     table_name,
                     custom,
