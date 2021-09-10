@@ -300,6 +300,12 @@ def parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, tabl
         max_row = 50000  # rows limit
     if max_column > 300:
         max_column = 300  # columns limit
+    if max_row == 0:
+        wb.close()
+        # upload empty json to file server
+        content = json.dumps(tables)
+        upload_excel_json_file(repo_id, dtable_name, content)
+        return
 
     if custom:
         head_index = head_index_map.get(sheet.title, 0)
@@ -308,7 +314,6 @@ def parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, tabl
     else:
         head_index = 0
 
-    excel_columns = parse_excel_columns(sheet_rows, head_index, max_column)
     columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
     if max_column > len(columns):
         max_column = len(columns)
@@ -316,7 +321,7 @@ def parse_append_excel_to_json(repo_id, dtable_name, username, dtable_uuid, tabl
     max_row = len(rows)
 
     dtable_io_logger.info(
-        'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), len(excel_columns)))
+        'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), max_column))
 
     table = {
         'name': sheet.title,
@@ -357,7 +362,7 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
                 if column_type in ('number', 'duration', 'rating'):
                     row_data[column_name] = cell_value
                 elif column_type == 'date':
-                    row_data[column_name] = parse_date(cell_value)
+                    row_data[column_name] = str(cell_value)
                 elif column_type == 'long-text':
                     row_data[column_name] = parse_long_text(cell_value)
                 elif column_type == 'checkbox':
@@ -367,13 +372,13 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
                 elif column_type in ('URL', 'email'):
                     row_data[column_name] = str(cell_value)
                 elif column_type == 'text':
-                    row_data[column_name] = parse_text(cell_value)
+                    row_data[column_name] = str(cell_value)
                 elif column_type == 'file':
-                    row_data[column_name] = parse_file(cell_value)
+                    row_data[column_name] = None
                 elif column_type == 'image':
-                    row_data[column_name] = parse_image(cell_value)
+                    row_data[column_name] = str(cell_value)
                 elif column_type == 'single_select':
-                    row_data[column_name] = parse_single_select(cell_value)
+                    row_data[column_name] = str(cell_value)
                 elif column_type == 'link':
                     row_data[column_name] = None
                 elif column_type == 'button':
@@ -390,46 +395,3 @@ def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
                 row_data[column_name] = None
         rows.append(row_data)
     return rows
-
-
-def parse_date(value):
-    DATE_FORMAT = '%Y-%m-%d'
-    DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
-    EXCEL_DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
-    value = str(value)
-    if len(value) == 10:
-        value = str(datetime.strptime(value, DATE_FORMAT))
-    elif len(value) == 24:
-        value = str(datetime.strptime(value, DATETIME_FORMAT))
-    elif len(value) == 19:
-        value = str(datetime.strptime(value, EXCEL_DATETIME_FORMAT))
-    else:
-        value = None
-    return value
-
-
-def parse_text(value):
-    if isinstance(value, dict) and 'text' in value:
-        return value['text']  # barcode
-    value = str(value)
-    return value
-
-
-def parse_file(value):
-    return [{
-        'name': item['filename'],
-        'size': item['size'],
-        'type': 'file',
-        'url': item['url'],
-    } for item in value]
-
-
-def parse_image(value):
-    return [item['url'] for item in value]
-
-
-def parse_single_select(value):
-    if isinstance(value, dict) and 'name' in value:
-        return value['name']  # collaborator
-    value = str(value)
-    return value
