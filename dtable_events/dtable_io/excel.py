@@ -324,7 +324,7 @@ def parse_append_excel_to_json(repo_id, file_name, username, dtable_uuid, table_
         'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), max_column))
 
     table = {
-        'name': sheet.title,
+        'name': table_name,
         'rows': rows,
         'columns': columns,
         'head_index': head_index,
