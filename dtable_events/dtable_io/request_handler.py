@@ -164,7 +164,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['task_id'] = task_id
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
-        elif path == '/add-append-excel-task':
+        elif path == '/add-append-excel-append-parsed-file-task':
 
             if task_manager.tasks_queue.full():
                 dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
@@ -176,16 +176,16 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             repo_id = arguments['repo_id'][0]
             workspace_id = arguments['workspace_id'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
-            dtable_name = arguments['dtable_name'][0]
+            file_name = arguments['file_name'][0]
             table_name = arguments['table_name'][0]
 
             try:
-                task_id = task_manager.add_append_excel_task(
+                task_id = task_manager.add_append_excel_append_parsed_file_task(
                     username,
                     repo_id,
                     workspace_id,
                     dtable_uuid,
-                    dtable_name,
+                    file_name,
                     table_name,
                 )
             except Exception as e:
@@ -200,7 +200,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['task_id'] = task_id
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
-        elif path == '/add-parse-append-excel-task':
+        elif path == '/add-append-excel-upload-excel-task':
 
             if task_manager.tasks_queue.full():
                 dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
@@ -218,7 +218,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             custom = bool(int(custom))
 
             try:
-                task_id = task_manager.add_parse_append_excel_task(
+                task_id = task_manager.add_append_excel_upload_excel_task(
                     username,
                     repo_id,
                     workspace_id,

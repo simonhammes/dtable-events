@@ -108,21 +108,21 @@ class TaskManager(object):
         self.tasks_map[task_id] = task
         return task_id
 
-    def add_append_excel_task(self, username, repo_id, workspace_id, dtable_uuid, dtable_name, table_name):
-        from dtable_events.dtable_io import append_excel
+    def add_append_excel_append_parsed_file_task(self, username, repo_id, workspace_id, dtable_uuid, file_name, table_name):
+        from dtable_events.dtable_io import append_excel_append_parsed_file
 
         task_id = str(int(time.time()*1000))
-        task = (append_excel,
-                (username, repo_id, workspace_id, dtable_uuid, dtable_name, table_name, self.config))
+        task = (append_excel_append_parsed_file,
+                (username, repo_id, workspace_id, dtable_uuid, file_name, table_name, self.config))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
         return task_id
 
-    def add_parse_append_excel_task(self, username, repo_id, workspace_id, file_name, dtable_uuid, table_name, custom):
-        from dtable_events.dtable_io import parse_append_excel
+    def add_append_excel_upload_excel_task(self, username, repo_id, workspace_id, file_name, dtable_uuid, table_name, custom):
+        from dtable_events.dtable_io import append_excel_upload_excel
 
         task_id = str(int(time.time()*1000))
-        task = (parse_append_excel,
+        task = (append_excel_upload_excel,
                 (username, repo_id, workspace_id, file_name, dtable_uuid, table_name, custom, self.config))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task

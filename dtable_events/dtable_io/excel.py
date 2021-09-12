@@ -259,19 +259,19 @@ def import_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name):
     upload_excel_json_to_dtable_server(username, dtable_uuid, json_file)
 
 
-def append_excel_by_dtable_server(username, repo_id, dtable_uuid, dtable_name, table_name):
+def append_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_name, table_name):
     from dtable_events.dtable_io.utils import get_excel_json_file, \
         append_excel_json_to_dtable_server, delete_excel_file
 
     # get json file
-    json_file = get_excel_json_file(repo_id, dtable_name)
+    json_file = get_excel_json_file(repo_id, file_name)
     # delete excel file
-    delete_excel_file(username, repo_id, dtable_name)
+    delete_excel_file(username, repo_id, file_name)
     # upload json file to dtable-server
     append_excel_json_to_dtable_server(username, dtable_uuid, json_file, table_name)
 
 
-def parse_append_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name, custom=False):
+def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name, custom=False):
     from dtable_events.dtable_io.utils import get_excel_file, \
         upload_excel_json_file, get_excel_json_file, get_columns_from_dtable_server
     from dtable_events.dtable_io import dtable_io_logger
