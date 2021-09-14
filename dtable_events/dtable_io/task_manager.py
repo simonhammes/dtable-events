@@ -108,6 +108,26 @@ class TaskManager(object):
         self.tasks_map[task_id] = task
         return task_id
 
+    def add_append_excel_append_parsed_file_task(self, username, repo_id, dtable_uuid, file_name, table_name):
+        from dtable_events.dtable_io import append_excel_append_parsed_file
+
+        task_id = str(int(time.time()*1000))
+        task = (append_excel_append_parsed_file,
+                (username, repo_id, dtable_uuid, file_name, table_name))
+        self.tasks_queue.put(task_id)
+        self.tasks_map[task_id] = task
+        return task_id
+
+    def add_append_excel_upload_excel_task(self, username, repo_id, file_name, dtable_uuid, table_name):
+        from dtable_events.dtable_io import append_excel_upload_excel
+
+        task_id = str(int(time.time()*1000))
+        task = (append_excel_upload_excel,
+                (username, repo_id, file_name, dtable_uuid, table_name))
+        self.tasks_queue.put(task_id)
+        self.tasks_map[task_id] = task
+        return task_id
+
     def query_status(self, task_id):
         task = self.tasks_map[task_id]
         if task == 'success':
