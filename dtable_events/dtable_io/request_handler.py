@@ -174,7 +174,6 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
             username = arguments['username'][0]
             repo_id = arguments['repo_id'][0]
-            workspace_id = arguments['workspace_id'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
             file_name = arguments['file_name'][0]
             table_name = arguments['table_name'][0]
@@ -183,7 +182,6 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
                 task_id = task_manager.add_append_excel_append_parsed_file_task(
                     username,
                     repo_id,
-                    workspace_id,
                     dtable_uuid,
                     file_name,
                     table_name,
@@ -210,22 +208,17 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
 
             username = arguments['username'][0]
             repo_id = arguments['repo_id'][0]
-            workspace_id = arguments['workspace_id'][0]
             file_name = arguments['file_name'][0]
             dtable_uuid = arguments['dtable_uuid'][0]
             table_name = arguments['table_name'][0]
-            custom = arguments['custom'][0]
-            custom = bool(int(custom))
 
             try:
                 task_id = task_manager.add_append_excel_upload_excel_task(
                     username,
                     repo_id,
-                    workspace_id,
                     file_name,
                     dtable_uuid,
                     table_name,
-                    custom,
                 )
             except Exception as e:
                 logger.error(e)

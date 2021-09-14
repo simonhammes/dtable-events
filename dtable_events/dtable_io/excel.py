@@ -271,18 +271,10 @@ def append_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_nam
     append_excel_json_to_dtable_server(username, dtable_uuid, json_file, table_name)
 
 
-def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name, custom=False):
+def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name):
     from dtable_events.dtable_io.utils import get_excel_file, \
-        upload_excel_json_file, get_excel_json_file, get_columns_from_dtable_server
+        upload_excel_json_file, get_columns_from_dtable_server
     from dtable_events.dtable_io import dtable_io_logger
-
-    # user custom columns
-    if custom:
-        json_file = get_excel_json_file(repo_id, file_name)
-        tables = json.loads(json_file)
-        head_index_map = {table['name']: table['head_index'] for table in tables}
-    else:
-        head_index_map = {}
 
     # parse
     excel_file = get_excel_file(repo_id, file_name)
@@ -307,17 +299,11 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
         upload_excel_json_file(repo_id, file_name, content)
         return
 
-    if custom:
-        head_index = head_index_map.get(sheet.title, 0)
-        if head_index > max_row - 1:
-            head_index = 0
-    else:
-        head_index = 0
-
     columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
+    sheet_column_num = max_column
     if max_column > len(columns):
         max_column = len(columns)
-    rows = parse_append_excel_rows(sheet_rows, columns, head_index, max_column)
+    rows = parse_append_excel_rows(sheet_rows, columns, max_column, sheet_column_num)
     max_row = len(rows)
 
     dtable_io_logger.info(
@@ -327,7 +313,6 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
         'name': table_name,
         'rows': rows,
         'columns': columns,
-        'head_index': head_index,
         'max_row': max_row,
         'max_column': max_column,
     }
@@ -339,21 +324,24 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
     upload_excel_json_file(repo_id, file_name, content)
 
 
-def parse_append_excel_rows(sheet_rows, columns, head_index, max_column):
+def parse_append_excel_rows(sheet_rows, columns, max_column, sheet_column_num):
     from dtable_events.dtable_io import dtable_io_logger
 
-    if head_index < 0:
-        value_rows = sheet_rows
-    else:
-        value_rows = sheet_rows[head_index + 1:]
+    value_rows = sheet_rows[1:]
+    sheet_head = sheet_rows[0]
+    head_len = len(sheet_head)
+    head_dict = {sheet_head[index].value: index for index in range(head_len)}
     rows = []
 
     for row in value_rows:
         row_data = {}
         for index in range(max_column):
             column_name = columns[index]['name']
+            if head_dict.get(column_name) is None:
+                continue
+            row_index = head_dict.get(column_name)
             try:
-                cell_value = row[index].value
+                cell_value = row[row_index].value
                 column_type = columns[index]['type']
                 if cell_value is None:
                     continue
