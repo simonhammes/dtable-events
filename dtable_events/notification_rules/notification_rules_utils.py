@@ -390,8 +390,7 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
 
 
 
-    if (op_type == 'modify_row' and trigger['condition'] == CONDITION_ROWS_MODIFIED) or \
-       (op_type in ('insert_row', 'append_rows') and trigger['condition'] == CONDITION_ROWS_ADDED):
+    if op_type == 'modify_row' and trigger['condition'] == CONDITION_ROWS_MODIFIED:
         if not is_trigger_time_satisfy(last_trigger_time):
             return
 
@@ -420,7 +419,7 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
         send_notification(dtable_uuid, user_msg_list, dtable_server_access_token)
 
     elif (op_type == 'modify_row' and trigger['condition'] == CONDITION_FILTERS_SATISFY) or \
-         (op_type in ('insert_row', 'append_rows') and trigger['condition'] == CONDITION_FILTERS_SATISFY_ADDED):
+         (op_type in ('insert_row', 'append_rows') and trigger['condition'] == CONDITION_ROWS_ADDED):
         detail = {
             'table_id': table_id,
             'view_id': view_id,
