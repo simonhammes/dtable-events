@@ -40,7 +40,6 @@ except ImportError as e:
 CONDITION_ROWS_MODIFIED = 'rows_modified'
 CONDITION_ROWS_ADDED = 'rows_added'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
-CONDITION_FILTERS_SATISFY_ADDED = 'filters_satisfy_added'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
 
 
