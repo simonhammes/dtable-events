@@ -50,6 +50,13 @@ CONDITION_PERIODICALLY = 'run_periodically'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
+EMAIL_RE = re.compile(
+        r"(^[-!#$%&*+/=?^_`{}|~0-9A-Z]+(\.[-!#$%&*+/=?^_`{}|~0-9A-Z]+)*"  # dot-atom
+        # quoted-string, see also http://tools.ietf.org/html/rfc2822#section-3.2.5
+        r'|^"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"'
+        r')@((?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)$)'  # domain
+        r'|\[(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\]$',
+        re.IGNORECASE)  # literal form, ipv4 address (SMTP 4.1.3)
 
 def get_third_party_account(session, account_id):
     account_query = session.query(BoundThirdPartyAccounts).filter(
@@ -464,6 +471,13 @@ class SendWechatAction(BaseAction):
 
 class SendEmailAction(BaseAction):
 
+
+
+    def is_valid_email(self, email):
+        """A heavy email format validation.
+        """
+        return True if EMAIL_RE.match(email) is not None else False
+
     def __init__(self,
                  auto_rule,
                  data,
@@ -483,15 +497,40 @@ class SendEmailAction(BaseAction):
 
 
         self.column_blanks = []
+        self.column_blanks_send_to = []
+        self.column_blanks_copy_to = []
         self.col_name_dict = {}
 
         self._init_notify()
 
-    def _init_notify(self):
+    def _init_notify_msg(self):
         msg = self.send_info.get('message')
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
-        self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
+
+    def _init_notify_send_to(self):
+        send_to_list = self.send_info.get('send_to')
+        blanks = []
+        for send_to in send_to_list:
+            res = re.findall(r'\{([^{]*?)\}', send_to)
+            if res:
+                blanks.extend(res)
+        self.column_blanks_send_to = [blank for blank in blanks if blank in self.col_name_dict]
+
+    def _init_notify_copy_to(self):
+        copy_to_list = self.send_info.get('copy_to')
+        blanks = []
+        for copy_to in copy_to_list:
+            res = re.findall(r'\{([^{]*?)\}', copy_to)
+            if res:
+                blanks.extend(res)
+        self.column_blanks_copy_to = [blank for blank in blanks if blank in self.col_name_dict]
+
+    def _init_notify(self):
+        self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
+        self._init_notify_msg()
+        self._init_notify_send_to()
+        self._init_notify_copy_to()
         account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
         if account_dict:
             account_detail = account_dict.get('detail', {})
@@ -507,20 +546,27 @@ class SendEmailAction(BaseAction):
                 'password' : password
             }
 
-    def _fill_msg_blanks(self, row):
+    def _fill_msg_blanks(self, row, text, blanks):
 
-        msg, column_blanks, col_name_dict = self.send_info.get('message', ''), self.column_blanks, self.col_name_dict
+        col_name_dict = self.col_name_dict
         dtable_uuid, db_session, dtable_metadata = self.auto_rule.dtable_uuid, self.auto_rule.db_session, self.auto_rule.dtable_metadata
-        return fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
+        return fill_msg_blanks(dtable_uuid, text, blanks, col_name_dict, row, db_session, dtable_metadata)
 
     def per_update_notify(self):
         row = self.data['converted_row']
         msg = self.send_info.get('message', '')
+        send_to_list = self.send_info.get('send_to', [])
+        copy_to_list = self.send_info.get('copy_to', [])
         if self.column_blanks:
-            msg = self._fill_msg_blanks(row)
-
+            msg = self._fill_msg_blanks(row, msg, self.column_blanks)
+        if self.column_blanks_send_to:
+            send_to_list = [self._fill_msg_blanks(row, send_to, self.column_blanks_send_to) for send_to in send_to_list]
+        if self.column_blanks_copy_to:
+            copy_to_list = [self._fill_msg_blanks(row, copy_to, self.column_blanks_copy_to) for copy_to in copy_to_list]
         self.send_info.update({
-            'message': msg
+            'message': msg,
+            'send_to': [send_to for send_to in send_to_list if self.is_valid_email(send_to)],
+            'copy_to': [copy_to for copy_to in copy_to_list if self.is_valid_email(copy_to)],
         })
         try:
             send_email_msg(
