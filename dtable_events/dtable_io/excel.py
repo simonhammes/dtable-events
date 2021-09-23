@@ -40,6 +40,13 @@ def parse_multiple_select(cell_value):
     return [value.strip(' ') for value in values]
 
 
+def parse_number(cell_value):
+    try:
+        int(cell_value)
+    except:
+        return ''
+    return cell_value
+
 def parse_long_text(cell_value):
     cell_value = str(cell_value)
     checked_count = cell_value.count('[x]')
@@ -354,7 +361,7 @@ def parse_append_excel_rows(sheet_rows, columns, max_column):
                 if isinstance(cell_value, datetime):  # JSON serializable
                     cell_value = str(cell_value)
                 if column_type in ('number', 'duration', 'rating'):
-                    row_data[column_name] = cell_value
+                    row_data[column_name] = parse_number(cell_value)
                 elif column_type == 'date':
                     row_data[column_name] = str(cell_value)
                 elif column_type == 'long-text':
