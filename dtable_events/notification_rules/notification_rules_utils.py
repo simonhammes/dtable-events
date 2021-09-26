@@ -38,6 +38,7 @@ except ImportError as e:
 
 
 CONDITION_ROWS_MODIFIED = 'rows_modified'
+CONDITION_ROWS_ADDED = 'rows_added'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
 
@@ -79,6 +80,7 @@ def scan_triggered_notification_rules(event_data, db_session):
     message_dtable_uuid = event_data.get('dtable_uuid', '')
     table_id = event_data.get('table_id', '')
     rule_id = event_data.get('notification_rule_id')
+    op_type = event_data.get('op_type')
     if not row or not converted_row or not message_dtable_uuid or not table_id or not rule_id:
         logger.error(f'redis event data not valid, event_data = {event_data}')
         return
@@ -88,10 +90,9 @@ def scan_triggered_notification_rules(event_data, db_session):
     rules = db_session.execute(sql, {'dtable_uuid': message_dtable_uuid, 'rule_id': rule_id})
 
     dtable_server_access_token = get_dtable_server_token(message_dtable_uuid)
-
     for rule in rules:
         try:
-            check_notification_rule(rule, table_id, row, converted_row, dtable_server_access_token, db_session)
+            check_notification_rule(rule, table_id, row, converted_row, dtable_server_access_token, db_session, op_type)
         except Exception as e:
             logger.error(f'check rule failed. {rule}, error: {e}')
     db_session.commit()
@@ -360,8 +361,7 @@ def gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name
     return _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata=dtable_metadata)
 
 
-def check_notification_rule(rule, message_table_id, row, converted_row, dtable_server_access_token, db_session):
-
+def check_notification_rule(rule, message_table_id, row, converted_row, dtable_server_access_token, db_session, op_type):
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
@@ -387,7 +387,9 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
         columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
         column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
 
-    if trigger['condition'] == CONDITION_ROWS_MODIFIED:
+
+
+    if op_type == 'modify_row' and trigger['condition'] == CONDITION_ROWS_MODIFIED:
         if not is_trigger_time_satisfy(last_trigger_time):
             return
 
@@ -415,7 +417,8 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
                 })
         send_notification(dtable_uuid, user_msg_list, dtable_server_access_token)
 
-    elif trigger['condition'] == CONDITION_FILTERS_SATISFY:
+    elif (op_type == 'modify_row' and trigger['condition'] == CONDITION_FILTERS_SATISFY) or \
+         (op_type in ('insert_row', 'append_rows') and trigger['condition'] == CONDITION_ROWS_ADDED):
         detail = {
             'table_id': table_id,
             'view_id': view_id,

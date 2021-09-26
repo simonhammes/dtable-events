@@ -44,6 +44,7 @@ PER_UPDATE = 'per_update'
 PER_MONTH = 'per_month'
 
 CONDITION_ROWS_MODIFIED = 'rows_modified'
+CONDITION_ROWS_ADDED = 'rows_added'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
 CONDITION_PERIODICALLY = 'run_periodically'
@@ -702,8 +703,16 @@ class AutomationRule:
         return self._table_name
 
     def can_do_actions(self):
-        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY):
+        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY, CONDITION_ROWS_ADDED):
             return False
+
+        if self.trigger.get('condition') == CONDITION_ROWS_ADDED:
+            if self.data.get('op_type') not in ['insert_row', 'append_rows']:
+                return False
+
+        if self.trigger.get('condition') in [CONDITION_FILTERS_SATISFY, CONDITION_ROWS_MODIFIED]:
+            if self.data.get('op_type') not in ['modify_row', 'modify_rows']:
+                return False
 
         if self.run_condition == PER_UPDATE:
             return True
