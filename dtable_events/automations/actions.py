@@ -12,7 +12,7 @@ from dtable_events.automations.models import BoundThirdPartyAccounts
 from dtable_events.dtable_io import send_wechat_msg, send_email_msg
 from dtable_events.notification_rules.notification_rules_utils import _fill_msg_blanks as fill_msg_blanks, \
     send_notification
-from dtable_events.utils import utc_to_tz
+from dtable_events.utils import utc_to_tz, uuid_str_to_36_chars
 from dtable_events.utils.constants import ColumnTypes
 
 
@@ -183,7 +183,7 @@ class UpdateAction(BaseAction):
 class LockRowAction(BaseAction):
 
 
-    def __init__(self, auto_rule, data):
+    def __init__(self, auto_rule, data, trigger):
         """
         auto_rule: instance of AutomationRule
         data: if auto_rule.PER_UPDATE, data is event data from redis
@@ -195,7 +195,32 @@ class LockRowAction(BaseAction):
             'table_name': self.auto_rule.table_name,
             'row_ids':[],
         }
+        self.trigger = trigger
         self._init_updates()
+
+    def _check_row_conditions(self):
+        filters = self.trigger.get('filters', [])
+        filter_conjunction = self.trigger.get('filter_conjunciton', 'And')
+        table_id = self.auto_rule.table_id
+        view_id = self.auto_rule.view_id
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        client_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
+        json_data = {
+            'table_id': table_id,
+            'view_id': view_id,
+            'filter_conditions': {
+                'filters': filters,
+                'filter_conjunction': filter_conjunction
+            }
+        }
+        try:
+            response = requests.post(client_url, headers=self.auto_rule.headers, json=json_data)
+            rows_data = response.json().get('rows')
+            return rows_data or []
+        except Exception as e:
+            logger.error('lock dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return
+
 
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
@@ -203,11 +228,14 @@ class LockRowAction(BaseAction):
             row_id = self.data['row']['_id']
             self.update_data['row_ids'].append(row_id)
 
+        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
+            rows_data = self._check_row_conditions()
+            for row in rows_data:
+                self.update_data['row_ids'].append(row.get('_id'))
+
+
     def _can_do_action(self):
         if not self.update_data.get('row_ids'):
-            return False
-
-        if self.auto_rule.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
             return False
 
         return True
@@ -215,6 +243,7 @@ class LockRowAction(BaseAction):
     def do_action(self):
         if not self._can_do_action():
             return
+
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
         row_update_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/lock-rows/?from=dtable-events'
         try:
@@ -625,6 +654,7 @@ class AutomationRule:
         self.view_id = None
 
         self._table_name = ''
+        self._view_name = ''
         self._dtable_metadata = None
         self._access_token = None
         self._view_columns = None
@@ -645,17 +675,17 @@ class AutomationRule:
 
     @property
     def access_token(self):
+
         if not self._access_token:
             self._access_token = jwt.encode(
                 payload={
                     'exp': int(time.time()) + 300,
-                    'dtable_uuid': self.dtable_uuid,
+                    'dtable_uuid': uuid_str_to_36_chars(self.dtable_uuid),
                     'username': 'Automation Rule',
                     'permission': 'rw',
                 },
                 key=DTABLE_PRIVATE_KEY
             )
-
         return self._access_token
 
     @property
@@ -701,6 +731,20 @@ class AutomationRule:
                     self._table_name = table.get('name')
                     break
         return self._table_name
+
+    @property
+    def view_name(self):
+        """
+        name of table defined in rule
+        """
+        if not self._view_name and self.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
+            dtable_metadata = self.dtable_metadata
+            views = dtable_metadata.get('views', [])
+            for view in views:
+                if view.get('_id') == self.view_id:
+                    self._view_name = view.get('name')
+                    break
+        return self._view_name
 
     def can_do_actions(self):
         if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY, CONDITION_ROWS_ADDED):
@@ -761,7 +805,7 @@ class AutomationRule:
                     NotifyAction(self, self.data, default_msg, users, users_column_key).do_action()
 
                 elif action_info.get('type') == 'lock_record':
-                    LockRowAction(self, self.data).do_action()
+                    LockRowAction(self, self.data, self.trigger).do_action()
 
                 elif action_info.get('type') == 'send_wechat':
                     account_id = int(action_info.get('account_id'))

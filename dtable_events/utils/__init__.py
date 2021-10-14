@@ -4,6 +4,7 @@ import sys
 import logging
 import configparser
 import subprocess
+import uuid
 
 import pytz
 
@@ -151,3 +152,9 @@ def utc_to_tz(dt, tz_str):
         # This method is available for pytz time zones.
         value = tz.normalize(value)
     return value.replace(tzinfo=None)
+
+def uuid_str_to_36_chars(dtable_uuid):
+    if len(dtable_uuid) == 32:
+        return str(uuid.UUID(dtable_uuid))
+    else:
+        return dtable_uuid
