@@ -278,9 +278,9 @@ def send_email_msg(auth_info, send_info, username, config=None, db_session=None)
 
     result = {}
     try:
-        smtp = smtplib.SMTP(email_host, int(email_port), timeout=5)
+        smtp = smtplib.SMTP(email_host, int(email_port), timeout=30)
     except Exception as e:
-        dtable_message_logger.error(
+        dtable_message_logger.warning(
             'Email server configured failed. host: %s, port: %s, error: %s' % (email_host, email_port, e))
         result['err_msg'] = 'Email server host or port invalid'
         return result
@@ -292,7 +292,7 @@ def send_email_msg(auth_info, send_info, username, config=None, db_session=None)
         smtp.sendmail(host_user, recevers, msg_obj.as_string())
         success = True
     except Exception as e :
-        dtable_message_logger.error(
+        dtable_message_logger.warning(
             'Email sending failed. email: %s, error: %s' % (host_user, e))
         result['err_msg'] = 'Email server username or password invalid'
     else:
