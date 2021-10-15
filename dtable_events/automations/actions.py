@@ -732,20 +732,6 @@ class AutomationRule:
                     break
         return self._table_name
 
-    @property
-    def view_name(self):
-        """
-        name of table defined in rule
-        """
-        if not self._view_name and self.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
-            dtable_metadata = self.dtable_metadata
-            views = dtable_metadata.get('views', [])
-            for view in views:
-                if view.get('_id') == self.view_id:
-                    self._view_name = view.get('name')
-                    break
-        return self._view_name
-
     def can_do_actions(self):
         if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY, CONDITION_ROWS_ADDED):
             return False
