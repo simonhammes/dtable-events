@@ -654,7 +654,6 @@ class AutomationRule:
         self.view_id = None
 
         self._table_name = ''
-        self._view_name = ''
         self._dtable_metadata = None
         self._access_token = None
         self._view_columns = None
