@@ -660,7 +660,7 @@ class AutomationRule:
 
     @property
     def headers(self):
-        return {'Authorization': 'Token ' + self.access_token.decode()}
+        return {'Authorization': 'Token ' + self.access_token}
 
     @property
     def dtable_metadata(self):
