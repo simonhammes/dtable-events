@@ -204,7 +204,7 @@ class LockRowAction(BaseAction):
         table_id = self.auto_rule.table_id
         view_id = self.auto_rule.view_id
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-        client_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
+        client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
         json_data = {
             'table_id': table_id,
             'view_id': view_id,
