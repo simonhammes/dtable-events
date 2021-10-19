@@ -48,6 +48,7 @@ CONDITION_ROWS_ADDED = 'rows_added'
 CONDITION_FILTERS_SATISFY = 'filters_satisfy'
 CONDITION_NEAR_DEADLINE = 'near_deadline'
 CONDITION_PERIODICALLY = 'run_periodically'
+CONDITION_PERIODICALLY_BY_CONDITION = 'run_periodically_by_condition'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
@@ -732,7 +733,7 @@ class AutomationRule:
         return self._table_name
 
     def can_do_actions(self):
-        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY, CONDITION_ROWS_ADDED):
+        if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY, CONDITION_ROWS_ADDED, CONDITION_PERIODICALLY_BY_CONDITION):
             return False
 
         if self.trigger.get('condition') == CONDITION_ROWS_ADDED:
