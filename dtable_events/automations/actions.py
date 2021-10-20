@@ -681,7 +681,7 @@ class RunPythonScriptAction(BaseAction):
         #   'can_schedule_run_script': {org1: {'can_run_python_script': True/False}}
         # }
         if self.org_id != -1:
-            can_run_python = permission_dict['org_script_permissions'][self.org_id]['can_run_python_script']
+            can_run_python = permission_dict['org_script_permissions'][str(self.org_id)]['can_run_python_script']
         else:
             can_run_python = permission_dict['user_script_permissions'][self.owner]['can_run_python_script']
 
@@ -877,7 +877,7 @@ class AutomationRule:
             payload['username'] = username
         if app_name:
             payload['app_name'] = app_name
-        temp_api_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256').decode()
+        temp_api_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256')
         return temp_api_token
 
     def can_do_actions(self):
