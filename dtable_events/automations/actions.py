@@ -211,7 +211,11 @@ class LockRowAction(BaseAction):
             'view_id': view_id,
             'filter_conditions': {
                 'filters': filters,
-                'filter_conjunction': filter_conjunction
+                'filter_conjunction': filter_conjunction,
+                'sorts':[
+                    {"column_key": "_mtime", "sort_type": "down"}
+                ],
+                'limit': 500
             }
         }
         try:
