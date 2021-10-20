@@ -40,6 +40,11 @@ def parse_multiple_select(cell_value):
     return [value.strip(' ') for value in values]
 
 
+def parse_image(cell_value):
+    cell_value = str(cell_value)
+    return cell_value.split(' ')
+
+
 def parse_number(cell_value):
     try:
         int(cell_value)
@@ -377,7 +382,7 @@ def parse_append_excel_rows(sheet_rows, columns, max_column):
                 elif column_type == 'file':
                     row_data[column_name] = None
                 elif column_type == 'image':
-                    row_data[column_name] = str(cell_value)
+                    row_data[column_name] = parse_image(cell_value)
                 elif column_type == 'single_select':
                     row_data[column_name] = str(cell_value)
                 elif column_type == 'link':
