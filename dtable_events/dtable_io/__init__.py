@@ -405,3 +405,9 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
             dtable_io_logger.error('execute printToPDF error: {}'.format(e))
 
         driver.quit()
+
+def run_auto_rule_task(trigger, actions, options, config):
+    from dtable_events.automations.actions import AutomationRule
+    db_session = init_db_session_class(config)()
+    auto_rule = AutomationRule(None, db_session, trigger, actions, options)
+    auto_rule.do_actions(with_test=True)

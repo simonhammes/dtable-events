@@ -924,8 +924,8 @@ class AutomationRule:
         return False
 
 
-    def do_actions(self):
-        if not self.can_do_actions():
+    def do_actions(self, with_test=False):
+        if (not self.can_do_actions()) and (not with_test):
             return
         for action_info in self.action_infos:
             try:
@@ -982,7 +982,7 @@ class AutomationRule:
                 logger.exception(e)
                 logger.error('rule: %s, do actions error: %s', self.rule_id, e)
 
-        if self.done_actions:
+        if self.done_actions and not with_test:
             self.update_last_trigger_time()
 
     def set_done_actions(self, done=True):
