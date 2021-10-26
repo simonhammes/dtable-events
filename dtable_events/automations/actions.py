@@ -758,6 +758,87 @@ class RunPythonScriptAction(BaseAction):
                 self.auto_rule.set_done_actions()
 
 
+class LinkRecordsAction(BaseAction):
+
+    def __init__(self, auto_rule, data, link_id, linked_table_id, linked_view_id, linked_table_filters, linked_table_filter_conjunction):
+        super().__init__(auto_rule, data=data)
+        self.action_type = 'link_record'
+        self.link_id = link_id
+        self.linked_table_id = linked_table_id
+        self.linked_view_id = linked_view_id
+        self.linked_table_filters = linked_table_filters
+        self.linked_table_filter_conjunction = linked_table_filter_conjunction
+
+        self.linked_row_ids = []
+
+        self._init_linked_row_ids()
+
+    def _get_linked_table_rows(self):
+        json_data = {
+            'table_id': self.linked_table_id,
+            'view_id': self.linked_view_id,
+            'filter_conditions': {
+                'filters': self.linked_table_filters,
+                'filter_conjunction': self.linked_table_filter_conjunction,
+                'sorts': [
+                    {"column_key": "_mtime", "sort_type": "down"}
+                ],
+                'limit': 500
+            }
+        }
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
+        try:
+            response = requests.post(client_url, headers=self.auto_rule.headers, json=json_data)
+            rows_data = response.json().get('rows')
+            logger.debug('Number of linking dtable rows by auto-rules: %s, dtable_uuid: %s, details: %s' % (
+                len(rows_data),
+                self.auto_rule.dtable_uuid,
+                json.dumps(json_data)
+            ))
+            return rows_data or []
+        except Exception as e:
+            logger.error('link dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return []
+
+    def _init_linked_row_ids(self):
+        linked_rows_data = self._get_linked_table_rows()
+        self.linked_row_ids = linked_rows_data and [row.get('_id') for row in linked_rows_data] or []
+
+    def _can_do_action(self):
+        if not self.linked_row_ids:
+            return False
+
+        if not self.auto_rule.run_condition == PER_UPDATE:
+            return False
+
+        return True
+
+    def do_action(self):
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        rows_link_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/links/?from=dtable-events'
+        if not self._can_do_action():
+            return
+        json_data = {
+            'row_id': self.data['row']['_id'],
+            'link_id': self.link_id,
+            'table_id': self.auto_rule.table_id,
+            'other_table_id': self.linked_table_id,
+            'other_rows_ids': self.linked_row_ids
+        }
+
+        try:
+            response = requests.put(rows_link_url, headers=self.auto_rule.headers, json=json_data)
+        except Exception as e:
+            logger.error('link dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return
+        if response.status_code != 200:
+            logger.error('link dtable: %s error response status code: %s', self.auto_rule.dtable_uuid, response.status_code)
+        else:
+            self.auto_rule.set_done_actions()
+
+
+
 class RuleInvalidException(Exception):
     """
     Exception which indicates rule need to be set is_valid=Fasle
@@ -979,6 +1060,14 @@ class AutomationRule:
                     org_id = action_info.get('org_id')
                     repo_id = action_info.get('repo_id')
                     RunPythonScriptAction(self, self.data, script_name, workspace_id, owner, org_id, repo_id).do_action()
+
+                elif action_info.get('type') == 'link_records':
+                    link_id = action_info.get('link_id')
+                    linked_table_id = action_info.get('linked_table_id')
+                    linked_view_id = action_info.get('linked_view_id')
+                    linked_table_filters = action_info.get('filters')
+                    linked_table_filter_conjunction = action_info.get('filter_conjunction')
+                    LinkRecordsAction(self, self.data, link_id, linked_table_id, linked_view_id, linked_table_filters, linked_table_filter_conjunction).do_action()
 
             except RuleInvalidException as e:
                 logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
