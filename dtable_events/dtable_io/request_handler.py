@@ -240,7 +240,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             try:
                 is_finished = task_manager.query_status(task_id)
             except Exception as e:
-                logger.error(e)
+                logger.debug(e)  # task_id not found
                 self.send_error(500)
                 return
 
@@ -275,7 +275,7 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             try:
                 is_finished, result = message_task_manager.query_status(task_id)
             except Exception as e:
-                logger.error(e)
+                logger.debug(e)  # task_id not found
                 self.send_error(500)
                 return
 
