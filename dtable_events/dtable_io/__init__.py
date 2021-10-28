@@ -417,3 +417,4 @@ def run_auto_rule_task(trigger, actions, options, config):
     db_session = init_db_session_class(config)()
     auto_rule = AutomationRule(None, db_session, trigger, actions, options)
     auto_rule.do_actions(with_test=True)
+    db_session.close()
