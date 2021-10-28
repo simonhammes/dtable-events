@@ -129,7 +129,7 @@ class TaskManager(object):
         return task_id
 
     def add_run_auto_rule_task(self, username, org_id, dtable_uuid, run_condition, trigger, actions):
-        from dtable_events.dtable_io import run_auto_rule_task
+        from dtable_events.automations.auto_rules_utils import run_auto_rule_task
         task_id = str(int(time.time() * 1000))
         options = {
             'run_condition': run_condition,
