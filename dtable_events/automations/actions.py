@@ -985,6 +985,9 @@ class AutomationRule:
         if self.done_actions and not with_test:
             self.update_last_trigger_time()
 
+        if self.db_session:
+            self.db_session.close()
+
     def set_done_actions(self, done=True):
         self.done_actions = done
 
