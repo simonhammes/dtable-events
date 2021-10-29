@@ -70,6 +70,9 @@ def get_dtable_export_content(username, repo_id, dtable_uuid, asset_dir_id, conf
         copy_src_forms_to_json(dtable_uuid, tmp_file_path, db_session)
     except Exception as e:
         dtable_io_logger.error('copy forms failed. ERROR: {}'.format(e))
+    finally:
+        if db_session:
+            db_session.close()
 
 
     """
@@ -120,6 +123,9 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
         create_forms_from_src_dtable(workspace_id, dtable_uuid, db_session)
     except Exception as e:
         dtable_io_logger.error('create forms failed. ERROR: {}'.format(e))
+    finally:
+        if db_session:
+            db_session.close()
 
     # remove extracted tmp file
     dtable_io_logger.info('Remove extracted tmp file.')

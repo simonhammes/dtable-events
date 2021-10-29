@@ -1,5 +1,6 @@
 import logging
 
+from dtable_events import init_db_session_class
 from dtable_events.automations.actions import AutomationRule
 
 logger = logging.getLogger(__name__)
@@ -55,3 +56,14 @@ def run_regular_execution_rule(rule, db_session):
         auto_rule.do_actions()
     except Exception as e:
         logger.error('auto rule: %s do actions error: %s', options['rule_id'], e)
+
+def run_auto_rule_task(trigger, actions, options, config):
+    from dtable_events.automations.actions import AutomationRule
+    db_session = init_db_session_class(config)()
+    try:
+        auto_rule = AutomationRule(None, db_session, trigger, actions, options)
+        auto_rule.do_actions(with_test=True)
+    except Exception as e:
+        logger.error('automation rule run test error: {}'.format(e))
+    finally:
+        db_session.close()

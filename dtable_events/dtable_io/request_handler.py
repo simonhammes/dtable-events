@@ -503,6 +503,37 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             resp = {'task_id': task_id}
             self.wfile.write(json.dumps(resp).encode('utf-8'))
+
+        elif path == '/add-run-auto-rule-task':
+            if message_task_manager.tasks_queue.full():
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            username = datasets.getvalue('username')
+            org_id = datasets.getvalue('org_id')
+            run_condition = datasets.getvalue('run_condition')
+            trigger = datasets.getvalue('trigger')
+            dtable_uuid = datasets.getvalue('dtable_uuid')
+            actions = datasets.getvalue('actions')
+            try:
+                task_id = task_manager.add_run_auto_rule_task(
+                    username,
+                    org_id,
+                    dtable_uuid,
+                    run_condition,
+                    trigger,
+                    actions
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {'task_id': task_id}
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
         else:
             self.send_error(400, 'path %s invalid.' % path)
 

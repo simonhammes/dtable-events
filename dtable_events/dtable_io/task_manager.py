@@ -128,6 +128,21 @@ class TaskManager(object):
         self.tasks_map[task_id] = task
         return task_id
 
+    def add_run_auto_rule_task(self, username, org_id, dtable_uuid, run_condition, trigger, actions):
+        from dtable_events.automations.auto_rules_utils import run_auto_rule_task
+        task_id = str(int(time.time() * 1000))
+        options = {
+            'run_condition': run_condition,
+            'dtable_uuid': dtable_uuid,
+            'org_id': org_id,
+            'creator': username,
+        }
+
+        task = (run_auto_rule_task, (trigger, actions, options, self.config))
+        self.tasks_queue.put(task_id)
+        self.tasks_map[task_id] = task
+        return task_id
+
     def query_status(self, task_id):
         task = self.tasks_map[task_id]
         if task == 'success':
