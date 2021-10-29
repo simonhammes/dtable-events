@@ -164,6 +164,40 @@ class DTableIORequestHandler(SimpleHTTPRequestHandler):
             resp['task_id'] = task_id
             self.wfile.write(json.dumps(resp).encode('utf-8'))
 
+        elif path == '/add-import-excel-add-table-task':
+
+            if task_manager.tasks_queue.full():
+                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
+                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
+                self.send_error(400, 'dtable io server busy.')
+                return
+
+            username = arguments['username'][0]
+            repo_id = arguments['repo_id'][0]
+            workspace_id = arguments['workspace_id'][0]
+            dtable_uuid = arguments['dtable_uuid'][0]
+            dtable_name = arguments['dtable_name'][0]
+
+            try:
+                task_id = task_manager.add_import_excel_add_table_task(
+                    username,
+                    repo_id,
+                    workspace_id,
+                    dtable_uuid,
+                    dtable_name,
+                )
+            except Exception as e:
+                logger.error(e)
+                self.send_error(500)
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            resp = {}
+            resp['task_id'] = task_id
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+
         elif path == '/add-append-excel-append-parsed-file-task':
 
             if task_manager.tasks_queue.full():
