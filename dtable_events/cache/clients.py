@@ -18,7 +18,7 @@ class RedisCacheClient(BaseCacheClient):
     def __init__(self):
         self._redis_client = None
 
-    def _init_redis(self, config):
+    def init_redis(self, config):
         self._redis_client = RedisClient(config)
 
     def set(self, key, value, timeout=None):

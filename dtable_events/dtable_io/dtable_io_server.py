@@ -1,24 +1,24 @@
-import time
 import logging
 import os
 import sys
-from http.server import HTTPServer
 from threading import Thread
 
-from dtable_events.dtable_io.request_handler import DTableIORequestHandler
+from gevent.pywsgi import WSGIServer
+
+from dtable_events.dtable_io.request_handler import app as application
 from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.dtable_io.task_message_manager import message_task_manager
 
 
 class DTableIOServer(Thread):
 
-    def __init__(self, config, dtable_server_config):
+    def __init__(self, config):
         Thread.__init__(self)
-        self._parse_config(config, dtable_server_config)
+        self._parse_config(config)
         task_manager.init(
             self._workers, self._dtable_private_key, self._dtable_web_service_url,
-            self._file_server_port, self._dtable_server_url, self._enable_dtable_server_cluster, self._dtable_proxy_server_url,
-            self._io_task_timeout, self._session_cookie_name, config
+            self._file_server_port, self._dtable_server_url, self._enable_dtable_server_cluster,
+            self._dtable_proxy_server_url, self._io_task_timeout, self._session_cookie_name, config
         )
         message_task_manager.init(
             self._workers, self._dtable_private_key, self._dtable_web_service_url,
@@ -27,9 +27,9 @@ class DTableIOServer(Thread):
         )
         task_manager.run()
         message_task_manager.run()
-        self._server = HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
+        self._server = WSGIServer((self._host, int(self._port)), application)
 
-    def _parse_config(self, config, dtable_server_config):
+    def _parse_config(self, config):
         if config.has_option('DTABLE-IO', 'host'):
             self._host = config.get('DTABLE-IO', 'host')
         else:
@@ -96,11 +96,4 @@ class DTableIOServer(Thread):
                 logging.error(f'import settings from SEAFILE_CENTRAL_CONF_DIR/dtable_web_settings.py failed {e}')
 
     def run(self):
-        while 1:
-            try:
-                self._server.serve_forever()
-            except Exception as e:
-                logging.error(e)
-                time.sleep(5)
-                self._server.server_close()
-                self._server = HTTPServer((self._host, int(self._port)), DTableIORequestHandler)
+        self._server.serve_forever()
