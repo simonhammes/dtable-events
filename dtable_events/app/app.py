@@ -16,12 +16,12 @@ from dtable_events.webhook.webhook import Webhooker
 
 
 class App(object):
-    def __init__(self, config, dtable_server_config, task_mode):
+    def __init__(self, config, task_mode):
         self._enable_foreground_tasks = task_mode.enable_foreground_tasks
         self._enable_background_tasks = task_mode.enable_background_tasks
 
         if self._enable_foreground_tasks:
-            self._dtable_io_server = DTableIOServer(config, dtable_server_config)
+            self._dtable_io_server = DTableIOServer(config)
 
         if self._enable_background_tasks:
             # redis client subscriber

@@ -1,578 +1,524 @@
-import cgi
 import json
 import jwt
 import logging
-from urllib import parse
-from http.server import SimpleHTTPRequestHandler
+
+from flask import Flask, request, make_response
+
 from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.dtable_io.task_message_manager import message_task_manager
 
+app = Flask(__name__)
 logger = logging.getLogger(__name__)
 
 
-class DTableIORequestHandler(SimpleHTTPRequestHandler):
+def check_auth_token(req):
+    auth = req.headers.get('Authorization', '').split()
+    if not auth or auth[0].lower() != 'token' or len(auth) != 2:
+        return False, 'Token invalid.'
 
-    def do_GET(self):
+    token = auth[1]
+    if not token:
+        return False, 'Token invalid.'
+
+    private_key = task_manager.conf['dtable_private_key']
+    try:
+        jwt.decode(token, private_key, algorithms=['HS256'])
+    except (jwt.ExpiredSignatureError, jwt.InvalidSignatureError) as e:
+        return False, e
+
+    return True, None
+
+
+@app.route('/add-export-task', methods=['GET'])
+def add_export_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
         from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
 
-        auth = self.headers['Authorization'].split()
-        if not auth or auth[0].lower() != 'token' or len(auth) != 2:
-            self.send_error(403, 'Token invalid.')
-        token = auth[1]
-        if not token:
-            self.send_error(403, 'Token invalid.')
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    table_name = request.args.get('table_name')
+    dtable_uuid = request.args.get('dtable_uuid')
 
-        private_key = task_manager.conf['dtable_private_key']
-        try:
-            jwt.decode(token, private_key, algorithms=['HS256'])
-        except (jwt.ExpiredSignatureError, jwt.InvalidSignatureError) as e:
-            self.send_error(403, e)
+    try:
+        task_id = task_manager.add_export_task(
+            username, repo_id, dtable_uuid, table_name)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
 
-        path, arguments = parse.splitquery(self.path)
-        arguments = parse.parse_qs(arguments)
-        if path == '/add-export-task':
+    return make_response(({'task_id': task_id}, 200))
 
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
 
-            username = arguments['username'][0]
-            repo_id = arguments['repo_id'][0]
-            table_name = arguments['table_name'][0]
-            dtable_uuid = arguments['dtable_uuid'][0]
+@app.route('/add-import-task', methods=['GET'])
+def add_import_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
 
-            try:
-                task_id = task_manager.add_export_task(
-                    username,
-                    repo_id,
-                    dtable_uuid,
-                    table_name,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {'task_id': task_id}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/add-import-task':
-
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
-
-            username = arguments['username'][0]
-            repo_id = arguments['repo_id'][0]
-            workspace_id = arguments['workspace_id'][0]
-            dtable_uuid = arguments['dtable_uuid'][0]
-            dtable_file_name = arguments['dtable_file_name'][0]
-
-            try:
-                task_id = task_manager.add_import_task(
-                    username,
-                    repo_id,
-                    workspace_id,
-                    dtable_uuid,
-                    dtable_file_name,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {}
-            resp['task_id'] = task_id
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/add-parse-excel-task':
-
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
-
-            username = arguments['username'][0]
-            repo_id = arguments['repo_id'][0]
-            workspace_id = arguments['workspace_id'][0]
-            dtable_name = arguments['dtable_name'][0]
-            custom = arguments['custom'][0]
-            custom = bool(int(custom))
-
-            try:
-                task_id = task_manager.add_parse_excel_task(
-                    username,
-                    repo_id,
-                    workspace_id,
-                    dtable_name,
-                    custom,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {}
-            resp['task_id'] = task_id
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/add-import-excel-task':
-
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
-
-            username = arguments['username'][0]
-            repo_id = arguments['repo_id'][0]
-            workspace_id = arguments['workspace_id'][0]
-            dtable_uuid = arguments['dtable_uuid'][0]
-            dtable_name = arguments['dtable_name'][0]
-
-            try:
-                task_id = task_manager.add_import_excel_task(
-                    username,
-                    repo_id,
-                    workspace_id,
-                    dtable_uuid,
-                    dtable_name,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {}
-            resp['task_id'] = task_id
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/add-import-excel-add-table-task':
-
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
-
-            username = arguments['username'][0]
-            repo_id = arguments['repo_id'][0]
-            workspace_id = arguments['workspace_id'][0]
-            dtable_uuid = arguments['dtable_uuid'][0]
-            dtable_name = arguments['dtable_name'][0]
-
-            try:
-                task_id = task_manager.add_import_excel_add_table_task(
-                    username,
-                    repo_id,
-                    workspace_id,
-                    dtable_uuid,
-                    dtable_name,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {}
-            resp['task_id'] = task_id
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/add-append-excel-append-parsed-file-task':
-
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
-
-            username = arguments['username'][0]
-            repo_id = arguments['repo_id'][0]
-            dtable_uuid = arguments['dtable_uuid'][0]
-            file_name = arguments['file_name'][0]
-            table_name = arguments['table_name'][0]
-
-            try:
-                task_id = task_manager.add_append_excel_append_parsed_file_task(
-                    username,
-                    repo_id,
-                    dtable_uuid,
-                    file_name,
-                    table_name,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {}
-            resp['task_id'] = task_id
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/add-append-excel-upload-excel-task':
-
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
-
-            username = arguments['username'][0]
-            repo_id = arguments['repo_id'][0]
-            file_name = arguments['file_name'][0]
-            dtable_uuid = arguments['dtable_uuid'][0]
-            table_name = arguments['table_name'][0]
-
-            try:
-                task_id = task_manager.add_append_excel_upload_excel_task(
-                    username,
-                    repo_id,
-                    file_name,
-                    dtable_uuid,
-                    table_name,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {}
-            resp['task_id'] = task_id
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/query-status':
-            task_id = arguments['task_id'][0]
-            if not task_manager.is_valid_task_id(task_id):
-                self.send_error(400, 'task_id invalid.')
-            is_finished = False
-            try:
-                is_finished = task_manager.query_status(task_id)
-            except Exception as e:
-                logger.debug(e)  # task_id not found
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.end_headers()
-            resp = {}
-            resp['is_finished'] = is_finished
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/cancel-task':
-            task_id = arguments['task_id'][0]
-            if not task_manager.is_valid_task_id(task_id):
-                self.send_error(400, 'task_id invalid.')
-            try:
-                task_manager.cancel_task(task_id)
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.end_headers()
-            resp = {'success': True}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/query-message-send-status':
-            task_id = arguments['task_id'][0]
-            if not message_task_manager.is_valid_task_id(task_id):
-                self.send_error(400, 'task_id invalid.')
-            is_finished = False
-            result = None
-            try:
-                is_finished, result = message_task_manager.query_status(task_id)
-            except Exception as e:
-                logger.debug(e)  # task_id not found
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.end_headers()
-            resp = {}
-            resp['is_finished'] = is_finished
-            resp['result'] = result if result else {}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/cancel-message-send-task':
-            task_id = arguments['task_id'][0]
-            if not message_task_manager.is_valid_task_id(task_id):
-                self.send_error(400, 'task_id invalid.')
-            try:
-                message_task_manager.cancel_task(task_id)
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.end_headers()
-            resp = {'success': True}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        elif path == '/convert-page-to-pdf':
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
-
-            dtable_uuid = arguments['dtable_uuid'][0]
-            page_id = arguments['page_id'][0]
-            row_id = arguments['row_id'][0] if arguments.get('row_id') else None
-            access_token = arguments['access_token'][0]
-            session_id = arguments['session_id'][0]
-
-            try:
-                task_id = task_manager.convert_page_to_pdf(
-                    dtable_uuid,
-                    page_id,
-                    row_id,
-                    access_token,
-                    session_id
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {'task_id': task_id}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-
-        else:
-            self.send_error(400, 'path %s invalid.' % path)
-
-    def do_POST(self):
+    if task_manager.tasks_queue.full():
         from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
 
-        auth = self.headers['Authorization'].split()
-        if not auth or auth[0].lower() != 'token' or len(auth) != 2:
-            self.send_error(403, 'Token invalid.')
-        token = auth[1]
-        if not token:
-            self.send_error(403, 'Token invalid.')
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    workspace_id = request.args.get('workspace_id')
+    dtable_uuid = request.args.get('dtable_uuid')
+    dtable_file_name = request.args.get('dtable_file_name')
 
-        private_key = task_manager.conf['dtable_private_key']
-        try:
-            jwt.decode(token, private_key, algorithms=['HS256'])
-        except (jwt.ExpiredSignatureError, jwt.InvalidSignatureError) as e:
-            self.send_error(403, e)
+    try:
+        task_id = task_manager.add_import_task(
+            username, repo_id, workspace_id, dtable_uuid, dtable_file_name)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
 
-        path, _ = parse.splitquery(self.path)
-        datasets = cgi.FieldStorage(fp = self.rfile,headers = self.headers,environ = {'REQUEST_METHOD': 'POST'})
+    return make_response(({'task_id': task_id}, 200))
 
-        if path == '/dtable-asset-files':
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
 
-            username = datasets.getvalue('username')
-            repo_id = datasets.getvalue('repo_id')
-            dtable_uuid = datasets.getvalue('dtable_uuid')
-            files = datasets.getvalue('files')
-            files_map = datasets.getvalue('files_map')
-            if not isinstance(files, list):
-                files = [files]
-            if not isinstance(files_map, dict):
-                files_map = json.loads(files_map)
-            try:
-                task_id = task_manager.add_export_dtable_asset_files_task(
-                    username,
-                    repo_id,
-                    dtable_uuid,
-                    files,
-                    files_map,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
+@app.route('/add-parse-excel-task', methods=['GET'])
+def add_parse_excel_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
 
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {'task_id': task_id}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
 
-        elif path == '/transfer-dtable-asset-files':
-            if task_manager.tasks_queue.full():
-                dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s' \
-                        % (task_manager.tasks_queue.qsize(), task_manager.current_task_info, task_manager.threads_is_alive()))
-                self.send_error(400, 'dtable io server busy.')
-                return
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    workspace_id = request.args.get('workspace_id')
+    dtable_name = request.args.get('dtable_name')
+    custom = request.args.get('custom')
+    custom = bool(int(custom))
 
-            username = datasets.getvalue('username')
-            repo_id = datasets.getvalue('repo_id')
-            dtable_uuid = datasets.getvalue('dtable_uuid')
-            files = datasets.getvalue('files')
-            files_map = datasets.getvalue('files_map')
-            repo_api_token = datasets.getvalue('repo_api_token')
-            seafile_server_url = datasets.getvalue('seafile_server_url')
-            parent_dir = datasets.getvalue('parent_dir')
-            relative_path = datasets.getvalue('relative_path')
-            replace = datasets.getvalue('replace')
-            if not isinstance(files, list):
-                files = [files]
-            if not isinstance(files_map, dict):
-                files_map = json.loads(files_map)
-            try:
-                task_id = task_manager.add_transfer_dtable_asset_files_task(
-                    username,
-                    repo_id,
-                    dtable_uuid,
-                    files,
-                    files_map,
-                    parent_dir,
-                    relative_path,
-                    replace,
-                    repo_api_token,
-                    seafile_server_url,
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
+    try:
+        task_id = task_manager.add_parse_excel_task(
+            username, repo_id, workspace_id, dtable_name, custom)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
 
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {'task_id': task_id}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
+    return make_response(({'task_id': task_id}, 200))
 
-        elif path == '/add-wechat-sending-task':
-            if message_task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy.')
-                return
 
-            webhook_url = datasets.getvalue('webhook_url')
-            msg = datasets.getvalue('msg')
-            try:
-                task_id = message_task_manager.add_wechat_sending_task(
-                    webhook_url,
-                    msg
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
+@app.route('/add-import-excel-task', methods=['GET'])
+def add_import_excel_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
 
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {'task_id': task_id}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
 
-        elif path == '/add-email-sending-task':
-            if message_task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy.')
-                return
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    workspace_id = request.args.get('workspace_id')
+    dtable_uuid = request.args.get('dtable_uuid')
+    dtable_name = request.args.get('dtable_name')
 
-            send_to = datasets.getvalue('send_to')
-            copy_to = datasets.getvalue('copy_to')
-            if not isinstance(send_to, list):
-                send_to = [send_to]
-            if copy_to and not isinstance(copy_to, list):
-                copy_to = [copy_to]
+    try:
+        task_id = task_manager.add_import_excel_task(
+            username, repo_id, workspace_id, dtable_uuid, dtable_name)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
 
-            auth_info = {
-                'email_host': datasets.getvalue('email_host'),
-                'email_port': datasets.getvalue('email_port'),
-                'host_user': datasets.getvalue('host_user'),
-                'password': datasets.getvalue('password')
-            }
+    return make_response(({'task_id': task_id}, 200))
 
-            send_info = {
-                'message': datasets.getvalue('message'),
-                'send_to': send_to,
-                'subject': datasets.getvalue('subject'),
-                'source': datasets.getvalue('source'),
-                'copy_to': copy_to,
-                'reply_to': datasets.getvalue('reply_to'),
-            }
-            username = datasets.getvalue('username')
-            try:
-                task_id = message_task_manager.add_email_sending_task(
-                    auth_info,
-                    send_info,
-                    username
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
 
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {'task_id': task_id}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
+@app.route('/add-import-excel-add-table-task', methods=['GET'])
+def add_import_excel_add_table_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
 
-        elif path == '/add-run-auto-rule-task':
-            if message_task_manager.tasks_queue.full():
-                self.send_error(400, 'dtable io server busy.')
-                return
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
 
-            username = datasets.getvalue('username')
-            org_id = datasets.getvalue('org_id')
-            run_condition = datasets.getvalue('run_condition')
-            trigger = datasets.getvalue('trigger')
-            dtable_uuid = datasets.getvalue('dtable_uuid')
-            actions = datasets.getvalue('actions')
-            try:
-                task_id = task_manager.add_run_auto_rule_task(
-                    username,
-                    org_id,
-                    dtable_uuid,
-                    run_condition,
-                    trigger,
-                    actions
-                )
-            except Exception as e:
-                logger.error(e)
-                self.send_error(500)
-                return
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    workspace_id = request.args.get('workspace_id')
+    dtable_uuid = request.args.get('dtable_uuid')
+    dtable_name = request.args.get('dtable_name')
 
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            resp = {'task_id': task_id}
-            self.wfile.write(json.dumps(resp).encode('utf-8'))
-        else:
-            self.send_error(400, 'path %s invalid.' % path)
+    try:
+        task_id = task_manager.add_import_excel_add_table_task(
+            username, repo_id, workspace_id, dtable_uuid, dtable_name)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
 
-    def log_request(self, *args):
-        """
-        Override super.log_request to prevent server from logging request in log
-        """
-        pass
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/add-append-excel-append-parsed-file-task', methods=['GET'])
+def add_append_excel_append_parsed_file_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
+
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    dtable_uuid = request.args.get('dtable_uuid')
+    file_name = request.args.get('file_name')
+    table_name = request.args.get('table_name')
+
+    try:
+        task_id = task_manager.add_append_excel_append_parsed_file_task(
+            username, repo_id, dtable_uuid, file_name, table_name)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/add-append-excel-upload-excel-task', methods=['GET'])
+def add_append_excel_upload_excel_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
+
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    file_name = request.args.get('file_name')
+    dtable_uuid = request.args.get('dtable_uuid')
+    table_name = request.args.get('table_name')
+
+    try:
+        task_id = task_manager.add_append_excel_upload_excel_task(
+            username, repo_id, file_name, dtable_uuid, table_name)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/query-status', methods=['GET'])
+def query_status():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    task_id = request.args.get('task_id')
+    if not task_manager.is_valid_task_id(task_id):
+        return make_response(('task_id invalid.', 400))
+
+    try:
+        is_finished = task_manager.query_status(task_id)
+    except Exception as e:
+        logger.debug(e)  # task_id not found
+        return make_response((e, 500))
+
+    return make_response(({'is_finished': is_finished}, 200))
+
+
+@app.route('/cancel-task', methods=['GET'])
+def cancel_status():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    task_id = request.args.get('task_id')
+    if not task_manager.is_valid_task_id(task_id):
+        return make_response(('task_id invalid.', 400))
+
+    try:
+        task_manager.cancel_task(task_id)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'success': True}, 200))
+
+
+@app.route('/query-message-send-status', methods=['GET'])
+def query_message_send_status():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    task_id = request.args.get('task_id')
+    if not message_task_manager.is_valid_task_id(task_id):
+        return make_response(('task_id invalid.', 400))
+
+    try:
+        is_finished, result = message_task_manager.query_status(task_id)
+    except Exception as e:
+        logger.debug(e)  # task_id not found
+        return make_response((e, 500))
+
+    resp = dict(is_finished=is_finished)
+    resp['result'] = result if result else {}
+    return make_response((resp, 200))
+
+
+@app.route('/cancel-message-send-task', methods=['GET'])
+def cancel_message_send_status():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    task_id = request.args.get('task_id')
+    if not message_task_manager.is_valid_task_id(task_id):
+        return make_response(('task_id invalid.', 400))
+
+    try:
+        message_task_manager.cancel_task(task_id)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'success': True}, 200))
+
+
+@app.route('/convert-page-to-pdf', methods=['GET'])
+def convert_page_to_pdf():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
+
+    dtable_uuid = request.args.get('dtable_uuid')
+    page_id = request.args.get('page_id')
+    row_id = request.args.get('row_id')
+    access_token = request.args.get('access_token')
+    session_id = request.args.get('session_id')
+
+    try:
+        task_id = task_manager.convert_page_to_pdf(
+            dtable_uuid, page_id, row_id, access_token, session_id)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/dtable-asset-files', methods=['POST'])
+def dtable_asset_files():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
+
+    data = request.form
+    if not isinstance(data, dict):
+        return make_response(('Bad request', 400))
+
+    username = data.get('username')
+    repo_id = data.get('repo_id')
+    dtable_uuid = data.get('dtable_uuid')
+    files = data.getlist('files')
+    files_map = data.get('files_map')
+
+    if not isinstance(files, list):
+        files = [files]
+    if not isinstance(files_map, dict):
+        files_map = json.loads(files_map)
+
+    try:
+        task_id = task_manager.add_export_dtable_asset_files_task(
+            username, repo_id, dtable_uuid, files, files_map)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/transfer-dtable-asset-files', methods=['POST'])
+def transfer_dtable_asset_files():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
+
+    data = request.form
+    if not isinstance(data, dict):
+        return make_response(('Bad request', 400))
+
+    username = data.get('username')
+    repo_id = data.get('repo_id')
+    dtable_uuid = data.get('dtable_uuid')
+    files = data.getlist('files')
+    files_map = data.get('files_map')
+    repo_api_token = data.get('repo_api_token')
+    seafile_server_url = data.get('seafile_server_url')
+    parent_dir = data.get('parent_dir')
+    relative_path = data.get('relative_path')
+    replace = data.get('replace')
+
+    if not isinstance(files, list):
+        files = [files]
+    if not isinstance(files_map, dict):
+        files_map = json.loads(files_map)
+
+    try:
+        task_id = task_manager.add_transfer_dtable_asset_files_task(
+            username, repo_id, dtable_uuid, files, files_map, parent_dir,
+            relative_path, replace, repo_api_token, seafile_server_url)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/add-wechat-sending-task', methods=['POST'])
+def add_wechat_sending_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if message_task_manager.tasks_queue.full():
+        return make_response(('dtable io server busy.', 400))
+
+    data = request.form
+    if not isinstance(data, dict):
+        return make_response(('Bad request', 400))
+
+    webhook_url = data.get('webhook_url')
+    msg = data.get('msg')
+
+    try:
+        task_id = message_task_manager.add_wechat_sending_task(webhook_url, msg)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/add-email-sending-task', methods=['POST'])
+def add_email_sending_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if message_task_manager.tasks_queue.full():
+        return make_response(('dtable io server busy.', 400))
+
+    data = request.form
+    if not isinstance(data, dict):
+        return make_response(('Bad request', 400))
+
+    username = data.get('username')
+    send_to = data.getlist('send_to')
+    copy_to = data.getlist('copy_to')
+
+    if not isinstance(send_to, list):
+        send_to = [send_to]
+    if copy_to and not isinstance(copy_to, list):
+        copy_to = [copy_to]
+
+    auth_info = {
+        'email_host': data.get('email_host'),
+        'email_port': data.get('email_port'),
+        'host_user': data.get('host_user'),
+        'password': data.get('password')
+    }
+
+    send_info = {
+        'message': data.get('message'),
+        'send_to': send_to,
+        'subject': data.get('subject'),
+        'source': data.get('source'),
+        'copy_to': copy_to,
+        'reply_to': data.get('reply_to'),
+    }
+
+    try:
+        task_id = message_task_manager.add_email_sending_task(
+            auth_info, send_info, username)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/add-run-auto-rule-task', methods=['POST'])
+def add_run_auto_rule_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if message_task_manager.tasks_queue.full():
+        return make_response(('dtable io server busy.', 400))
+
+    data = request.form
+    if not isinstance(data, dict):
+        return make_response(('Bad request', 400))
+
+    username = data.get('username')
+    org_id = data.get('org_id')
+    run_condition = data.get('run_condition')
+    trigger = data.get('trigger')
+    dtable_uuid = data.get('dtable_uuid')
+    actions = data.get('actions')
+
+    try:
+        task_id = task_manager.add_run_auto_rule_task(
+            username, org_id, dtable_uuid, run_condition, trigger, actions)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))

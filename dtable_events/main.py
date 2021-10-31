@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-import os
+from gevent import monkey
+monkey.patch_all()
+
 import argparse
 import logging
-import json
 
 from dtable_events.app.app import App
 from dtable_events.app.log import LogConfigurator
@@ -15,13 +16,9 @@ def main():
     args = parser.parse_args()
     app_logger = LogConfigurator(args.loglevel, args.logfile)
 
-    dtable_server_config_path = os.environ['DTABLE_SERVER_CONFIG']
-    with open(dtable_server_config_path) as f:
-        dtable_server_config = json.load(f)
-
     config = get_config(args.config_file)
 
-    redis_cache._init_redis(config)  # init redis instance in redis-cache
+    redis_cache.init_redis(config)  # init redis instance in redis-cache
 
     try:
         create_db_tables(config)
@@ -34,7 +31,7 @@ def main():
  
     task_mode = get_task_mode(args.taskmode)
 
-    app = App(config, dtable_server_config, task_mode)
+    app = App(config, task_mode)
     app.serve_forever()
 
 
