@@ -222,8 +222,8 @@ class LockRowAction(BaseAction):
                 'sorts':[
                     {"column_key": "_mtime", "sort_type": "down"}
                 ],
-                'limit': 500
-            }
+            },
+            'limit': 500
         }
         try:
             response = requests.post(client_url, headers=self.auto_rule.headers, json=json_data)
