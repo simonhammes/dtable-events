@@ -101,7 +101,7 @@ def parse_excel_rows(sheet_rows, columns, head_index, max_column):
                 column_type = columns[index]['type']
                 if cell_value is None:
                     continue
-                if isinstance(cell_value, datetime):  # JSON serializable
+                if isinstance(cell_value, datetime) or isinstance(cell_value, time):  # JSON serializable
                     cell_value = str(cell_value)
 
                 if column_type == 'number':
