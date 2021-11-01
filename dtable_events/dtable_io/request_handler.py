@@ -468,7 +468,7 @@ def add_email_sending_task():
     if copy_to and not isinstance(copy_to, list):
         copy_to = [copy_to]
 
-    file_download_urls = data.getvalue('file_download_urls', )
+    file_download_urls = data.get('file_download_urls', )
     if file_download_urls and not isinstance(file_download_urls, dict):
         file_download_urls = json.loads(file_download_urls)
 
