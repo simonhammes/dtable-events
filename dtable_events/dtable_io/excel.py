@@ -1,6 +1,6 @@
 import re
 import json
-from datetime import datetime
+from datetime import datetime, time
 
 from openpyxl import load_workbook
 
@@ -101,7 +101,7 @@ def parse_excel_rows(sheet_rows, columns, head_index, max_column):
                 column_type = columns[index]['type']
                 if cell_value is None:
                     continue
-                if isinstance(cell_value, datetime):  # JSON serializable
+                if isinstance(cell_value, datetime) or isinstance(cell_value, time):  # JSON serializable
                     cell_value = str(cell_value)
 
                 if column_type == 'number':
@@ -136,6 +136,8 @@ def parse_excel_column_type(value_list):
                 column_type = 'number'
             elif isinstance(cell_value, datetime):
                 column_type = 'date'
+            elif isinstance(cell_value, time):
+                column_type = 'text'
             elif '\n' in cell_value:
                 column_type = 'long-text'
             elif cell_value in CHECKBOX_STRING_LIST:
