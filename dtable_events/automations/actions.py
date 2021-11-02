@@ -208,18 +208,34 @@ class LockRowAction(BaseAction):
 
     def _check_row_conditions(self):
         filters = self.trigger.get('filters', [])
-        filter_conjunction = self.trigger.get('filter_conjunciton', 'And')
+        filter_conjunction = self.trigger.get('filter_conjunction', 'And')
         table_id = self.auto_rule.table_id
         view_id = self.auto_rule.view_id
+        view_info = self.auto_rule.view_info
+        view_filters = view_info.get('filters', [])
+        view_filter_conjunction = view_info.get('filter_conjunction', 'And')
+        filter_groups = []
+
+        if view_filters:
+            filter_groups.append({'filters': view_filters, 'filter_conjunction': view_filter_conjunction})
+
+
+        if filters:
+            # remove the duplicate filter which may already exist in view filter
+            trigger_filters = [trigger_filter for trigger_filter in filters if trigger_filter not in view_filters]
+            if trigger_filters:
+                filter_groups.append({'filters': trigger_filters, 'filter_conjunction': filter_conjunction})
+
+
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
         client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
         json_data = {
             'table_id': table_id,
             'view_id': view_id,
             'filter_conditions': {
-                'filters': filters,
-                'filter_conjunction': filter_conjunction,
-                'sorts':[
+                'filter_groups':filter_groups,
+                'group_conjunction': 'And',
+                'sorts': [
                     {"column_key": "_mtime", "sort_type": "down"}
                 ],
             },
@@ -792,6 +808,7 @@ class AutomationRule:
 
         self.table_id = None
         self.view_id = None
+        self._view_info = {}
 
         self._table_name = ''
         self._dtable_metadata = None
@@ -872,6 +889,20 @@ class AutomationRule:
                     self._table_name = table.get('name')
                     break
         return self._table_name
+
+    @property
+    def view_info(self):
+        dtable_metadata = self.dtable_metadata
+        tables = dtable_metadata.get('tables', [])
+        for table in tables:
+            if table.get('_id') == self.table_id:
+                views = table.get('views')
+                for table_view in views:
+                    if table_view.get('_id') == self.view_id:
+                        self._view_info = table_view
+                        break
+        return self._view_info
+
 
     def get_temp_api_token(self, username=None, app_name=None):
         payload = {
