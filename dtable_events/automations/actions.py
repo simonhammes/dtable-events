@@ -219,13 +219,11 @@ class LockRowAction(BaseAction):
         if view_filters:
             filter_groups.append({'filters': view_filters, 'filter_conjunction': view_filter_conjunction})
 
-
         if filters:
             # remove the duplicate filter which may already exist in view filter
             trigger_filters = [trigger_filter for trigger_filter in filters if trigger_filter not in view_filters]
             if trigger_filters:
                 filter_groups.append({'filters': trigger_filters, 'filter_conjunction': filter_conjunction})
-
 
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
         client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
@@ -254,7 +252,6 @@ class LockRowAction(BaseAction):
             logger.error('lock dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
             return []
 
-
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         if self.auto_rule.run_condition == PER_UPDATE:
@@ -265,7 +262,6 @@ class LockRowAction(BaseAction):
             rows_data = self._check_row_conditions()
             for row in rows_data:
                 self.update_data['row_ids'].append(row.get('_id'))
-
 
     def _can_do_action(self):
         if not self.update_data.get('row_ids'):
