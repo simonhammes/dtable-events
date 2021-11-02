@@ -210,7 +210,6 @@ class LockRowAction(BaseAction):
         filters = self.trigger.get('filters', [])
         filter_conjunction = self.trigger.get('filter_conjunction', 'And')
         table_id = self.auto_rule.table_id
-        view_id = self.auto_rule.view_id
         view_info = self.auto_rule.view_info
         view_filters = view_info.get('filters', [])
         view_filter_conjunction = view_info.get('filter_conjunction', 'And')
@@ -229,7 +228,6 @@ class LockRowAction(BaseAction):
         client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
         json_data = {
             'table_id': table_id,
-            'view_id': view_id,
             'filter_conditions': {
                 'filter_groups':filter_groups,
                 'group_conjunction': 'And',
