@@ -25,7 +25,7 @@ class LogConfigurator(object):
 
     def _rotating_config(self):
         # Rotating log
-        handler = handlers.TimedRotatingFileHandler(self._logfile, when='W0', interval=1)
+        handler = handlers.TimedRotatingFileHandler(self._logfile, when='W0', interval=1, backupCount=7)
         handler.setLevel(self._level)
         formatter = logging.Formatter('[%(asctime)s] %(filename)s[line:%(lineno)d] [%(levelname)s] %(message)s')
         handler.setFormatter(formatter)

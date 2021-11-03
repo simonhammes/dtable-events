@@ -84,7 +84,8 @@ class TaskMessageManager(object):
                 self.current_task_info = None
 
     def run(self):
-        self.t = threading.Thread(target=self.handle_task)
+        t_name = 'MessageTaskManager Thread'
+        self.t = threading.Thread(target=self.handle_task, name=t_name)
         self.t.setDaemon(True)
         self.t.start()
 

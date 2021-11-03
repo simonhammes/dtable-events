@@ -3,6 +3,7 @@ import requests
 import os
 import time
 import logging
+from logging import handlers
 import io
 import uuid
 import multiprocessing
@@ -31,11 +32,12 @@ def setup_logger(logname):
     """
     logdir = os.path.join(os.environ.get('LOG_DIR', ''))
     log_file = os.path.join(logdir, logname)
-    handler = logging.FileHandler(log_file)
+    handler = handlers.TimedRotatingFileHandler(log_file, when='MIDNIGHT', interval=1, backupCount=7)
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     handler.setFormatter(formatter)
+    handler.addFilter(logging.Filter(logname))
 
-    logger = multiprocessing.get_logger()
+    logger = logging.getLogger(logname)
     logger.addHandler(handler)
 
     return logger
