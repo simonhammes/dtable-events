@@ -379,6 +379,8 @@ def parse_append_excel_rows(sheet_rows, columns, max_column):
                     continue
                 if isinstance(cell_value, datetime):  # JSON serializable
                     cell_value = str(cell_value)
+                if isinstance(cell_value, str):
+                    cell_value = cell_value.strip()
                 if column_type in ('number', 'duration', 'rating'):
                     row_data[column_name] = parse_number(cell_value)
                 elif column_type == 'date':
