@@ -10,8 +10,6 @@ from datetime import datetime, date, timedelta
 import jwt
 import requests
 
-from seaserv import seafile_api
-
 from dtable_events.automations.models import BoundThirdPartyAccounts
 from dtable_events.dtable_io import send_wechat_msg, send_email_msg
 from dtable_events.notification_rules.notification_rules_utils import _fill_msg_blanks as fill_msg_blanks, \
@@ -720,22 +718,6 @@ class RunPythonScriptAction(BaseAction):
         if not self._can_do_action():
             return
 
-        # prepare params to request faas url
-        script_path = os.path.join(
-            '/asset', str(UUID(self.auto_rule.dtable_uuid)), 'scripts', self.script_name)
-        asset_id = seafile_api.get_file_id_by_path(self.repo_id, script_path)
-        if not asset_id:
-            logger.warning('script %s not found!', self.script_name)
-            return
-
-        token = seafile_api.get_fileserver_access_token(
-            self.repo_id, asset_id, 'download', '', use_onetime=True)
-        if not token:
-            logger.error('script %s cant get file server token!', self.script_name)
-            return
-
-        script_url = '%s/files/%s/%s' % (FILE_SERVER_ROOT.strip('/'), token, parse.quote(self.script_name))
-
         context_data = {'table': self.auto_rule.table_name}
         if self.auto_rule.run_condition == PER_UPDATE:
             context_data['row'] = self.data['converted_row']
@@ -751,7 +733,6 @@ class RunPythonScriptAction(BaseAction):
                 'context_data': context_data,
                 'owner': self.owner,
                 'org_id': self.org_id,
-                'script_url': script_url,
                 'temp_api_token': self.auto_rule.get_temp_api_token(app_name=self.script_name),
                 'scripts_running_limit': scripts_running_limit,
                 'operate_from': 'automation-rule',
