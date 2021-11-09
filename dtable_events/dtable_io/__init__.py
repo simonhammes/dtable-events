@@ -256,8 +256,11 @@ def get_dtable_transfer_asset_files(username, repo_id, dtable_uuid, files, task_
     if os.path.exists(tmp_file_path):
         shutil.rmtree(tmp_file_path)
 
-def send_wechat_msg(webhook_url, msg):
-    msg_format = {"msgtype": "text", "text": {"content": msg}}
+def send_wechat_msg(webhook_url, msg, msg_type="text"):
+    if msg_type == "markdown":
+        msg_format = {"msgtype": "markdown","markdown":{"content":msg}}
+    else:
+        msg_format = {"msgtype": "text", "text": {"content": msg}}
     result = {}
     try:
         requests.post(webhook_url, json=msg_format, headers={"Content-Type": "application/json"})
