@@ -221,7 +221,8 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
     for sheet in wb:
         dtable_io_logger.info(
             'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
-
+        if sheet.max_row is None or sheet.max_column is None:
+            continue
         sheet_rows = list(sheet.rows)
         max_row = len(sheet_rows)
         max_column = sheet.max_column
@@ -307,12 +308,27 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
     tables = []
     wb = load_workbook(excel_file, read_only=True)
     sheet = wb.get_sheet_by_name(wb.sheetnames[0])
-    # for sheet in wb:
+    columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
+
+    if sheet.max_row is None or sheet.max_column is None:
+        wb.close()
+        # upload empty json to file server
+        table = {
+            'name': table_name,
+            'rows': [],
+            'columns': columns,
+            'max_row': 0,
+            'max_column': 0,
+        }
+        tables.append(table)
+        content = json.dumps(tables)
+        upload_excel_json_file(repo_id, file_name, content)
+        return
+
     dtable_io_logger.info(
         'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
 
     sheet_rows = list(sheet.rows)
-    columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
     max_row = len(sheet_rows)
     max_column = sheet.max_column
     if max_row > 50000:
