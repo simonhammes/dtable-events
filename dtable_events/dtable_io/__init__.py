@@ -402,7 +402,7 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
         WebDriverWait(driver, awaitReactRender).until(lambda driver: driver.find_element_by_id('page-design-render-complete') is not None, message='wait react timeout')
         # make sure images from asset are rendered, timeout 120s
         WebDriverWait(driver, 120, poll_frequency=1).until(lambda driver: check_images_and_networks(driver), message='wait images and networks timeout')
-        time.sleep(2) # wait for fonts rendering
+        time.sleep(6) # wait for all rendering
     except Exception as e:
         dtable_io_logger.warning('wait for page design error: %s', e)
     finally:
