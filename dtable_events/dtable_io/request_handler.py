@@ -522,3 +522,91 @@ def add_run_auto_rule_task():
         return make_response((e, 500))
 
     return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/add-update-excel-upload-excel-task', methods=['GET'])
+def add_update_excel_upload_excel_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
+
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    file_name = request.args.get('file_name')
+    dtable_uuid = request.args.get('dtable_uuid')
+    table_name = request.args.get('table_name')
+
+    try:
+        task_id = task_manager.add_update_excel_upload_excel_task(
+            username, repo_id, file_name, dtable_uuid, table_name, )
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/add-update-excel-csv-update-parsed-file-task', methods=['GET'])
+def add_update_excel_csv_update_parsed_file_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
+
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    dtable_uuid = request.args.get('dtable_uuid')
+    file_name = request.args.get('file_name')
+    table_name = request.args.get('table_name')
+    selected_columns = request.args.get('selected_columns')
+
+    try:
+        task_id = task_manager.add_update_excel_csv_update_parsed_file_task(
+            username, repo_id, dtable_uuid, file_name, table_name, selected_columns)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))
+
+
+@app.route('/add-update-csv-upload-csv-task', methods=['GET'])
+def add_update_csv_upload_csv_task():
+    is_valid, error = check_auth_token(request)
+    if not is_valid:
+        return make_response((error, 403))
+
+    if task_manager.tasks_queue.full():
+        from dtable_events.dtable_io import dtable_io_logger
+        dtable_io_logger.warning('dtable io server busy, queue size: %d, current tasks: %s, threads is_alive: %s'
+                                 % (task_manager.tasks_queue.qsize(), task_manager.current_task_info,
+                                    task_manager.threads_is_alive()))
+        return make_response(('dtable io server busy.', 400))
+
+    username = request.args.get('username')
+    repo_id = request.args.get('repo_id')
+    dtable_uuid = request.args.get('dtable_uuid')
+    file_name = request.args.get('file_name')
+    table_name = request.args.get('table_name')
+
+    try:
+        task_id = task_manager.add_update_csv_upload_csv_task(
+            username, repo_id, file_name, dtable_uuid, table_name)
+    except Exception as e:
+        logger.error(e)
+        return make_response((e, 500))
+
+    return make_response(({'task_id': task_id}, 200))

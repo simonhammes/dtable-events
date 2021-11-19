@@ -3,6 +3,7 @@ import json
 from datetime import datetime, time
 
 from openpyxl import load_workbook
+import csv
 
 CHECKBOX_TUPLE = (
     ('√', 'x'),
@@ -337,7 +338,6 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
     if max_column > len(columns):
         max_column = len(columns)
     rows = parse_append_excel_rows(sheet_rows, columns, max_column)
-    max_row = len(rows)
 
     dtable_io_logger.info(
         'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), max_column))
@@ -377,43 +377,252 @@ def parse_append_excel_rows(sheet_rows, columns, max_column):
                 column_type = columns[index]['type']
                 if cell_value is None:
                     continue
-                if isinstance(cell_value, datetime):  # JSON serializable
-                    cell_value = str(cell_value)
-                if isinstance(cell_value, str):
-                    cell_value = cell_value.strip()
-                if column_type in ('number', 'duration', 'rating'):
-                    row_data[column_name] = parse_number(cell_value)
-                elif column_type == 'date':
-                    row_data[column_name] = str(cell_value)
-                elif column_type == 'long-text':
-                    row_data[column_name] = parse_long_text(cell_value)
-                elif column_type == 'checkbox':
-                    row_data[column_name] = parse_checkbox(cell_value)
-                elif column_type == 'multi-select':
-                    row_data[column_name] = parse_multiple_select(cell_value)
-                elif column_type in ('URL', 'email'):
-                    row_data[column_name] = str(cell_value)
-                elif column_type == 'text':
-                    row_data[column_name] = str(cell_value)
-                elif column_type == 'file':
-                    row_data[column_name] = None
-                elif column_type == 'image':
-                    row_data[column_name] = parse_image(cell_value)
-                elif column_type == 'single_select':
-                    row_data[column_name] = str(cell_value)
-                elif column_type == 'link':
-                    row_data[column_name] = None
-                elif column_type == 'button':
-                    row_data[column_name] = None
-                elif column_type == 'geolocation':
-                    row_data[column_name] = None
-                elif column_type in ('collaborator', 'creator', 'last_modifier', 'ctime', 'mtime', 'formula',
-                                     'link_formula', 'auto_number'):
-                    row_data[column_name] = None
-                else:
-                    row_data[column_name] = str(cell_value)
+                row_data[column_name] = parse_row(column_type, cell_value)
             except Exception as e:
                 dtable_io_logger.exception(e)
                 row_data[column_name] = None
         rows.append(row_data)
     return rows
+
+
+def get_insert_update_result(excel_row, dtable_rows, selected_column_list):
+    update_row_list = []
+    for dtable_row in dtable_rows:
+        is_update = True
+        for selected_column in selected_column_list:
+            dtable_cell_value = dtable_row.get(selected_column)
+            excel_cell_value = excel_row.get(selected_column)
+            if dtable_cell_value != excel_cell_value:
+                is_update = False
+                break
+        if is_update:
+            update_row = {'row_id': dtable_row.get('_id'), 'row': excel_row}
+            update_row_list.append(update_row)
+    if update_row_list:
+        return update_row_list, 'update'
+    return excel_row, 'insert'
+
+
+def update_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_name, table_name, selected_columns):
+    from dtable_events.dtable_io.utils import get_excel_json_file, update_rows_by_dtable_server, \
+        delete_file, get_rows_from_dtable_server, update_append_excel_json_to_dtable_server
+
+    # get json file
+    json_file = get_excel_json_file(repo_id, file_name)
+    sheet_content = json_file.decode()
+    excel_rows = json.loads(sheet_content)
+    excel_rows = excel_rows[0].get('rows', [])
+    dtable_rows = get_rows_from_dtable_server(username, dtable_uuid, table_name)
+    selected_column_list = selected_columns.split(',')
+    update_rows = []
+    insert_rows = []
+    for excel_row in excel_rows:
+        rows, operateType = get_insert_update_result(excel_row, dtable_rows, selected_column_list)
+        if operateType == 'insert':
+            insert_rows.append(rows)
+        else:
+            update_rows += rows
+
+    # delete excel,json,csv file
+    delete_file(username, repo_id, file_name)
+    # upload json file to dtable-server
+    update_rows_by_dtable_server(username, dtable_uuid, update_rows, table_name)
+    update_append_excel_json_to_dtable_server(username, dtable_uuid, insert_rows, table_name)
+
+
+def parse_update_excel_upload_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name):
+    from dtable_events.dtable_io.utils import get_excel_file, \
+        upload_excel_json_file, get_columns_from_dtable_server
+    from dtable_events.dtable_io import dtable_io_logger
+
+    # parse
+    excel_file = get_excel_file(repo_id, file_name)
+    tables = []
+    wb = load_workbook(excel_file, read_only=True)
+    sheet = wb.get_sheet_by_name(wb.sheetnames[0])
+    dtable_io_logger.info(
+        'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
+
+    sheet_rows = list(sheet.rows)
+    columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
+    max_row = len(sheet_rows)
+    max_column = sheet.max_column
+    if max_row > 50000:
+        max_row = 50000  # rows limit
+    if max_column > 300:
+        max_column = 300  # columns limit
+    if max_row == 0:
+        wb.close()
+        # upload empty json to file server
+        table = {
+            'name': table_name,
+            'rows': [],
+            'columns': columns,
+            'max_row': max_row,
+            'max_column': max_column,
+        }
+        tables.append(table)
+        content = json.dumps(tables)
+        upload_excel_json_file(repo_id, file_name, content)
+        return
+
+    if max_column > len(columns):
+        max_column = len(columns)
+    rows = parse_update_excel_rows(sheet_rows, columns, max_column)
+
+    dtable_io_logger.info(
+        'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), max_column))
+
+    table = {
+        'name': table_name,
+        'rows': rows,
+        'columns': columns,
+        'max_row': max_row,
+        'max_column': max_column,
+    }
+    tables.append(table)
+    wb.close()
+
+    # upload json to file server
+    content = json.dumps(tables)
+    upload_excel_json_file(repo_id, file_name, content)
+
+
+def parse_update_excel_rows(sheet_rows, columns, max_column):
+    from dtable_events.dtable_io import dtable_io_logger
+
+    value_rows = sheet_rows[1:]
+    sheet_head = sheet_rows[0]
+    head_dict = {sheet_head[index].value: index for index in range(len(sheet_head))}
+    rows = []
+
+    for row in value_rows:
+        row_data = {}
+        for index in range(max_column):
+            column_name = columns[index]['name']
+            if head_dict.get(column_name) is None:
+                continue
+            row_index = head_dict.get(column_name)
+            try:
+                cell_value = row[row_index].value
+                column_type = columns[index]['type']
+                if cell_value is None:
+                    continue
+                row_data[column_name] = parse_row(column_type, cell_value)
+            except Exception as e:
+                dtable_io_logger.exception(e)
+                row_data[column_name] = None
+        rows.append(row_data)
+    return rows
+
+
+def parse_update_csv_upload_csv_to_json(repo_id, file_name, username, dtable_uuid, table_name):
+    from dtable_events.dtable_io.utils import get_csv_file, \
+        upload_excel_json_file, get_columns_from_dtable_server
+    from dtable_events.dtable_io import dtable_io_logger
+
+    # parse
+    csv_file = get_csv_file(repo_id, file_name)
+    tables = []
+    columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
+
+    max_column = 300  # columns limit
+    rows, max_column, csv_row_num, csv_column_num = parse_update_csv_rows(csv_file, columns, max_column)
+    dtable_io_logger.info(
+        'parse csv: %s, rows: %d, columns: %d' % (file_name, csv_row_num, csv_column_num))
+
+    max_row = csv_row_num
+    if csv_row_num > 10000:
+        max_row = 10000  # rows limit
+
+    dtable_io_logger.info(
+        'got table: %s, rows: %d, columns: %d' % (file_name, len(rows), max_column))
+
+    table = {
+        'name': table_name,
+        'rows': rows,
+        'columns': columns,
+        'max_row': max_row,
+        'max_column': max_column,
+    }
+    tables.append(table)
+    # upload json to file server
+    content = json.dumps(tables)
+    upload_excel_json_file(repo_id, file_name, content)
+
+
+def parse_update_csv_rows(csv_file, columns, max_column):
+    from dtable_events.dtable_io import dtable_io_logger
+
+    rows = []
+    csv_rows = [row for row in csv.reader(csv_file)]
+    if not csv_rows:
+        return rows, 0, 0, 0
+
+    csv_head = csv_rows[0]
+    csv_column_num = len(csv_head)
+    table_column_num = len(columns)
+    if csv_column_num < max_column:
+        max_column = csv_column_num
+    if table_column_num > csv_column_num:
+        max_column = table_column_num
+
+    csv_head_dict = {csv_head[index].strip(): index for index in range(csv_column_num)}
+    csv_row_num = 0
+    for csv_row in csv_rows[1:]:
+        csv_row_num += 1
+        row_data = {}
+        for index in range(max_column):
+            column_name = columns[index]['name']
+            if csv_head_dict.get(column_name) is None:
+                continue
+            row_index = csv_head_dict.get(column_name)
+            try:
+                cell_value = csv_row[row_index].strip()
+                column_type = columns[index]['type']
+                if cell_value is None:
+                    continue
+                row_data[column_name] = parse_row(column_type, cell_value)
+            except Exception as e:
+                dtable_io_logger.exception(e)
+                row_data[column_name] = None
+        rows.append(row_data)
+    return rows, max_column, csv_row_num, csv_column_num
+
+
+def parse_row(column_type, cell_value):
+    if isinstance(cell_value, datetime):  # JSON serializable
+        cell_value = str(cell_value)
+    if isinstance(cell_value, str):
+        cell_value = cell_value.strip()
+    if column_type in ('number', 'duration', 'rating'):
+        return parse_number(cell_value)
+    elif column_type == 'date':
+        return str(cell_value)
+    elif column_type == 'long-text':
+        return parse_long_text(cell_value)
+    elif column_type == 'checkbox':
+        return parse_checkbox(cell_value)
+    elif column_type == 'multi-select':
+        return parse_multiple_select(cell_value)
+    elif column_type in ('URL', 'email'):
+        return str(cell_value)
+    elif column_type == 'text':
+        return str(cell_value)
+    elif column_type == 'file':
+        return None
+    elif column_type == 'image':
+        return parse_image(cell_value)
+    elif column_type == 'single_select':
+        return str(cell_value)
+    elif column_type == 'link':
+        return None
+    elif column_type == 'button':
+        return None
+    elif column_type == 'geolocation':
+        return None
+    elif column_type in ('collaborator', 'creator', 'last_modifier', 'ctime', 'mtime', 'formula',
+                         'link_formula', 'auto_number'):
+        return None
+    else:
+        return str(cell_value)
