@@ -393,17 +393,12 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
                 break
         return False
 
-    awaitReactRender = 60;
+    awaitReactRender = 60
     if not row_id:
-        awaitReactRender = 60 * 3; # 3: should use page count
+        awaitReactRender = 180
 
     try:
         # make sure react is rendered,timeout awaitReactRender, rendering is not completed within 3 minutes, and rendering performance needs to be improved
-        """
-            row count  | timeout(ms)
-              1        |    60
-              n        |    180
-        """
         WebDriverWait(driver, awaitReactRender).until(lambda driver: driver.find_element_by_id('page-design-render-complete') is not None, message='wait react timeout')
         # make sure images from asset are rendered, timeout 120s
         WebDriverWait(driver, 120, poll_frequency=1).until(lambda driver: check_images_and_networks(driver), message='wait images and networks timeout')
