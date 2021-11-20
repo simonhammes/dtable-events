@@ -760,26 +760,105 @@ class RunPythonScriptAction(BaseAction):
 
 class LinkRecordsAction(BaseAction):
 
-    def __init__(self, auto_rule, data, link_id, linked_table_id, linked_view_id, linked_table_filters, linked_table_filter_conjunction):
+    COLUMN_FILTER_PREDICATE_MAPPING = {
+        ColumnTypes.TEXT: "is",
+        ColumnTypes.DATE: "is",
+        ColumnTypes.LONG_TEXT: "is",
+        ColumnTypes.CHECKBOX: "is",
+        ColumnTypes.SINGLE_SELECT: "is",
+        ColumnTypes.MULTIPLE_SELECT: "is_exactly",
+        ColumnTypes.URL: "is",
+        ColumnTypes.DURATION: "equal",
+        ColumnTypes.NUMBER: "equal",
+        ColumnTypes.COLLABORATOR: "is_exactly",
+        ColumnTypes.EMAIL: "is",
+        ColumnTypes.RATE: "equal",
+    }
+
+    def __init__(self, auto_rule, data, linked_table_id, linked_view_id, match_conditions):
         super().__init__(auto_rule, data=data)
         self.action_type = 'link_record'
-        self.link_id = link_id
         self.linked_table_id = linked_table_id
-        self.linked_view_id = linked_view_id
-        self.linked_table_filters = linked_table_filters
-        self.linked_table_filter_conjunction = linked_table_filter_conjunction
+        self.linked_view_id = linked_view_id or "0000"
+        self.match_conditions = match_conditions
 
         self.linked_row_ids = []
 
         self._init_linked_row_ids()
+
+
+    def _format_filters(self):
+        filters = []
+        for match_condition in self.match_conditions:
+            column_key = match_condition.get("column_key")
+            other_column_key = match_condition.get("other_column_key")
+            other_column = self.get_column(self.linked_table_id, other_column_key) or {}
+            filter_item = {
+                "column_key": other_column_key,
+                "filter_predicate": self.COLUMN_FILTER_PREDICATE_MAPPING.get(other_column.get('type', ''), 'is'),
+                "filter_term": self.data['row'].get(column_key)
+            }
+            filters.append(filter_item)
+        return filters
+
+    def get_table_name(self, table_id):
+        dtable_metadata = self.auto_rule.dtable_metadata
+        tables = dtable_metadata.get('tables', [])
+        for table in tables:
+            if table.get('_id') == table_id:
+                 return table.get('name')
+
+    def get_column(self, table_id, column_key):
+        dtable_metadata = self.auto_rule.dtable_metadata
+        for table in dtable_metadata.get('tables', []):
+            if table.get('_id') == table_id:
+                for col in table.get('columns'):
+                    if col.get('key') == column_key:
+                        return col
+        return None
+
+    def _add_link_column(self):
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        column_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/columns/'
+        table_name = self.auto_rule.table_name
+        linked_table_name = self.get_table_name(self.linked_table_id)
+        json_data = {
+            "table_name": table_name,
+            "column_name": linked_table_name,
+            "column_type": 'link',
+            "column_data": {
+                "table": table_name,
+                "other_table": linked_table_name,
+            }
+        }
+
+        try:
+            response = requests.post(column_url, headers=self.auto_rule.headers, json=json_data)
+            link_id = response.json().get('data', {}).get('link_id', '')
+            return link_id
+        except Exception as e:
+            logger.error('link dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return ''
+
+    def _get_or_create_link_id(self):
+        columns = self.auto_rule.view_columns
+        for col in columns:
+            col_type = col.get('type')
+            if col_type == ColumnTypes.LINK:
+                linked_table_id = col.get('data', {}).get('other_table_id')
+                if linked_table_id == self.linked_table_id:
+                    return col.get('data', {}).get('link_id')
+        return self._add_link_column()
+
+
 
     def _get_linked_table_rows(self):
         json_data = {
             'table_id': self.linked_table_id,
             'view_id': self.linked_view_id,
             'filter_conditions': {
-                'filters': self.linked_table_filters,
-                'filter_conjunction': self.linked_table_filter_conjunction,
+                'filters': self._format_filters(),
+                'filter_conjunction': 'And',
                 'sorts': [
                     {"column_key": "_mtime", "sort_type": "down"}
                 ],
@@ -819,9 +898,10 @@ class LinkRecordsAction(BaseAction):
         rows_link_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/links/?from=dtable-events'
         if not self._can_do_action():
             return
+        link_id = self._get_or_create_link_id()
         json_data = {
             'row_id': self.data['row']['_id'],
-            'link_id': self.link_id,
+            'link_id': link_id,
             'table_id': self.auto_rule.table_id,
             'other_table_id': self.linked_table_id,
             'other_rows_ids': self.linked_row_ids
@@ -1062,12 +1142,11 @@ class AutomationRule:
                     RunPythonScriptAction(self, self.data, script_name, workspace_id, owner, org_id, repo_id).do_action()
 
                 elif action_info.get('type') == 'link_records':
-                    link_id = action_info.get('link_id')
+                    # link_id = action_info.get('link_id')
                     linked_table_id = action_info.get('linked_table_id')
                     linked_view_id = action_info.get('linked_view_id')
-                    linked_table_filters = action_info.get('filters')
-                    linked_table_filter_conjunction = action_info.get('filter_conjunction')
-                    LinkRecordsAction(self, self.data, link_id, linked_table_id, linked_view_id, linked_table_filters, linked_table_filter_conjunction).do_action()
+                    match_conditions = action_info.get('match_conditions')
+                    LinkRecordsAction(self, self.data, linked_table_id, linked_view_id, match_conditions).do_action()
 
             except RuleInvalidException as e:
                 logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
