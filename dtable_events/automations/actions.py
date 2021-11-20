@@ -799,7 +799,7 @@ class LinkRecordsAction(BaseAction):
             filter_item = {
                 "column_key": other_column_key,
                 "filter_predicate": self.COLUMN_FILTER_PREDICATE_MAPPING.get(other_column.get('type', ''), 'is'),
-                "filter_term": self.data['row'].get(column_key)
+                "filter_term": row_value
             }
             filters.append(filter_item)
         return filters
