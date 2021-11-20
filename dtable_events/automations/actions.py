@@ -811,9 +811,10 @@ class LinkRecordsAction(BaseAction):
         filters = []
         for match_condition in self.match_conditions:
             column_key = match_condition.get("column_key")
-            row_value = self.data['row'].get(column_key)
+            column = self.get_column(self.auto_rule.table_id, column_key) or {}
+            row_value = self.data['converted_row'].get(column.get('name'))
             if not row_value:
-                continue
+                return []
             other_column_key = match_condition.get("other_column_key")
             other_column = self.get_column(self.linked_table_id, other_column_key) or {}
             parsed_row_value = self.parse_column_value(other_column, row_value)
@@ -875,11 +876,14 @@ class LinkRecordsAction(BaseAction):
         return self._add_link_column()
 
     def _get_linked_table_rows(self):
+        filter_groups = self._format_filter_groups()
+        if not filter_groups:
+            return []
         json_data = {
             'table_id': self.linked_table_id,
             'view_id': self.linked_view_id,
             'filter_conditions': {
-                'filter_groups': self._format_filter_groups(),
+                'filter_groups': filter_groups,
                 'group_conjunction': 'And',
                 'sorts': [
                     {"column_key": "_mtime", "sort_type": "down"}
