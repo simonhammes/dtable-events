@@ -802,7 +802,7 @@ class LinkRecordsAction(BaseAction):
                 "filter_term": row_value
             }
             filters.append(filter_item)
-        return [{"filters": filters, "filter_conjunction": "And"}]
+        return filters and [{"filters": filters, "filter_conjunction": "And"}] or []
 
     def get_table_name(self, table_id):
         dtable_metadata = self.auto_rule.dtable_metadata
