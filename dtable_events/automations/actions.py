@@ -787,6 +787,26 @@ class LinkRecordsAction(BaseAction):
         self._init_linked_row_ids()
 
 
+    def parse_column_value(self, column, value):
+        if column.get('type') == ColumnTypes.SINGLE_SELECT:
+            select_options = column.get('data', {}).get('options', [])
+            for option in select_options:
+                if value == option.get('name'):
+                    return option.get('id')
+
+        elif column.get('type') == ColumnTypes.MULTIPLE_SELECT:
+            m_select_options = column.get('data', {}).get('options', [])
+            if isinstance(value, list):
+                parse_value_list = []
+                for option in m_select_options:
+                    if option.get('name') in value:
+                        option_id = option.get('id')
+                        parse_value_list.append(option_id)
+                return parse_value_list
+        else:
+            return value
+
+
     def _format_filter_groups(self):
         filters = []
         for match_condition in self.match_conditions:
@@ -796,10 +816,11 @@ class LinkRecordsAction(BaseAction):
                 continue
             other_column_key = match_condition.get("other_column_key")
             other_column = self.get_column(self.linked_table_id, other_column_key) or {}
+            parsed_row_value = self.parse_column_value(other_column, row_value)
             filter_item = {
                 "column_key": other_column_key,
                 "filter_predicate": self.COLUMN_FILTER_PREDICATE_MAPPING.get(other_column.get('type', ''), 'is'),
-                "filter_term": row_value
+                "filter_term": parsed_row_value
             }
             filters.append(filter_item)
         return filters and [{"filters": filters, "filter_conjunction": "And"}] or []
