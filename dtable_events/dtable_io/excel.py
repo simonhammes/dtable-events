@@ -418,7 +418,10 @@ def update_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_nam
     insert_rows = []
     for excel_row in excel_rows:
         rows, operateType = get_insert_update_result(excel_row, dtable_rows, selected_column_list)
-        update_rows += rows
+        if operateType == 'insert':
+            insert_rows += rows
+        else:
+            update_rows += rows
 
     # delete excel,json,csv file
     delete_file(username, repo_id, file_name)
