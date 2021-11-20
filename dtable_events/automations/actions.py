@@ -791,6 +791,9 @@ class LinkRecordsAction(BaseAction):
         filters = []
         for match_condition in self.match_conditions:
             column_key = match_condition.get("column_key")
+            row_value = self.data['row'].get(column_key)
+            if not row_value:
+                continue
             other_column_key = match_condition.get("other_column_key")
             other_column = self.get_column(self.linked_table_id, other_column_key) or {}
             filter_item = {
@@ -849,8 +852,6 @@ class LinkRecordsAction(BaseAction):
                 if linked_table_id == self.linked_table_id:
                     return col.get('data', {}).get('link_id')
         return self._add_link_column()
-
-
 
     def _get_linked_table_rows(self):
         json_data = {
