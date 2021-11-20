@@ -822,7 +822,7 @@ class LinkRecordsAction(BaseAction):
 
     def _add_link_column(self):
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-        column_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/columns/'
+        column_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/columns/'
         table_name = self.auto_rule.table_name
         linked_table_name = self.get_table_name(self.linked_table_id)
         json_data = {
