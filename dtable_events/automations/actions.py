@@ -471,11 +471,12 @@ class NotifyAction(BaseAction):
 
 class SendWechatAction(BaseAction):
 
-    def __init__(self, auto_rule, data, msg, account_id):
+    def __init__(self, auto_rule, data, msg, account_id, msg_type):
 
         super().__init__(auto_rule, data)
         self.action_type = 'send_wechat'
         self.msg = msg
+        self.msg_type = msg_type
         self.account_id = account_id
 
         self.webhook_url = ''
@@ -505,13 +506,13 @@ class SendWechatAction(BaseAction):
         if self.column_blanks:
             msg = self._fill_msg_blanks(row)
         try:
-            send_wechat_msg(self.webhook_url, msg)
+            send_wechat_msg(self.webhook_url, msg, self.msg_type)
         except Exception as e:
             logger.error('send wechat error: %s', e)
 
     def cron_notify(self):
         try:
-            send_wechat_msg(self.webhook_url, self.msg)
+            send_wechat_msg(self.webhook_url, self.msg, self.msg_type)
         except Exception as e:
             logger.error('send wechat error: %s', e)
 
@@ -955,7 +956,8 @@ class AutomationRule:
                 elif action_info.get('type') == 'send_wechat':
                     account_id = int(action_info.get('account_id'))
                     default_msg = action_info.get('default_msg', '')
-                    SendWechatAction(self, self.data, default_msg, account_id).do_action()
+                    msg_type = action_info.get('msg_type', 'text')
+                    SendWechatAction(self, self.data, default_msg, account_id, msg_type).do_action()
 
                 elif action_info.get('type') == 'send_email':
                     account_id = int(action_info.get('account_id'))
