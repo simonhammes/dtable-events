@@ -787,7 +787,7 @@ class LinkRecordsAction(BaseAction):
         self._init_linked_row_ids()
 
 
-    def _format_filters(self):
+    def _format_filter_groups(self):
         filters = []
         for match_condition in self.match_conditions:
             column_key = match_condition.get("column_key")
@@ -802,7 +802,7 @@ class LinkRecordsAction(BaseAction):
                 "filter_term": row_value
             }
             filters.append(filter_item)
-        return filters
+        return [{"filters": filters, "filter_conjunction": "And"}]
 
     def get_table_name(self, table_id):
         dtable_metadata = self.auto_rule.dtable_metadata
@@ -858,8 +858,8 @@ class LinkRecordsAction(BaseAction):
             'table_id': self.linked_table_id,
             'view_id': self.linked_view_id,
             'filter_conditions': {
-                'filters': self._format_filters(),
-                'filter_conjunction': 'And',
+                'filter_groups': self._format_filter_groups(),
+                'group_conjunction': 'And',
                 'sorts': [
                     {"column_key": "_mtime", "sort_type": "down"}
                 ],
