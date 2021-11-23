@@ -19,6 +19,7 @@ from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_d
     parse_update_excel_upload_excel_to_json, parse_update_csv_upload_csv_to_json
 from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.statistics.db import save_email_sending_records
+from urllib import parse
 
 dtable_io_logger = setup_logger('dtable_events_io.log')
 dtable_message_logger = setup_logger('dtable_events_message.log')
@@ -328,6 +329,8 @@ def send_email_msg(auth_info, send_info, username, config=None, db_session=None)
     copy_to = send_info.get('copy_to', [])
     reply_to = send_info.get('reply_to', '')
 
+    file_download_urls = send_info.get('file_download_urls', None)
+
     msg_obj = MIMEMultipart()
     content_body = MIMEText(msg)
     msg_obj['Subject'] = subject
@@ -336,6 +339,14 @@ def send_email_msg(auth_info, send_info, username, config=None, db_session=None)
     msg_obj['Cc'] = copy_to and ",".join(copy_to) or ""
     msg_obj['Reply-to'] = reply_to
     msg_obj.attach(content_body)
+
+    if file_download_urls:
+        for file_name, file_url in file_download_urls.items():
+            response = requests.get(file_url)
+            attach_file = MIMEText(response.content, 'base64', 'utf-8')
+            attach_file["Content-Type"] = 'application/octet-stream'
+            attach_file["Content-Disposition"] = 'attachment;filename*=UTF-8\'\'' + parse.quote(file_name)
+            msg_obj.attach(attach_file)
 
     result = {}
     try:
@@ -346,6 +357,7 @@ def send_email_msg(auth_info, send_info, username, config=None, db_session=None)
         result['err_msg'] = 'Email server host or port invalid'
         return result
     success = False
+
     try:
         smtp.starttls()
         smtp.login(host_user, password)
