@@ -865,7 +865,7 @@ class LinkRecordsAction(BaseAction):
             response = requests.post(client_url, headers=self.auto_rule.headers, json=json_data)
             rows_data = response.json().get('rows')
             logger.debug('Number of linking dtable rows by auto-rules: %s, dtable_uuid: %s, details: %s' % (
-                len(rows_data),
+                rows_data and len(rows_data) or 0,
                 self.auto_rule.dtable_uuid,
                 json.dumps(json_data)
             ))
