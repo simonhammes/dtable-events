@@ -33,7 +33,6 @@ try:
     DTABLE_WEB_SERVICE_URL = getattr(seahub_settings, 'DTABLE_WEB_SERVICE_URL')
     DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
     DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
-    TIME_ZONE = getattr(seahub_settings, 'TIME_ZONE', 'UTC')
     ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
     DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
     FILE_SERVER_ROOT = getattr(seahub_settings, 'FILE_SERVER_ROOT', 'http://127.0.0.1:8082')
@@ -143,7 +142,7 @@ class UpdateAction(BaseAction):
         self._init_updates()
 
     def format_time_by_offset(self, offset, format_length):
-        cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
+        cur_datetime = datetime.now()
         cur_datetime_offset = cur_datetime + timedelta(days=offset)
         if format_length == 2:
             return cur_datetime_offset.strftime("%Y-%m-%d %H:%M")
@@ -329,7 +328,7 @@ class AddRowAction(BaseAction):
         self._init_updates()
 
     def format_time_by_offset(self, offset, format_length):
-        cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
+        cur_datetime = datetime.now()
         cur_datetime_offset = cur_datetime + timedelta(days=offset)
         if format_length == 2:
             return cur_datetime_offset.strftime("%Y-%m-%d %H:%M")
@@ -907,8 +906,8 @@ class AutomationRule:
             return True
 
         elif self.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
-            cur_hour = int(utc_to_tz(datetime.utcnow(), TIME_ZONE).strftime('%H'))
-            cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
+            cur_datetime = datetime.now()
+            cur_hour = cur_datetime.hour
             cur_week_day = cur_datetime.isoweekday()
             cur_month_day = cur_datetime.day
             if self.run_condition == PER_DAY:
