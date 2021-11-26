@@ -33,7 +33,6 @@ try:
     DTABLE_WEB_SERVICE_URL = getattr(seahub_settings, 'DTABLE_WEB_SERVICE_URL')
     DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
     DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
-    TIME_ZONE = getattr(seahub_settings, 'TIME_ZONE', 'UTC')
     ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
     DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
     FILE_SERVER_ROOT = getattr(seahub_settings, 'FILE_SERVER_ROOT', 'http://127.0.0.1:8082')
@@ -142,6 +141,14 @@ class UpdateAction(BaseAction):
         }
         self._init_updates()
 
+    def format_time_by_offset(self, offset, format_length):
+        cur_datetime = datetime.now()
+        cur_datetime_offset = cur_datetime + timedelta(days=offset)
+        if format_length == 2:
+            return cur_datetime_offset.strftime("%Y-%m-%d %H:%M")
+        if format_length == 1:
+            return cur_datetime_offset.strftime("%Y-%m-%d")
+
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         filtered_updates = {}
@@ -150,8 +157,25 @@ class UpdateAction(BaseAction):
                 if 'key' in col and col.get('type') in self.VALID_COLUMN_TYPES:
                     col_name = col.get('name')
                     col_key = col.get('key')
+                    col_type = col.get('type')
                     if col_key in self.updates.keys():
-                        filtered_updates[col_name] = self.parse_column_value(col, self.updates.get(col_key))
+                        if col_type == ColumnTypes.DATE:
+                            time_format = col.get('data', {}).get('format', '')
+                            format_length = len(time_format.split(" "))
+                            try:
+                                time_dict = self.updates.get(col_key)
+                                set_type = time_dict.get('set_type')
+                                if set_type == 'specific_value':
+                                    time_value = time_dict.get('value')
+                                    filtered_updates[col_name] = time_value
+                                elif set_type == 'relative_date':
+                                    offset = time_dict.get('offset')
+                                    filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
+                            except Exception as e:
+                                logger.error(e)
+                                filtered_updates[col_name] = self.updates.get(col_key)
+                        else:
+                            filtered_updates[col_name] = self.parse_column_value(col, self.updates.get(col_key))
             row_id = self.data['row']['_id']
             self.update_data['row'] = filtered_updates
             self.update_data['row_id'] = row_id
@@ -314,7 +338,7 @@ class AddRowAction(BaseAction):
         self._init_updates()
 
     def format_time_by_offset(self, offset, format_length):
-        cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
+        cur_datetime = datetime.now()
         cur_datetime_offset = cur_datetime + timedelta(days=offset)
         if format_length == 2:
             return cur_datetime_offset.strftime("%Y-%m-%d %H:%M")
@@ -908,8 +932,8 @@ class AutomationRule:
             return True
 
         elif self.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
-            cur_hour = int(utc_to_tz(datetime.utcnow(), TIME_ZONE).strftime('%H'))
-            cur_datetime = utc_to_tz(datetime.utcnow(), TIME_ZONE)
+            cur_datetime = datetime.now()
+            cur_hour = cur_datetime.hour
             cur_week_day = cur_datetime.isoweekday()
             cur_month_day = cur_datetime.day
             if self.run_condition == PER_DAY:
