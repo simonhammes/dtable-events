@@ -783,6 +783,158 @@ class RunPythonScriptAction(BaseAction):
                 self.auto_rule.set_done_actions()
 
 
+class LinkRecordsAction(BaseAction):
+
+    COLUMN_FILTER_PREDICATE_MAPPING = {
+        ColumnTypes.TEXT: "is",
+        ColumnTypes.DATE: "is",
+        ColumnTypes.LONG_TEXT: "is",
+        ColumnTypes.CHECKBOX: "is",
+        ColumnTypes.SINGLE_SELECT: "is",
+        ColumnTypes.MULTIPLE_SELECT: "is_exactly",
+        ColumnTypes.URL: "is",
+        ColumnTypes.DURATION: "equal",
+        ColumnTypes.NUMBER: "equal",
+        ColumnTypes.COLLABORATOR: "is_exactly",
+        ColumnTypes.EMAIL: "is",
+        ColumnTypes.RATE: "equal",
+    }
+
+    def __init__(self, auto_rule, data, linked_table_id, link_id, match_conditions):
+        super().__init__(auto_rule, data=data)
+        self.action_type = 'link_record'
+        self.linked_table_id = linked_table_id
+        self.link_id = link_id
+        self.match_conditions = match_conditions
+
+        self.linked_row_ids = []
+
+        self._init_linked_row_ids()
+
+
+    def parse_column_value(self, column, value):
+        if column.get('type') == ColumnTypes.SINGLE_SELECT:
+            select_options = column.get('data', {}).get('options', [])
+            for option in select_options:
+                if value == option.get('name'):
+                    return option.get('id')
+
+        elif column.get('type') == ColumnTypes.MULTIPLE_SELECT:
+            m_select_options = column.get('data', {}).get('options', [])
+            if isinstance(value, list):
+                parse_value_list = []
+                for option in m_select_options:
+                    if option.get('name') in value:
+                        option_id = option.get('id')
+                        parse_value_list.append(option_id)
+                return parse_value_list
+        else:
+            return value
+
+
+    def _format_filter_groups(self):
+        filters = []
+        for match_condition in self.match_conditions:
+            column_key = match_condition.get("column_key")
+            column = self.get_column(self.auto_rule.table_id, column_key) or {}
+            row_value = self.data['converted_row'].get(column.get('name'))
+            if not row_value:
+                return []
+            other_column_key = match_condition.get("other_column_key")
+            other_column = self.get_column(self.linked_table_id, other_column_key) or {}
+            parsed_row_value = self.parse_column_value(other_column, row_value)
+            filter_item = {
+                "column_key": other_column_key,
+                "filter_predicate": self.COLUMN_FILTER_PREDICATE_MAPPING.get(other_column.get('type', ''), 'is'),
+                "filter_term": parsed_row_value
+            }
+            filters.append(filter_item)
+        return filters and [{"filters": filters, "filter_conjunction": "And"}] or []
+
+    def get_table_name(self, table_id):
+        dtable_metadata = self.auto_rule.dtable_metadata
+        tables = dtable_metadata.get('tables', [])
+        for table in tables:
+            if table.get('_id') == table_id:
+                 return table.get('name')
+
+    def get_column(self, table_id, column_key):
+        dtable_metadata = self.auto_rule.dtable_metadata
+        for table in dtable_metadata.get('tables', []):
+            if table.get('_id') == table_id:
+                for col in table.get('columns'):
+                    if col.get('key') == column_key:
+                        return col
+        return None
+
+    def _get_linked_table_rows(self):
+        filter_groups = self._format_filter_groups()
+        if not filter_groups:
+            return []
+        json_data = {
+            'table_id': self.linked_table_id,
+            'filter_conditions': {
+                'filter_groups': filter_groups,
+                'group_conjunction': 'And',
+                'sorts': [
+                    {"column_key": "_mtime", "sort_type": "down"}
+                ],
+                'limit': 500
+            }
+        }
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
+        try:
+            response = requests.post(client_url, headers=self.auto_rule.headers, json=json_data)
+            rows_data = response.json().get('rows')
+            logger.debug('Number of linking dtable rows by auto-rules: %s, dtable_uuid: %s, details: %s' % (
+                rows_data and len(rows_data) or 0,
+                self.auto_rule.dtable_uuid,
+                json.dumps(json_data)
+            ))
+            return rows_data or []
+        except Exception as e:
+            logger.error('link dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return []
+
+    def _init_linked_row_ids(self):
+        linked_rows_data = self._get_linked_table_rows()
+        self.linked_row_ids = linked_rows_data and [row.get('_id') for row in linked_rows_data] or []
+
+    def _can_do_action(self):
+        if not self.linked_row_ids:
+            return False
+
+        if not self.auto_rule.run_condition == PER_UPDATE:
+            return False
+
+        return True
+
+    def do_action(self):
+        api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+        rows_link_url = api_url.rstrip('/') + '/api/v1/dtables/' + self.auto_rule.dtable_uuid + '/links/?from=dtable-events'
+        if not self._can_do_action():
+            return
+        json_data = {
+            'row_id': self.data['row']['_id'],
+            'link_id': self.link_id,
+            'table_id': self.auto_rule.table_id,
+            'other_table_id': self.linked_table_id,
+            'other_rows_ids': self.linked_row_ids
+        }
+
+        try:
+            response = requests.put(rows_link_url, headers=self.auto_rule.headers, json=json_data)
+        except Exception as e:
+            logger.error('link dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return
+        if response.status_code != 200:
+            logger.error('link dtable: %s error response status code: %s', self.auto_rule.dtable_uuid, response.status_code)
+        else:
+            self.auto_rule.set_done_actions()
+
+
+
 class RuleInvalidException(Exception):
     """
     Exception which indicates rule need to be set is_valid=Fasle
@@ -1005,6 +1157,12 @@ class AutomationRule:
                     org_id = action_info.get('org_id')
                     repo_id = action_info.get('repo_id')
                     RunPythonScriptAction(self, self.data, script_name, workspace_id, owner, org_id, repo_id).do_action()
+
+                elif action_info.get('type') == 'link_records':
+                    linked_table_id = action_info.get('linked_table_id')
+                    link_id = action_info.get('link_id')
+                    match_conditions = action_info.get('match_conditions')
+                    LinkRecordsAction(self, self.data, linked_table_id, link_id, match_conditions).do_action()
 
             except RuleInvalidException as e:
                 logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
