@@ -775,12 +775,11 @@ class LinkRecordsAction(BaseAction):
         ColumnTypes.RATE: "equal",
     }
 
-    def __init__(self, auto_rule, data, linked_table_id, linked_view_id, link_id, match_conditions):
+    def __init__(self, auto_rule, data, linked_table_id, link_id, match_conditions):
         super().__init__(auto_rule, data=data)
         self.action_type = 'link_record'
         self.linked_table_id = linked_table_id
         self.link_id = link_id
-        self.linked_view_id = linked_view_id or "0000"
         self.match_conditions = match_conditions
 
         self.linked_row_ids = []
@@ -849,7 +848,6 @@ class LinkRecordsAction(BaseAction):
             return []
         json_data = {
             'table_id': self.linked_table_id,
-            'view_id': self.linked_view_id,
             'filter_conditions': {
                 'filter_groups': filter_groups,
                 'group_conjunction': 'And',
@@ -1135,12 +1133,10 @@ class AutomationRule:
                     RunPythonScriptAction(self, self.data, script_name, workspace_id, owner, org_id, repo_id).do_action()
 
                 elif action_info.get('type') == 'link_records':
-                    # link_id = action_info.get('link_id')
                     linked_table_id = action_info.get('linked_table_id')
-                    linked_view_id = action_info.get('linked_view_id')
                     link_id = action_info.get('link_id')
                     match_conditions = action_info.get('match_conditions')
-                    LinkRecordsAction(self, self.data, linked_table_id, linked_view_id, link_id, match_conditions).do_action()
+                    LinkRecordsAction(self, self.data, linked_table_id, link_id, match_conditions).do_action()
 
             except RuleInvalidException as e:
                 logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
