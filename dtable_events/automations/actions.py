@@ -415,6 +415,19 @@ class NotifyAction(BaseAction):
 
         self._init_notify(msg)
 
+    def is_valid_username(self, user):
+
+        return True if EMAIL_RE.match(user) is not None else False
+
+    def get_user_column_by_key(self):
+        dtable_metadata = self.auto_rule.dtable_metadata
+        for table in dtable_metadata.get('tables', []):
+            if table.get('_id') == self.auto_rule.table_id:
+                for col in table.get('columns'):
+                    if col.get('key') == self.users_column_key:
+                        return col
+        return None
+
     def _init_notify(self, msg):
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
@@ -446,11 +459,15 @@ class NotifyAction(BaseAction):
         user_msg_list = []
         users = self.users
         if self.users_column_key:
-            users_from_column = raw_row.get(self.users_column_key, [])
+            user_column = self.get_user_column_by_key()
+            users_column_name = user_column.get('name')
+            users_from_column = row.get(users_column_name, [])
             if not isinstance(users_from_column, list):
                 users_from_column = [users_from_column, ]
             users = list(set(self.users + users_from_column))
         for user in users:
+            if not self.is_valid_username(user):
+                continue
             user_msg_list.append({
                 'to_user': user,
                 'msg_type': 'notification_rules',
@@ -550,7 +567,6 @@ class SendWechatAction(BaseAction):
 
 
 class SendEmailAction(BaseAction):
-
 
 
     def is_valid_email(self, email):

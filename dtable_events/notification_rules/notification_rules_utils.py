@@ -10,6 +10,7 @@ import sys
 import re
 import pytz
 
+from dtable_events.utils import is_valid_email
 from dtable_events.utils.constants import ColumnTypes
 from dtable_events.cache import redis_cache as cache
 
@@ -98,14 +99,14 @@ def scan_triggered_notification_rules(event_data, db_session):
     db_session.commit()
 
 
-def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_key, dtable_server_access_token):
+def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_name, dtable_server_access_token):
     api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
     url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/' + row_id + '/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token}
     params = {
         'table_id': table_id,
         'view_id': view_id,
-        'convert': False,
+        # 'convert': True,
     }
     res = requests.get(url, headers=headers, params=params)
 
@@ -113,7 +114,7 @@ def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_key,
         logger.error(f'dtable {dtable_uuid} failed to list_users_by_column_key {res.text}')
 
     rowdict = json.loads(res.content)
-    user_list = rowdict.get(column_key, [])
+    user_list = rowdict.get(column_name, [])
     if isinstance(user_list, str):
         return [user_list]
     return user_list
@@ -361,6 +362,15 @@ def gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name
     return _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata=dtable_metadata)
 
 
+def _get_column_by_key(dtable_metadata, table_id, column_key):
+    for table in dtable_metadata.get('tables', []):
+        if table.get('_id') == table_id:
+            for col in table.get('columns'):
+                if col.get('key') == column_key:
+                    return col
+    return None
+
+
 def check_notification_rule(rule, message_table_id, row, converted_row, dtable_server_access_token, db_session, op_type):
     rule_id = rule[0]
     trigger = rule[1]
@@ -376,6 +386,8 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
     rule_name = trigger.get('rule_name', '')
     table_id = trigger['table_id']
     view_id = trigger['view_id']
+
+    dtable_metadata = _get_dtable_metadata(dtable_uuid)
 
     if message_table_id != table_id:
         return
@@ -404,12 +416,16 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
         }
 
         if users_column_key:
-            users_from_column = row.get(users_column_key, [])
+            user_column = _get_column_by_key(dtable_metadata, table_id, users_column_key)
+            users_column_name = user_column.get('name')
+            users_from_column = converted_row.get(users_column_name, [])
             if not isinstance(users_from_column, list):
                 users_from_column = [users_from_column, ]
             users = list(set(users + users_from_column))
 
         for user in users:
+            if not is_valid_email(user):
+                continue
             user_msg_list.append({
                 'to_user': user,
                 'msg_type': 'notification_rules',
@@ -429,12 +445,16 @@ def check_notification_rule(rule, message_table_id, row, converted_row, dtable_s
             'row_id_list': [row['_id']],
         }
         if users_column_key:
-            users_from_column = row.get(users_column_key, [])
+            user_column = _get_column_by_key(dtable_metadata, table_id, users_column_key)
+            users_column_name = user_column.get('name')
+            users_from_column = converted_row.get(users_column_name, [])
             if not isinstance(users_from_column, list):
                 users_from_column = [users_from_column, ]
             users = list(set(users + users_from_column))
 
         for user in users:
+            if not is_valid_email(user):
+                continue
             user_msg_list.append({
                 'to_user': user,
                 'msg_type': 'notification_rules',
@@ -480,6 +500,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
 
     if notify_hour != None:
         if int(notify_hour) != cur_hour:
+
             return
     else:
         if cur_hour != 12:
@@ -510,7 +531,9 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
         row_id = row['_id']
 
         if users_column_key:
-            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_key, dtable_server_access_token)
+            user_column = _get_column_by_key(dtable_metadata, table_id, users_column_key)
+            users_column_name = user_column.get('name')
+            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_name, dtable_server_access_token)
             to_users = list(set(users + users_from_cell))
         else:
             to_users = users
@@ -527,6 +550,8 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
 
         user_msg_list = []
         for user in to_users:
+            if not is_valid_email(user):
+                continue
             user_msg_list.append({
                 'to_user': user,
                 'msg_type': 'notification_rules',
