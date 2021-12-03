@@ -588,11 +588,11 @@ def parse_update_csv_rows(csv_file, columns, max_column):
     for csv_row in csv_rows[1:]:
         csv_row_num += 1
         row_data = {}
-        for index in range(max_column):
+        for index in range(table_column_num):
             column_name = columns[index]['name']
-            if csv_head_dict.get(column_name) is None:
-                continue
             row_index = csv_head_dict.get(column_name)
+            if row_index is None:
+                continue
             try:
                 cell_value = csv_row[row_index].strip()
                 column_type = columns[index]['type']
