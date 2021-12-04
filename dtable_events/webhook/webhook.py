@@ -112,6 +112,10 @@ class Webhooker:
                 else:
                     hook_job.response_status = response.status_code
                     hook_job.response_body = response.text
-                    hook_job.status = SUCCESS if 200 <= response.status_code < 300 else FAILURE
+                    # delete job after hook url successfully
+                    if 200 <= response.status_code < 300:
+                        db_session.delete(hook_job)
+                    else:
+                        hook_job.status = FAILURE
                 finally:
                     db_session.commit()
