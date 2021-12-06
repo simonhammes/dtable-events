@@ -355,7 +355,7 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
 
     if max_column > len(columns):
         max_column = len(columns)
-    rows = parse_append_excel_rows(sheet_rows, columns, max_column)
+    rows = parse_append_excel_rows(sheet_rows, columns, len(columns))
 
     dtable_io_logger.info(
         'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), max_column))
@@ -375,7 +375,7 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
     upload_excel_json_file(repo_id, file_name, content)
 
 
-def parse_append_excel_rows(sheet_rows, columns, max_column):
+def parse_append_excel_rows(sheet_rows, columns, column_lenght):
     from dtable_events.dtable_io import dtable_io_logger
 
     value_rows = sheet_rows[1:]
@@ -385,7 +385,7 @@ def parse_append_excel_rows(sheet_rows, columns, max_column):
 
     for row in value_rows:
         row_data = {}
-        for index in range(max_column):
+        for index in range(column_lenght):
             column_name = columns[index]['name']
             if head_dict.get(column_name) is None:
                 continue
@@ -518,7 +518,7 @@ def parse_update_excel_upload_excel_to_json(repo_id, file_name, username, dtable
 
     if max_column > len(columns):
         max_column = len(columns)
-    rows = parse_update_excel_rows(sheet_rows, columns, max_column)
+    rows = parse_update_excel_rows(sheet_rows, columns, len(columns))
 
     dtable_io_logger.info(
         'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), max_column))
@@ -538,7 +538,7 @@ def parse_update_excel_upload_excel_to_json(repo_id, file_name, username, dtable
     upload_excel_json_file(repo_id, file_name, content)
 
 
-def parse_update_excel_rows(sheet_rows, columns, max_column):
+def parse_update_excel_rows(sheet_rows, columns, column_length):
     from dtable_events.dtable_io import dtable_io_logger
 
     value_rows = sheet_rows[1:]
@@ -548,7 +548,7 @@ def parse_update_excel_rows(sheet_rows, columns, max_column):
 
     for row in value_rows:
         row_data = {}
-        for index in range(max_column):
+        for index in range(column_length):
             column_name = columns[index]['name']
             if head_dict.get(column_name) is None:
                 continue
