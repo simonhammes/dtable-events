@@ -403,16 +403,12 @@ def parse_append_excel_rows(sheet_rows, columns, column_lenght):
     return rows
 
 
-def get_insert_update_result(excel_row, dtable_rows_list, excel_col_name_type_dict):
-    update_row_list = []
-    for dtable_row in dtable_rows_list:
-        for col_name in excel_col_name_type_dict:
-            update_value = get_update_excel_dtable_value(excel_row, excel_col_name_type_dict.get(col_name), dtable_row, col_name)
-            if update_value['excel_row_val'] != update_value['dtable_row_val']:
-                update_row = {'row_id': dtable_row.get('_id'), 'row': excel_row}
-                update_row_list.append(update_row)
-                break
-    return update_row_list
+def get_update_result(excel_row, dtable_row, excel_col_name_type_dict):
+    for col_name in excel_col_name_type_dict:
+        update_value = get_update_excel_dtable_value(excel_row, excel_col_name_type_dict.get(col_name), dtable_row, col_name)
+        if update_value['excel_row_val'] != update_value['dtable_row_val']:
+            return {'row_id': dtable_row.get('_id'), 'row': excel_row}
+    return {}
 
 
 def get_update_excel_dtable_value(excel_row, column_type, dtable_row, col_name):
@@ -443,9 +439,10 @@ def get_dtable_rows_dict(dtable_rows, selected_column_list):
     for row in dtable_rows:
         key = str(hash('-'.join([str(get_cell_value(row, col)) for col in selected_column_list])))
         if dtable_row_dict.get(key):
-            dtable_row_dict.get(key).append(row)
+            # only deal first row
+            continue
         else:
-            dtable_row_dict[key] = [row]
+            dtable_row_dict[key] = row
     return dtable_row_dict
 
 
@@ -495,13 +492,13 @@ def get_insert_update_rows(dtable_col_type_dict, excel_rows, dtable_rows, select
             continue
         excel_key_str_info[selected_col_row_value_str] = True
 
-        dtable_rows_list = dtable_rows_dict.get(selected_col_row_value_str)
-
-        if not dtable_rows_list:
-            insert_rows.append(excel_rows)
+        dtable_row = dtable_rows_dict.get(selected_col_row_value_str)
+        if not dtable_row:
+            insert_rows.append(excel_row)
         else:
-            rows = get_insert_update_result(excel_row, dtable_rows_list, excel_col_name_type_dict)
-            update_rows += rows
+            update_row = get_update_result(excel_row, dtable_row, excel_col_name_type_dict)
+            if update_row:
+                update_rows.append(update_row)
     return insert_rows, update_rows
 
 
