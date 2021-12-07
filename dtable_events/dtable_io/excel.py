@@ -405,35 +405,28 @@ def parse_append_excel_rows(sheet_rows, columns, column_lenght):
 
 def get_update_result(excel_row, dtable_row, excel_col_name_type_dict):
     for col_name in excel_col_name_type_dict:
-        update_value = get_update_excel_dtable_value(excel_row, excel_col_name_type_dict.get(col_name), dtable_row, col_name)
-        if update_value['excel_row_val'] != update_value['dtable_row_val']:
+        excel_cell_val = excel_row.get(col_name, '')
+        dtable_cell_val = dtable_row.get(col_name, '')
+        column_type = excel_col_name_type_dict.get(col_name)
+        if column_type == 'multiple-select':
+            if not dtable_cell_val:
+                dtable_cell_val = []
+            if not excel_cell_val:
+                excel_cell_val = []
+            excel_cell_val.sort()
+            dtable_cell_val.sort()
+        elif column_type == 'date' and excel_cell_val:
+            # dtable row value like 2021-12-03 00:00 or 2021-12-03, excel row like 2021-12-03 00:00:00
+            excel_cell_val = excel_cell_val[0:len(dtable_cell_val)]
+        elif column_type == 'checkbox' and not dtable_cell_val:
+            excel_cell_val = False
+        dtable_cell_val = '' if dtable_cell_val is None else dtable_cell_val
+        excel_cell_val = '' if excel_cell_val is None else excel_cell_val
 
+        if excel_cell_val != dtable_cell_val:
             return {'row_id': dtable_row.get('_id'), 'row': excel_row}
 
     return {}
-
-
-def get_update_excel_dtable_value(excel_row, column_type, dtable_row, col_name):
-    excel_row_val = excel_row.get(col_name, '')
-    dtable_row_val = dtable_row.get(col_name, '')
-
-    if column_type == 'multiple-select':
-        if not dtable_row_val:
-            dtable_row_val = []
-        if not excel_row_val:
-            excel_row_val = []
-        excel_row_val.sort()
-        dtable_row_val.sort()
-    elif column_type == 'date' and dtable_row_val:
-        # dtable row value like 2021-12-03 00:00 or 2021-12-03, excel row like 2021-12-03 00:00:00
-        excel_row_val = excel_row_val[0:len(dtable_row_val)]
-    elif column_type == 'checkbox' and not excel_row_val:
-        excel_row_val = False
-
-    dtable_row_val = '' if dtable_row_val is None else dtable_row_val
-    excel_row_val = '' if excel_row_val is None else excel_row_val
-
-    return {'excel_row_val': excel_row_val, 'dtable_row_val': dtable_row_val}
 
 
 def get_dtable_rows_dict(dtable_rows, selected_column_list):
@@ -489,7 +482,7 @@ def get_insert_update_rows(dtable_col_type_dict, excel_rows, dtable_rows, select
     dtable_rows_dict = get_dtable_rows_dict(dtable_rows, selected_column_list)
     excel_key_str_info = {}
     for excel_row in excel_rows:
-        excel_row = {cell_value: excel_row.get(cell_value) for cell_value in excel_row if excel_col_name_type_dict.get(cell_value)}
+        excel_row = {col_name: excel_row.get(col_name) for col_name in excel_row if excel_col_name_type_dict.get(col_name)}
         selected_col_row_value_str = str(hash('-'.join([str(get_cell_value(excel_row, col)) for col in selected_column_list])))
         if excel_key_str_info.get(selected_col_row_value_str):
             continue
