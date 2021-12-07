@@ -25,7 +25,7 @@ LINK_REG_2 = r'^<(\S+)>$'
 IMAGE_REG_1 = r'^<img src="(\S+)" .+\/>'
 IMAGE_REG_2 = r'^!\[\]\((\S+)\)'
 
-UPDATE_TYPE_LIST = ['number', 'duration', 'rate', 'checkbox', 'multiple-select', 'single-select', 'url', 'email', 'text', 'date']
+UPDATE_TYPE_LIST = ['number', 'single-select', 'url', 'email', 'text', 'date', 'duration', 'rate', 'checkbox', 'multiple-select']
 
 
 class EmptyCell(object):
@@ -403,46 +403,50 @@ def parse_append_excel_rows(sheet_rows, columns, column_lenght):
     return rows
 
 
-def get_insert_update_result(excel_row, dtable_rows, selected_column_list, col_type_dict, excel_col_names):
+def get_insert_update_result(excel_row, dtable_rows_list, excel_col_name_type_dict):
     update_row_list = []
-    update_flag = False
-    for dtable_row in dtable_rows:
-        is_update = True
-        for selected_column in selected_column_list:
-            dtable_cell_value = dtable_row.get(selected_column)
-            excel_cell_value = excel_row.get(selected_column)
-            if dtable_cell_value != excel_cell_value:
-                is_update = False
+    for dtable_row in dtable_rows_list:
+        for col_name in excel_col_name_type_dict:
+            update_value = get_update_excel_dtable_value(excel_row, excel_col_name_type_dict.get(col_name), dtable_row, col_name)
+            if update_value['excel_row_val'] != update_value['dtable_row_val']:
+                update_row = {'row_id': dtable_row.get('_id'), 'row': excel_row}
+                update_row_list.append(update_row)
                 break
-        if is_update:
-            update_flag = True
-            for col_name in excel_col_names:
-                update_value = get_update_excel_dtable_value(excel_row, col_type_dict, dtable_row, col_name)
-                if update_value['excel_row_val'] != update_value['dtable_row_val']:
-                    update_row = {'row_id': dtable_row.get('_id'), 'row': excel_row}
-                    update_row_list.append(update_row)
-                    break
-    if update_flag:
-        return update_row_list, 'update'
-    return [excel_row], 'insert'
+    return update_row_list
 
 
-def get_update_excel_dtable_value(excel_row, col_type_dict, dtable_row, col_name):
-    excel_val = excel_row.get(col_name, '')
-    column_type = col_type_dict.get(col_name)
+def get_update_excel_dtable_value(excel_row, column_type, dtable_row, col_name):
+    excel_row_val = excel_row.get(col_name, '')
     dtable_row_val = dtable_row.get(col_name, '')
 
     if column_type == 'multiple-select':
-        if dtable_row_val == '':
+        if not dtable_row_val:
             dtable_row_val = []
-        if excel_val == '':
-            excel_val = []
-        excel_val.sort()
+        if not excel_row_val:
+            excel_row_val = []
+        excel_row_val.sort()
         dtable_row_val.sort()
     elif column_type == 'date' and dtable_row_val:
-        excel_val = excel_val[0:len(dtable_row_val)]
+        # dtable row value like 2021-12-03 00:00 or 2021-12-03, excel row like 2021-12-03 00:00:00
+        excel_row_val = excel_row_val[0:len(dtable_row_val)]
+    elif column_type == 'checkbox' and not excel_row_val:
+        excel_row_val = False
 
-    return {'excel_row_val': excel_val, 'dtable_row_val': dtable_row_val}
+    dtable_row_val = '' if dtable_row_val is None else dtable_row_val
+    excel_row_val = '' if excel_row_val is None else excel_row_val
+
+    return {'excel_row_val': excel_row_val, 'dtable_row_val': dtable_row_val}
+
+
+def get_dtable_rows_dict(dtable_rows, selected_column_list):
+    dtable_row_dict = {}
+    for row in dtable_rows:
+        key = str(hash('-'.join([str(get_cell_value(row, col)) for col in selected_column_list])))
+        if dtable_row_dict.get(key):
+            dtable_row_dict.get(key).append(row)
+        else:
+            dtable_row_dict[key] = [row]
+    return dtable_row_dict
 
 
 def update_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_name, table_name, selected_columns):
@@ -456,28 +460,49 @@ def update_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_nam
     excel_rows = excel_rows[0].get('rows', [])
     dtable_rows = get_rows_from_dtable_server(username, dtable_uuid, table_name)
     selected_column_list = selected_columns.split(',')
-    update_rows = []
-    insert_rows = []
 
     columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
-    col_type_dict = {col['name']: col['type'] for col in columns}
+    dtable_col_type_dict = {col['name']: col['type'] for col in columns}
 
-    excel_col_names = []
-    if excel_rows:
-        excel_col_names = [col_name for col_name in excel_rows[0].keys() if col_type_dict.get(col_name) in UPDATE_TYPE_LIST]
-
-    for excel_row in excel_rows:
-        rows, operateType = get_insert_update_result(excel_row, dtable_rows, selected_column_list, col_type_dict, excel_col_names)
-        if operateType == 'insert':
-            insert_rows += rows
-        else:
-            update_rows += rows
+    insert_rows, update_rows = get_insert_update_rows(dtable_col_type_dict, excel_rows, dtable_rows, selected_column_list)
 
     # delete excel,json,csv file
     delete_file(username, repo_id, file_name)
     # upload json file to dtable-server
     update_rows_by_dtable_server(username, dtable_uuid, update_rows, table_name)
     update_append_excel_json_to_dtable_server(username, dtable_uuid, insert_rows, table_name)
+
+
+def get_cell_value(row, col):
+    cell_value = row.get(col)
+    cell_value = '' if cell_value is None else cell_value
+    return cell_value
+
+
+def get_insert_update_rows(dtable_col_type_dict, excel_rows, dtable_rows, selected_column_list):
+    update_rows = []
+    insert_rows = []
+    excel_col_name_type_dict = {}
+    if excel_rows:
+        excel_col_name_type_dict = {col_name: dtable_col_type_dict.get(col_name) for col_name in excel_rows[0].keys()
+                                    if dtable_col_type_dict.get(col_name) in UPDATE_TYPE_LIST}
+
+    dtable_rows_dict = get_dtable_rows_dict(dtable_rows, selected_column_list)
+    excel_key_str_info = {}
+    for excel_row in excel_rows:
+        selected_col_row_value_str = str(hash('-'.join([str(get_cell_value(excel_row, col)) for col in selected_column_list])))
+        if excel_key_str_info.get(selected_col_row_value_str):
+            continue
+        excel_key_str_info[selected_col_row_value_str] = True
+
+        dtable_rows_list = dtable_rows_dict.get(selected_col_row_value_str)
+
+        if not dtable_rows_list:
+            insert_rows.append(excel_rows)
+        else:
+            rows = get_insert_update_result(excel_row, dtable_rows_list, excel_col_name_type_dict)
+            update_rows += rows
+    return insert_rows, update_rows
 
 
 def parse_update_excel_upload_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name):
