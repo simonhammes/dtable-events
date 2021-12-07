@@ -407,7 +407,9 @@ def get_update_result(excel_row, dtable_row, excel_col_name_type_dict):
     for col_name in excel_col_name_type_dict:
         update_value = get_update_excel_dtable_value(excel_row, excel_col_name_type_dict.get(col_name), dtable_row, col_name)
         if update_value['excel_row_val'] != update_value['dtable_row_val']:
+
             return {'row_id': dtable_row.get('_id'), 'row': excel_row}
+
     return {}
 
 
@@ -487,6 +489,7 @@ def get_insert_update_rows(dtable_col_type_dict, excel_rows, dtable_rows, select
     dtable_rows_dict = get_dtable_rows_dict(dtable_rows, selected_column_list)
     excel_key_str_info = {}
     for excel_row in excel_rows:
+        excel_row = {cell_value: excel_row.get(cell_value) for cell_value in excel_row if excel_col_name_type_dict.get(cell_value)}
         selected_col_row_value_str = str(hash('-'.join([str(get_cell_value(excel_row, col)) for col in selected_column_list])))
         if excel_key_str_info.get(selected_col_row_value_str):
             continue
