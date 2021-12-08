@@ -428,7 +428,8 @@ def get_update_row_data(excel_row, dtable_row, excel_col_name_to_type):
 
         if excel_cell_val != dtable_cell_val:
             update_excel_row[col_name] = excel_cell_val
-    return {'row_id': dtable_row.get('_id'), 'row': update_excel_row}
+    if update_excel_row:
+        return {'row_id': dtable_row.get('_id'), 'row': update_excel_row}
 
 
 def get_dtable_row_data(dtable_rows, key_columns):
@@ -495,7 +496,7 @@ def get_insert_update_rows(dtable_col_name_to_type, excel_rows, dtable_rows, key
             insert_rows.append(excel_row)
         else:
             update_row = get_update_row_data(excel_row, dtable_row, excel_col_name_to_type)
-            if update_row.get('row'):
+            if update_row:
                 update_rows.append(update_row)
     return insert_rows, update_rows
 
