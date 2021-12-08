@@ -25,6 +25,9 @@ LINK_REG_2 = r'^<(\S+)>$'
 IMAGE_REG_1 = r'^<img src="(\S+)" .+\/>'
 IMAGE_REG_2 = r'^!\[\]\((\S+)\)'
 
+UPDATE_TYPE_LIST = ['number', 'single-select', 'url', 'email', 'text', 'date', 'duration', 'rate', 'checkbox',
+                    'multiple-select']
+
 
 class EmptyCell(object):
     value = None
@@ -52,6 +55,7 @@ def parse_number(cell_value):
     except:
         return ''
     return cell_value
+
 
 def parse_long_text(cell_value):
     cell_value = str(cell_value)
@@ -353,7 +357,7 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
 
     if max_column > len(columns):
         max_column = len(columns)
-    rows = parse_append_excel_rows(sheet_rows, columns, max_column)
+    rows = parse_append_excel_rows(sheet_rows, columns, len(columns))
 
     dtable_io_logger.info(
         'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), max_column))
@@ -373,7 +377,7 @@ def parse_append_excel_upload_excel_to_json(repo_id, file_name, username, dtable
     upload_excel_json_file(repo_id, file_name, content)
 
 
-def parse_append_excel_rows(sheet_rows, columns, max_column):
+def parse_append_excel_rows(sheet_rows, columns, column_lenght):
     from dtable_events.dtable_io import dtable_io_logger
 
     value_rows = sheet_rows[1:]
@@ -383,7 +387,7 @@ def parse_append_excel_rows(sheet_rows, columns, max_column):
 
     for row in value_rows:
         row_data = {}
-        for index in range(max_column):
+        for index in range(column_lenght):
             column_name = columns[index]['name']
             if head_dict.get(column_name) is None:
                 continue
@@ -401,27 +405,48 @@ def parse_append_excel_rows(sheet_rows, columns, max_column):
     return rows
 
 
-def get_insert_update_result(excel_row, dtable_rows, selected_column_list):
-    update_row_list = []
-    for dtable_row in dtable_rows:
-        is_update = True
-        for selected_column in selected_column_list:
-            dtable_cell_value = dtable_row.get(selected_column)
-            excel_cell_value = excel_row.get(selected_column)
-            if dtable_cell_value != excel_cell_value:
-                is_update = False
-                break
-        if is_update:
-            update_row = {'row_id': dtable_row.get('_id'), 'row': excel_row}
-            update_row_list.append(update_row)
-    if update_row_list:
-        return update_row_list, 'update'
-    return [excel_row], 'insert'
+def get_update_row_data(excel_row, dtable_row, excel_col_name_to_type):
+    update_excel_row = {}
+    for col_name in excel_col_name_to_type:
+        excel_cell_val = excel_row.get(col_name, '')
+        dtable_cell_val = dtable_row.get(col_name, '')
+        column_type = excel_col_name_to_type.get(col_name)
+        if column_type == 'multiple-select':
+            if not dtable_cell_val:
+                dtable_cell_val = []
+            if not excel_cell_val:
+                excel_cell_val = []
+            excel_cell_val.sort()
+            dtable_cell_val.sort()
+        elif column_type == 'date' and excel_cell_val:
+            # dtable row value like 2021-12-03 00:00 or 2021-12-03, excel row like 2021-12-03 00:00:00
+            excel_cell_val = excel_cell_val[0:len(dtable_cell_val)]
+        elif column_type == 'checkbox' and not excel_cell_val:
+            excel_cell_val = False
+        dtable_cell_val = '' if dtable_cell_val is None else dtable_cell_val
+        excel_cell_val = '' if excel_cell_val is None else excel_cell_val
+
+        if excel_cell_val != dtable_cell_val:
+            update_excel_row[col_name] = excel_cell_val
+    if update_excel_row:
+        return {'row_id': dtable_row.get('_id'), 'row': update_excel_row}
+
+
+def get_dtable_row_data(dtable_rows, key_columns):
+    dtable_row_data = {}
+    for row in dtable_rows:
+        key = str(hash('-'.join([str(get_cell_value(row, col)) for col in key_columns])))
+        if dtable_row_data.get(key):
+            # only deal first row
+            continue
+        else:
+            dtable_row_data[key] = row
+    return dtable_row_data
 
 
 def update_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_name, table_name, selected_columns):
-    from dtable_events.dtable_io.utils import get_excel_json_file, update_rows_by_dtable_server, \
-        delete_file, get_rows_from_dtable_server, update_append_excel_json_to_dtable_server
+    from dtable_events.dtable_io.utils import get_excel_json_file, update_rows_by_dtable_server, delete_file, \
+        get_rows_from_dtable_server, update_append_excel_json_to_dtable_server, get_columns_from_dtable_server
 
     # get json file
     json_file = get_excel_json_file(repo_id, file_name)
@@ -429,21 +454,51 @@ def update_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_nam
     excel_rows = json.loads(sheet_content)
     excel_rows = excel_rows[0].get('rows', [])
     dtable_rows = get_rows_from_dtable_server(username, dtable_uuid, table_name)
-    selected_column_list = selected_columns.split(',')
-    update_rows = []
-    insert_rows = []
-    for excel_row in excel_rows:
-        rows, operateType = get_insert_update_result(excel_row, dtable_rows, selected_column_list)
-        if operateType == 'insert':
-            insert_rows += rows
-        else:
-            update_rows += rows
+    key_columns = selected_columns.split(',')
+
+    columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
+    dtable_col_name_to_type = {col['name']: col['type'] for col in columns}
+
+    insert_rows, update_rows = get_insert_update_rows(dtable_col_name_to_type, excel_rows, dtable_rows, key_columns)
 
     # delete excel,json,csv file
     delete_file(username, repo_id, file_name)
     # upload json file to dtable-server
     update_rows_by_dtable_server(username, dtable_uuid, update_rows, table_name)
     update_append_excel_json_to_dtable_server(username, dtable_uuid, insert_rows, table_name)
+
+
+def get_cell_value(row, col):
+    cell_value = row.get(col)
+    cell_value = '' if cell_value is None else cell_value
+    return cell_value
+
+
+def get_insert_update_rows(dtable_col_name_to_type, excel_rows, dtable_rows, key_columns):
+    if not excel_rows:
+        return [], []
+    update_rows = []
+    insert_rows = []
+    excel_col_name_to_type = {col_name: dtable_col_name_to_type.get(col_name) for col_name in excel_rows[0].keys()
+                             if dtable_col_name_to_type.get(col_name) in UPDATE_TYPE_LIST}
+
+    dtable_row_data = get_dtable_row_data(dtable_rows, key_columns)
+    keys_of_excel_rows = {}
+    for excel_row in excel_rows:
+        excel_row = {col_name: excel_row.get(col_name) for col_name in excel_row if excel_col_name_to_type.get(col_name)}
+        key = str(hash('-'.join([str(get_cell_value(excel_row, col)) for col in key_columns])))
+        if keys_of_excel_rows.get(key):
+            continue
+        keys_of_excel_rows[key] = True
+
+        dtable_row = dtable_row_data.get(key)
+        if not dtable_row:
+            insert_rows.append(excel_row)
+        else:
+            update_row = get_update_row_data(excel_row, dtable_row, excel_col_name_to_type)
+            if update_row:
+                update_rows.append(update_row)
+    return insert_rows, update_rows
 
 
 def parse_update_excel_upload_excel_to_json(repo_id, file_name, username, dtable_uuid, table_name):
@@ -484,7 +539,7 @@ def parse_update_excel_upload_excel_to_json(repo_id, file_name, username, dtable
 
     if max_column > len(columns):
         max_column = len(columns)
-    rows = parse_update_excel_rows(sheet_rows, columns, max_column)
+    rows = parse_update_excel_rows(sheet_rows, columns, len(columns))
 
     dtable_io_logger.info(
         'got table: %s, rows: %d, columns: %d' % (sheet.title, len(rows), max_column))
@@ -504,7 +559,7 @@ def parse_update_excel_upload_excel_to_json(repo_id, file_name, username, dtable
     upload_excel_json_file(repo_id, file_name, content)
 
 
-def parse_update_excel_rows(sheet_rows, columns, max_column):
+def parse_update_excel_rows(sheet_rows, columns, column_length):
     from dtable_events.dtable_io import dtable_io_logger
 
     value_rows = sheet_rows[1:]
@@ -514,7 +569,7 @@ def parse_update_excel_rows(sheet_rows, columns, max_column):
 
     for row in value_rows:
         row_data = {}
-        for index in range(max_column):
+        for index in range(column_length):
             column_name = columns[index]['name']
             if head_dict.get(column_name) is None:
                 continue
@@ -523,6 +578,7 @@ def parse_update_excel_rows(sheet_rows, columns, max_column):
                 cell_value = row[row_index].value
                 column_type = columns[index]['type']
                 if cell_value is None:
+                    row_data[column_name] = None
                     continue
                 row_data[column_name] = parse_row(column_type, cell_value)
             except Exception as e:
@@ -597,6 +653,7 @@ def parse_update_csv_rows(csv_file, columns, max_column):
                 cell_value = csv_row[row_index].strip()
                 column_type = columns[index]['type']
                 if cell_value is None:
+                    row_data[column_name] = None
                     continue
                 row_data[column_name] = parse_row(column_type, cell_value)
             except Exception as e:
@@ -611,7 +668,7 @@ def parse_row(column_type, cell_value):
         cell_value = str(cell_value)
     if isinstance(cell_value, str):
         cell_value = cell_value.strip()
-    if column_type in ('number', 'duration', 'rating'):
+    if column_type in ('number', 'duration', 'rate'):
         return parse_number(cell_value)
     elif column_type == 'date':
         return str(cell_value)
@@ -619,9 +676,9 @@ def parse_row(column_type, cell_value):
         return parse_long_text(cell_value)
     elif column_type == 'checkbox':
         return parse_checkbox(cell_value)
-    elif column_type == 'multi-select':
+    elif column_type == 'multiple-select':
         return parse_multiple_select(cell_value)
-    elif column_type in ('URL', 'email'):
+    elif column_type in ('url', 'email'):
         return str(cell_value)
     elif column_type == 'text':
         return str(cell_value)
