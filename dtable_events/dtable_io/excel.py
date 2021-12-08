@@ -406,6 +406,7 @@ def parse_append_excel_rows(sheet_rows, columns, column_lenght):
 
 
 def get_update_row_data(excel_row, dtable_row, excel_col_name_to_type):
+    update_excel_row = {}
     for col_name in excel_col_name_to_type:
         excel_cell_val = excel_row.get(col_name, '')
         dtable_cell_val = dtable_row.get(col_name, '')
@@ -420,15 +421,14 @@ def get_update_row_data(excel_row, dtable_row, excel_col_name_to_type):
         elif column_type == 'date' and excel_cell_val:
             # dtable row value like 2021-12-03 00:00 or 2021-12-03, excel row like 2021-12-03 00:00:00
             excel_cell_val = excel_cell_val[0:len(dtable_cell_val)]
-        elif column_type == 'checkbox' and not dtable_cell_val:
+        elif column_type == 'checkbox' and not excel_cell_val:
             excel_cell_val = False
         dtable_cell_val = '' if dtable_cell_val is None else dtable_cell_val
         excel_cell_val = '' if excel_cell_val is None else excel_cell_val
 
         if excel_cell_val != dtable_cell_val:
-            return {'row_id': dtable_row.get('_id'), 'row': excel_row}
-
-    return {}
+            update_excel_row[col_name] = excel_cell_val
+    return {'row_id': dtable_row.get('_id'), 'row': update_excel_row}
 
 
 def get_dtable_row_data(dtable_rows, key_columns):
@@ -495,7 +495,7 @@ def get_insert_update_rows(dtable_col_name_to_type, excel_rows, dtable_rows, key
             insert_rows.append(excel_row)
         else:
             update_row = get_update_row_data(excel_row, dtable_row, excel_col_name_to_type)
-            if update_row:
+            if update_row.get('row'):
                 update_rows.append(update_row)
     return insert_rows, update_rows
 
