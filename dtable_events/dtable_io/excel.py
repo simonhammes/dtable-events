@@ -405,11 +405,11 @@ def parse_append_excel_rows(sheet_rows, columns, column_lenght):
     return rows
 
 
-def get_update_row_data(excel_row, dtable_row, excel_col_name_2_type):
-    for col_name in excel_col_name_2_type:
+def get_update_row_data(excel_row, dtable_row, excel_col_name_to_type):
+    for col_name in excel_col_name_to_type:
         excel_cell_val = excel_row.get(col_name, '')
         dtable_cell_val = dtable_row.get(col_name, '')
-        column_type = excel_col_name_2_type.get(col_name)
+        column_type = excel_col_name_to_type.get(col_name)
         if column_type == 'multiple-select':
             if not dtable_cell_val:
                 dtable_cell_val = []
@@ -478,13 +478,13 @@ def get_insert_update_rows(dtable_col_name_to_type, excel_rows, dtable_rows, key
         return [], []
     update_rows = []
     insert_rows = []
-    excel_col_name_2_type = {col_name: dtable_col_name_to_type.get(col_name) for col_name in excel_rows[0].keys()
+    excel_col_name_to_type = {col_name: dtable_col_name_to_type.get(col_name) for col_name in excel_rows[0].keys()
                              if dtable_col_name_to_type.get(col_name) in UPDATE_TYPE_LIST}
 
     dtable_row_data = get_dtable_row_data(dtable_rows, key_columns)
     keys_of_excel_rows = {}
     for excel_row in excel_rows:
-        excel_row = {col_name: excel_row.get(col_name) for col_name in excel_row if excel_col_name_2_type.get(col_name)}
+        excel_row = {col_name: excel_row.get(col_name) for col_name in excel_row if excel_col_name_to_type.get(col_name)}
         key = str(hash('-'.join([str(get_cell_value(excel_row, col)) for col in key_columns])))
         if keys_of_excel_rows.get(key):
             continue
@@ -494,7 +494,7 @@ def get_insert_update_rows(dtable_col_name_to_type, excel_rows, dtable_rows, key
         if not dtable_row:
             insert_rows.append(excel_row)
         else:
-            update_row = get_update_row_data(excel_row, dtable_row, excel_col_name_2_type)
+            update_row = get_update_row_data(excel_row, dtable_row, excel_col_name_to_type)
             if update_row:
                 update_rows.append(update_row)
     return insert_rows, update_rows
