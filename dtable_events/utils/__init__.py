@@ -169,5 +169,5 @@ def uuid_str_to_36_chars(dtable_uuid):
         return dtable_uuid
 
 def is_valid_email(email):
-    return True if EMAIL_RE.match(email) else False
+    return True if EMAIL_RE.match(email) is not None else False
 

@@ -99,7 +99,7 @@ def scan_triggered_notification_rules(event_data, db_session):
     db_session.commit()
 
 
-def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_name, dtable_server_access_token):
+def list_users_by_column_name(dtable_uuid, table_id, view_id, row_id, column_name, dtable_server_access_token):
     api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
     url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/rows/' + row_id + '/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token}
@@ -111,7 +111,7 @@ def list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, column_name
     res = requests.get(url, headers=headers, params=params)
 
     if res.status_code != 200:
-        logger.error(f'dtable {dtable_uuid} failed to list_users_by_column_key {res.text}')
+        logger.error(f'dtable {dtable_uuid} failed to list_users_by_column_name {res.text}')
 
     rowdict = json.loads(res.content)
     user_list = rowdict.get(column_name, [])
@@ -533,7 +533,7 @@ def check_near_deadline_notification_rule(rule, db_session, timezone):
         if users_column_key:
             user_column = _get_column_by_key(dtable_metadata, table_id, users_column_key)
             users_column_name = user_column.get('name')
-            users_from_cell = list_users_by_column_key(dtable_uuid, table_id, view_id, row_id, users_column_name, dtable_server_access_token)
+            users_from_cell = list_users_by_column_name(dtable_uuid, table_id, view_id, row_id, users_column_name, dtable_server_access_token)
             to_users = list(set(users + users_from_cell))
         else:
             to_users = users
