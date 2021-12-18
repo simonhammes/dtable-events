@@ -6,7 +6,7 @@ from threading import Thread
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from dtable_events.notification_rules.notification_rules_utils import check_near_deadline_notification_rule
+from dtable_events.notification_rules.notification_rules_utils import trigger_near_deadline_notification_rule
 from dtable_events.db import init_db_session_class
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool
 
@@ -83,7 +83,7 @@ class DTableNofiticationRulesScanner(object):
         return self._enabled
 
 
-def scan_dtable_notification_rules(db_session, timezone):
+def scan_dtable_notification_rules(db_session):
     sql = '''
             SELECT `dnr`.`id`, `trigger`, `action`, `last_trigger_time`, `dtable_uuid` FROM dtable_notification_rules dnr
             JOIN dtables d ON dnr.dtable_uuid=d.uuid
@@ -97,12 +97,11 @@ def scan_dtable_notification_rules(db_session, timezone):
         'per_day_check_time': per_day_check_time,
         'per_week_check_time': per_week_check_time
     })
-
     for rule in rules:
         if not rule[4]:  # filter and ignore non-dtable-uuid records(some old records)
             continue
         try:
-            check_near_deadline_notification_rule(rule, db_session, timezone)
+            trigger_near_deadline_notification_rule(rule, db_session)
         except Exception as e:
             logging.exception(e)
             logging.error(f'check rule failed. {rule}, error: {e}')
@@ -125,7 +124,7 @@ class DTableNofiticationRulesScannerTimer(Thread):
 
             db_session = self.db_session_class()
             try:
-                scan_dtable_notification_rules(db_session, timezone)
+                scan_dtable_notification_rules(db_session)
             except Exception as e:
                 logging.exception('error when scanning dtable notification rules: %s', e)
             finally:

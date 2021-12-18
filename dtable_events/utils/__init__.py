@@ -7,10 +7,19 @@ import subprocess
 import uuid
 
 import pytz
+import re
 
 logger = logging.getLogger(__name__)
 pyexec = None
 
+
+EMAIL_RE = re.compile(
+        r"(^[-!#$%&*+/=?^_`{}|~0-9A-Z]+(\.[-!#$%&*+/=?^_`{}|~0-9A-Z]+)*"  # dot-atom
+        # quoted-string, see also http://tools.ietf.org/html/rfc2822#section-3.2.5
+        r'|^"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"'
+        r')@((?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)$)'  # domain
+        r'|\[(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\]$',
+        re.IGNORECASE)
 
 def find_in_path(prog):
     if 'win32' in sys.platform:
@@ -158,3 +167,7 @@ def uuid_str_to_36_chars(dtable_uuid):
         return str(uuid.UUID(dtable_uuid))
     else:
         return dtable_uuid
+
+def is_valid_email(email):
+    return True if EMAIL_RE.match(email) is not None else False
+

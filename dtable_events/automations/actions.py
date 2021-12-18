@@ -14,7 +14,7 @@ from dtable_events.automations.models import BoundThirdPartyAccounts
 from dtable_events.dtable_io import send_wechat_msg, send_email_msg
 from dtable_events.notification_rules.notification_rules_utils import _fill_msg_blanks as fill_msg_blanks, \
     send_notification
-from dtable_events.utils import utc_to_tz, uuid_str_to_36_chars
+from dtable_events.utils import utc_to_tz, uuid_str_to_36_chars, is_valid_email
 from dtable_events.utils.constants import ColumnTypes
 
 
@@ -55,14 +55,6 @@ CONDITION_PERIODICALLY = 'run_periodically'
 CONDITION_PERIODICALLY_BY_CONDITION = 'run_periodically_by_condition'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
-
-EMAIL_RE = re.compile(
-        r"(^[-!#$%&*+/=?^_`{}|~0-9A-Z]+(\.[-!#$%&*+/=?^_`{}|~0-9A-Z]+)*"  # dot-atom
-        # quoted-string, see also http://tools.ietf.org/html/rfc2822#section-3.2.5
-        r'|^"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"'
-        r')@((?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)$)'  # domain
-        r'|\[(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\]$',
-        re.IGNORECASE)  # literal form, ipv4 address (SMTP 4.1.3)
 
 def get_third_party_account(session, account_id):
     account_query = session.query(BoundThirdPartyAccounts).filter(
@@ -415,6 +407,29 @@ class NotifyAction(BaseAction):
 
         self._init_notify(msg)
 
+    def is_valid_username(self, user):
+        if not user:
+            return False
+
+        return is_valid_email(user)
+
+    def get_user_column_by_key(self):
+        dtable_metadata = self.auto_rule.dtable_metadata
+        table = None
+        for t in dtable_metadata.get('tables', []):
+            if t.get('_id') == self.auto_rule.table_id:
+                table = t
+                break
+
+        if not table:
+            return None
+
+        for col in table.get('columns'):
+            if col.get('key') == self.users_column_key:
+                return col
+
+        return None
+
     def _init_notify(self, msg):
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
@@ -446,11 +461,17 @@ class NotifyAction(BaseAction):
         user_msg_list = []
         users = self.users
         if self.users_column_key:
-            users_from_column = raw_row.get(self.users_column_key, [])
+            user_column = self.get_user_column_by_key()
+            users_column_name = user_column.get('name')
+            users_from_column = row.get(users_column_name, [])
+            if not users_from_column:
+                users_from_column = []
             if not isinstance(users_from_column, list):
                 users_from_column = [users_from_column, ]
             users = list(set(self.users + users_from_column))
         for user in users:
+            if not self.is_valid_username(user):
+                continue
             user_msg_list.append({
                 'to_user': user,
                 'msg_type': 'notification_rules',
@@ -552,11 +573,10 @@ class SendWechatAction(BaseAction):
 class SendEmailAction(BaseAction):
 
 
-
     def is_valid_email(self, email):
         """A heavy email format validation.
         """
-        return True if EMAIL_RE.match(email) is not None else False
+        return is_valid_email(email)
 
     def __init__(self,
                  auto_rule,
@@ -879,8 +899,8 @@ class LinkRecordsAction(BaseAction):
                 'sorts': [
                     {"column_key": "_mtime", "sort_type": "down"}
                 ],
-                'limit': 500
-            }
+            },
+            'limit': 500
         }
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
         client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
