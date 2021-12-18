@@ -891,8 +891,8 @@ class LinkRecordsAction(BaseAction):
                 'sorts': [
                     {"column_key": "_mtime", "sort_type": "down"}
                 ],
-                'limit': 500
-            }
+            },
+            'limit': 500
         }
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
         client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
