@@ -389,8 +389,6 @@ def trigger_notification_rule(rule, message_table_id, row, converted_row, dtable
     table_id = trigger['table_id']
     view_id = trigger['view_id']
 
-
-
     if message_table_id != table_id:
         return
 
@@ -422,6 +420,8 @@ def trigger_notification_rule(rule, message_table_id, row, converted_row, dtable
             user_column = _get_column_by_key(dtable_metadata, table_id, users_column_key)
             users_column_name = user_column.get('name')
             users_from_column = converted_row.get(users_column_name, [])
+            if not users_from_column:
+                users_from_column = []
             if not isinstance(users_from_column, list):
                 users_from_column = [users_from_column, ]
             users = list(set(users + users_from_column))
@@ -452,6 +452,8 @@ def trigger_notification_rule(rule, message_table_id, row, converted_row, dtable
             user_column = _get_column_by_key(dtable_metadata, table_id, users_column_key)
             users_column_name = user_column.get('name')
             users_from_column = converted_row.get(users_column_name, [])
+            if not users_from_column:
+                users_from_column = []
             if not isinstance(users_from_column, list):
                 users_from_column = [users_from_column, ]
             users = list(set(users + users_from_column))
