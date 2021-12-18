@@ -415,16 +415,19 @@ class NotifyAction(BaseAction):
 
     def get_user_column_by_key(self):
         dtable_metadata = self.auto_rule.dtable_metadata
-        sub_table = None
-        for table in dtable_metadata.get('tables', []):
-            if table.get('_id') == self.auto_rule.table_id:
-                sub_table = table
+        table = None
+        for t in dtable_metadata.get('tables', []):
+            if t.get('_id') == self.auto_rule.table_id:
+                table = t
                 break
 
-        if sub_table:
-            for col in sub_table.get('columns'):
-                if col.get('key') == self.users_column_key:
-                    return col
+        if not table:
+            return None
+
+        for col in table.get('columns'):
+            if col.get('key') == self.users_column_key:
+                return col
+
         return None
 
     def _init_notify(self, msg):

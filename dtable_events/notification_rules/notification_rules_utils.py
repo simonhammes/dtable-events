@@ -365,15 +365,18 @@ def gen_notification_msg_with_row(dtable_uuid, msg, row, column_blanks, col_name
 
 
 def _get_column_by_key(dtable_metadata, table_id, column_key):
-    sub_table = None
-    for table in dtable_metadata.get('tables', []):
-        if table.get('_id') == table_id:
-            sub_table = table
+    table = None
+    for t in dtable_metadata.get('tables', []):
+        if t.get('_id') == table_id:
+            table = t
 
-    if sub_table:
-        for col in sub_table.get('columns'):
-            if col.get('key') == column_key:
-                return col
+    if not table:
+        return None
+
+    for col in table.get('columns'):
+        if col.get('key') == column_key:
+            return col
+
     return None
 
 
