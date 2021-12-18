@@ -408,6 +408,8 @@ class NotifyAction(BaseAction):
         self._init_notify(msg)
 
     def is_valid_username(self, user):
+        if not user:
+            return False
 
         return is_valid_email(user)
 
@@ -454,6 +456,8 @@ class NotifyAction(BaseAction):
             user_column = self.get_user_column_by_key()
             users_column_name = user_column.get('name')
             users_from_column = row.get(users_column_name, [])
+            if not users_from_column:
+                users_from_column = []
             if not isinstance(users_from_column, list):
                 users_from_column = [users_from_column, ]
             users = list(set(self.users + users_from_column))

@@ -6,7 +6,7 @@ from threading import Thread
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from dtable_events.notification_rules.notification_rules_utils import check_near_deadline_notification_rule
+from dtable_events.notification_rules.notification_rules_utils import trigger_near_deadline_notification_rule
 from dtable_events.db import init_db_session_class
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool
 
@@ -97,12 +97,11 @@ def scan_dtable_notification_rules(db_session, timezone):
         'per_day_check_time': per_day_check_time,
         'per_week_check_time': per_week_check_time
     })
-
     for rule in rules:
         if not rule[4]:  # filter and ignore non-dtable-uuid records(some old records)
             continue
         try:
-            check_near_deadline_notification_rule(rule, db_session, timezone)
+            trigger_near_deadline_notification_rule(rule, db_session, timezone)
         except Exception as e:
             logging.exception(e)
             logging.error(f'check rule failed. {rule}, error: {e}')
