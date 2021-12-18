@@ -474,7 +474,7 @@ def trigger_notification_rule(rule, message_table_id, row, converted_row, dtable
     update_rule_last_trigger_time(rule_id, db_session)
 
 
-def trigger_near_deadline_notification_rule(rule, db_session, timezone):
+def trigger_near_deadline_notification_rule(rule, db_session):
     rule_id = rule[0]
     trigger = rule[1]
     action = rule[2]
@@ -497,12 +497,10 @@ def trigger_near_deadline_notification_rule(rule, db_session, timezone):
     table_id = trigger['table_id']
     view_id = trigger['view_id']
     notify_hour = trigger.get('notify_hour')
+    cur_datetime = datetime.now()
 
-    try:
-        cur_hour = int((datetime.utcnow() + pytz.timezone(timezone)._utcoffset).strftime('%H'))
-    except Exception as e:
-        logger.error('timezone: %s parse error: %s', timezone, e)
-        cur_hour = int(time.strftime('%H'))
+    cur_hour = int(cur_datetime.hour)
+
 
     if notify_hour != None:
         if int(notify_hour) != cur_hour:
