@@ -285,6 +285,8 @@ def convert_dtable_import_file_url(dtable_content, workspace_id, dtable_uuid):
                             v['text'] = v['text'].replace(item, v['images'][idx])
     
     plugin_settings = dtable_content.get('plugin_settings', {})
+
+    # page desgin settings
     page_design_settings = plugin_settings.get('page-design', [])
     for page in page_design_settings:
         page_id = page['page_id'];
@@ -328,6 +330,8 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
         seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
     except Exception as e:
         raise e
+    
+    return content_json
 
 
 def post_asset_files(repo_id, dtable_uuid, username):
@@ -353,6 +357,49 @@ def post_asset_files(repo_id, dtable_uuid, username):
                 seafile_api.mkdir_with_parents(repo_id, '/', cur_file_parent_path[1:], username)
 
             seafile_api.post_file(repo_id, tmp_file_path, cur_file_parent_path, file_name, username)
+
+# execute after post asset
+# dtable_content, repo_id, workspace_id, dtable_uuid, username
+def update_page_design_static_image(dtable_content, repo_id, workspace_id, dtable_uuid, username):
+    if not dtable_content:
+        return
+    # handle different url in settings.py
+    dtable_web_service_url = task_manager.conf['dtable_web_service_url'].rstrip('/')
+    plugin_settings = dtable_content.get('plugin_settings', {})
+    page_design_settings = plugin_settings.get('page-design', [])
+    for page in page_design_settings:
+        page_id = page['page_id']
+        page_content_file_name = '%s.json'%(page_id)
+        page_content_url = page['content_url']
+        parent_dir = '/asset/%s/page-design/%s'%(dtable_uuid, page_id)
+        page_json_file_id = seafile_api.get_file_id_by_path(repo_id, '/asset' + page_content_url.split('asset')[1])
+        token = seafile_api.get_fileserver_access_token(
+            repo_id, page_json_file_id, 'view', '', use_onetime=False
+        )
+        content_url = gen_inner_file_get_url(token, page_content_file_name)
+        page_content_response = requests.get(content_url)
+        is_changed = False
+        if page_content_response.status_code == 200:
+            page_content = page_content_response.json()
+            pages = page_content.get('pages', [])
+            for sub_page in pages:
+                element_map = sub_page.get('element_map', {})
+                for element_id in element_map:
+                    element = element_map.get(element_id, {})
+                    if element['type'] == 'static_image':
+                        config_data = element.get('config_data', {})
+                        static_image_url = config_data.get('staticImageUrl', '')
+                        file_name = '/'.join(static_image_url.split('/')[-2:])
+                        config_data['staticImageUrl'] = '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
+                                                                dtable_uuid, 'page-design', page_id, file_name])
+                        is_changed = True
+            if is_changed:
+                content_json_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'page-design')
+                os.makedirs(content_json_file_path)
+                page_content_save_path = os.path.join(content_json_file_path, page_content_file_name)
+                with open(page_content_save_path, 'w') as f:
+                    json.dump(page_content, f)
+                seafile_api.put_file(repo_id, page_content_save_path, parent_dir, '%s.json'%(page_id), username, None)
 
 
 def gen_form_id(length=4):
