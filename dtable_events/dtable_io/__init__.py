@@ -120,7 +120,7 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
     try:
         post_asset_files(repo_id, dtable_uuid, username)
     except Exception as e:
-        dtable_io_logger.error('post asset files faield. ERROR: {}'.format(e))
+        dtable_io_logger.error('post asset files failed. ERROR: {}'.format(e))
 
     dtable_io_logger.info('create forms from src dtable.')
     try:

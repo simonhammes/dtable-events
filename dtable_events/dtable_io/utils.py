@@ -238,7 +238,7 @@ def copy_src_forms_to_json(dtable_uuid, tmp_file_path, db_session):
             fp.write(json.dumps(src_forms_json))
 
 
-def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtable_uuid):
+def convert_dtable_import_file_url(dtable_content, workspace_id, dtable_uuid):
     """ notice that this function receive a python dict and return a python dict
         json related operations are excluded
 
@@ -283,6 +283,17 @@ def convert_dtable_import_file_and_image_url(dtable_content, workspace_id, dtabl
                                                dtable_uuid, 'images', img_name])
                             v['images'][idx] = new_url
                             v['text'] = v['text'].replace(item, v['images'][idx])
+    
+    plugin_settings = dtable_content.get('plugin_settings', {})
+    page_design_settings = plugin_settings.get('page-design', [])
+    # https://dev.seatable.cn/workspace/8/asset/`uuid`/page-design/ 
+    for page in page_design_settings:
+        page_id = page['page_id'];
+        page['content_url'] = '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
+                                        dtable_uuid, 'page-design', page_id, '%s.json'%(page_id)])
+        page['poster_url'] = '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
+                                        dtable_uuid, 'page-design', page_id, '%s.png'%(page_id)])
+    
     return dtable_content
 
 
@@ -310,7 +321,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
         seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
         return
 
-    content_json = convert_dtable_import_file_and_image_url(content, workspace_id, dtable_uuid)
+    content_json = convert_dtable_import_file_url(content, workspace_id, dtable_uuid)
     with open(content_json_file_path, 'w') as f:
         f.write(json.dumps(content_json))
 
