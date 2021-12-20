@@ -286,7 +286,6 @@ def convert_dtable_import_file_url(dtable_content, workspace_id, dtable_uuid):
     
     plugin_settings = dtable_content.get('plugin_settings', {})
     page_design_settings = plugin_settings.get('page-design', [])
-    # https://dev.seatable.cn/workspace/8/asset/`uuid`/page-design/ 
     for page in page_design_settings:
         page_id = page['page_id'];
         page['content_url'] = '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
