@@ -437,7 +437,7 @@ def import_or_sync(dst_dtable_uuid, src_dtable_uuid, src_rows, src_columns, src_
         query_params = {
             'table_name': src_table_name,
             'view_name': src_view_name,
-            'archive': True,
+            'use_dtable_db': True,
             'start': start,
             'limit': limit
         }
