@@ -417,12 +417,30 @@ def generate_synced_rows(converted_rows, src_rows, src_columns, synced_columns, 
     return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
 
 
-def import_or_sync(dst_dtable_uuid, src_dtable_uuid, src_rows, src_columns, src_table_name, src_view_name, src_headers, dst_table_id, dst_table_name, dst_headers, dst_columns=None, dst_rows=None, lang='en'):
+def import_or_sync(import_sync_context):
     """
     import or sync common dataset
 
     return: dst_table_id, error_msg -> str or None
     """
+    # extract necessary assets
+    dst_dtable_uuid = import_sync_context.get('dst_dtable_uuid')
+    src_dtable_uuid = import_sync_context.get('src_dtable_uuid')
+
+    src_rows = import_sync_context.get('src_rows')
+    src_columns = import_sync_context.get('src_columns')
+    src_table_name = import_sync_context.get('src_table_name')
+    src_view_name = import_sync_context.get('src_view_name')
+    src_headers = import_sync_context.get('src_headers')
+
+    dst_table_id = import_sync_context.get('dst_table_id')
+    dst_table_name = import_sync_context.get('dst_table_name')
+    dst_headers = import_sync_context.get('dst_headers')
+    dst_columns = import_sync_context.get('dst_columns')
+    dst_rows = import_sync_context.get('dst_rows')
+
+    lang = import_sync_context.get('lang', 'en')
+
     # generate cols and rows
     ## generate cols
     to_be_updated_columns, to_be_appended_columns, error = generate_synced_columns(src_columns, dst_columns=dst_columns)
@@ -627,7 +645,20 @@ def sync_common_dataset(context, config):
     dst_rows = dst_table.get('rows')
 
     try:
-        dst_table_id, error_msg = import_or_sync(dst_dtable_uuid, src_dtable_uuid, src_table.get('rows', []), src_columns, src_table.get('name'), src_view.get('name'), src_headers, dst_table_id, dst_table.get('name'), dst_headers, dst_rows=dst_rows, dst_columns=dst_columns)
+        dst_table_id, error_msg = import_or_sync({
+            'dst_dtable_uuid': dst_dtable_uuid,
+            'src_dtable_uuid': src_dtable_uuid,
+            'src_rows': src_table.get('rows', []),
+            'src_columns': src_columns,
+            'src_table_name': src_table.get('name'),
+            'src_view_name': src_view.get('name'),
+            'src_headers': src_headers,
+            'dst_table_id': dst_table_id,
+            'dst_table_name': dst_table.get('name'),
+            'dst_headers': dst_headers,
+            'dst_rows': dst_rows,
+            'dst_columns': dst_columns
+        })
         if error_msg:
             dtable_io_logger.error(error_msg)
             return
@@ -680,7 +711,18 @@ def import_common_dataset(context, config):
     creator = context.get('creator')
 
     try:
-        dst_table_id, error_msg = import_or_sync(dst_dtable_uuid, src_dtable_uuid, src_table.get('rows', []), src_columns, src_table.get('name'), src_view.get('name'), src_headers, None, dst_table_name, dst_headers, lang=lang)
+        dst_table_id, error_msg = import_or_sync({
+            'dst_dtable_uuid': dst_dtable_uuid,
+            'src_dtable_uuid': src_dtable_uuid,
+            'src_rows': src_table.get('rows', []),
+            'src_columns': src_columns,
+            'src_table_name': src_table.get('name'),
+            'src_view_name': src_view.get('name'),
+            'src_headers': src_headers,
+            'dst_table_name': dst_table_name,
+            'dst_headers': dst_headers,
+            'lang': lang
+        })
         if error_msg:
             dtable_io_logger.error(error_msg)
             return
