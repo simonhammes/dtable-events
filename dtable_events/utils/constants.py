@@ -21,3 +21,5 @@ class ColumnTypes:
     MTIME = 'mtime'
     LINK_FORMULA = 'link-formula'
     RATE = 'rate'
+    GEOLOCATION = 'geolocation'
+    BUTTON = 'button'
