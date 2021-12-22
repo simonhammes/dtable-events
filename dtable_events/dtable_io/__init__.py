@@ -11,7 +11,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
-    download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, prepare_dtable_json_from_memory
+    download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, \
+    prepare_dtable_json_from_memory, update_page_design_static_image
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io.excel import parse_excel_to_json, import_excel_by_dtable_server, \
     append_parsed_file_by_dtable_server, parse_append_excel_upload_excel_to_json, \
@@ -112,7 +113,7 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
 
     dtable_io_logger.info('Prepare dtable json file and post it at file server.')
     try:
-        post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_name)
+        dtable_content = post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_name)
     except Exception as e:
         dtable_io_logger.error('post dtable json failed. ERROR: {}'.format(e))
 
@@ -120,7 +121,7 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
     try:
         post_asset_files(repo_id, dtable_uuid, username)
     except Exception as e:
-        dtable_io_logger.error('post asset files faield. ERROR: {}'.format(e))
+        dtable_io_logger.error('post asset files failed. ERROR: {}'.format(e))
 
     dtable_io_logger.info('create forms from src dtable.')
     try:
@@ -130,6 +131,11 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
     finally:
         if db_session:
             db_session.close()
+
+    try:
+        update_page_design_static_image(dtable_content, repo_id, workspace_id, dtable_uuid, username)
+    except Exception as e:
+        dtable_io_logger.error('update page design static image failed. ERROR: {}'.format(e))
 
     # remove extracted tmp file
     dtable_io_logger.info('Remove extracted tmp file.')
