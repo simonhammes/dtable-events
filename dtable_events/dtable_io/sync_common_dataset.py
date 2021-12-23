@@ -451,7 +451,7 @@ def import_or_sync(import_sync_context):
     result_rows = []
     start, limit = 0, 10000
     while True:
-        url = dtable_server_url.rstrip('/') + '/api/v1/internal/dtables/' + str(src_dtable_uuid) + '/view-rows/?from=dtable_web'
+        url = dtable_server_url.rstrip('/') + '/api/v1/internal/dtables/' + str(src_dtable_uuid) + '/view-rows/?from=dtable_events'
         query_params = {
             'table_name': src_table_name,
             'view_name': src_view_name,
@@ -502,7 +502,7 @@ def import_or_sync(import_sync_context):
     ## or maybe append/update columns
     else:
         ### batch append columns
-        url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-append-columns/?from=dtable_web'
+        url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-append-columns/?from=dtable_events'
         data = {
             'table_id': dst_table_id,
             'columns': [{
@@ -521,7 +521,7 @@ def import_or_sync(import_sync_context):
             dtable_io_logger.error('batch append columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
             return None, 'batch append columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
         ### batch update columns
-        url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-update-columns/?from=dtable_web'
+        url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-update-columns/?from=dtable_events'
         data = {
             'table_id': dst_table_id,
             'columns': [{
@@ -542,7 +542,7 @@ def import_or_sync(import_sync_context):
     ## update delete append rows step by step
     step = 1000
     ### update rows
-    url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-update-rows/?from=dtable_web' % (str(dst_dtable_uuid),)
+    url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-update-rows/?from=dtable_events' % (str(dst_dtable_uuid),)
     for i in range(0, len(to_be_updated_rows), step):
         updates = []
         for row in to_be_updated_rows[i: i+step]:
@@ -565,7 +565,7 @@ def import_or_sync(import_sync_context):
             return None, 'sync dataset update rows dst dtable: %s dst table: %s error: %s' % (dst_dtable_uuid, dst_table_name, e)
 
     ### delete rows
-    url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-delete-rows/?from=dtable_web' % (str(dst_dtable_uuid),)
+    url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-delete-rows/?from=dtable_events' % (str(dst_dtable_uuid),)
     for i in range(0, len(to_be_deleted_row_ids), step):
         data = {
             'table_name': dst_table_name,
@@ -625,7 +625,7 @@ def sync_common_dataset(context, config):
     dataset_id = context.get('dataset_id')
 
     # request dst_dtable
-    url = dtable_server_url.strip('/') + '/dtables/' + str(dst_dtable_uuid) + '?from=dtable_web'
+    url = dtable_server_url.strip('/') + '/dtables/' + str(dst_dtable_uuid) + '?from=dtable_events'
     try:
         resp = requests.get(url, headers=dst_headers)
         dst_dtable_json = resp.json()
