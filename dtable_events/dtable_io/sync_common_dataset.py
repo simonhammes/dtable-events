@@ -502,42 +502,44 @@ def import_or_sync(import_sync_context):
     ## or maybe append/update columns
     else:
         ### batch append columns
-        url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-append-columns/?from=dtable_events'
-        data = {
-            'table_id': dst_table_id,
-            'columns': [{
-                'column_key': col.get('key'),
-                'column_name': col.get('name'),
-                'column_type': col.get('type'),
-                'column_data': col.get('data')
-            } for col in to_be_appended_columns]
-        }
-        try:
-            resp = requests.post(url, headers=dst_headers, json=data)
-            if resp.status_code != 200:
-                dtable_io_logger.error('batch append columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
-                return None, 'batch append columns to dst dtable: %s, table: %s error status code: %s text: %s' % (dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
-        except Exception as e:
-            dtable_io_logger.error('batch append columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
-            return None, 'batch append columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
+        if to_be_appended_columns:
+            url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-append-columns/?from=dtable_events'
+            data = {
+                'table_id': dst_table_id,
+                'columns': [{
+                    'column_key': col.get('key'),
+                    'column_name': col.get('name'),
+                    'column_type': col.get('type'),
+                    'column_data': col.get('data')
+                } for col in to_be_appended_columns]
+            }
+            try:
+                resp = requests.post(url, headers=dst_headers, json=data)
+                if resp.status_code != 200:
+                    dtable_io_logger.error('batch append columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
+                    return None, 'batch append columns to dst dtable: %s, table: %s error status code: %s text: %s' % (dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
+            except Exception as e:
+                dtable_io_logger.error('batch append columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
+                return None, 'batch append columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
         ### batch update columns
-        url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-update-columns/?from=dtable_events'
-        data = {
-            'table_id': dst_table_id,
-            'columns': [{
-                'key': col.get('key'),
-                'type': col.get('type'),
-                'data': col.get('data')
-            } for col in to_be_updated_columns]
-        }
-        try:
-            resp = requests.put(url, headers=dst_headers, json=data)
-            if resp.status_code != 200:
-                dtable_io_logger.error('batch update columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
-                return None, 'batch update columns to dst dtable: %s, table: %s error status code: %s text: %s' % (dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
-        except Exception as e:
-            dtable_io_logger.error('batch update columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
-            return None, 'batch update columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
+        if to_be_updated_columns:
+            url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-update-columns/?from=dtable_events'
+            data = {
+                'table_id': dst_table_id,
+                'columns': [{
+                    'key': col.get('key'),
+                    'type': col.get('type'),
+                    'data': col.get('data')
+                } for col in to_be_updated_columns]
+            }
+            try:
+                resp = requests.put(url, headers=dst_headers, json=data)
+                if resp.status_code != 200:
+                    dtable_io_logger.error('batch update columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
+                    return None, 'batch update columns to dst dtable: %s, table: %s error status code: %s text: %s' % (dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
+            except Exception as e:
+                dtable_io_logger.error('batch update columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
+                return None, 'batch update columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
 
     ## update delete append rows step by step
     step = 1000
@@ -687,7 +689,7 @@ def sync_common_dataset(context, config):
         })
         db_session.commit()
     except Exception as e:
-        dtable_io_logger.error('insert dtable coomo dataset sync error: %s', e)
+        dtable_io_logger.error('insert dtable common dataset sync error: %s', e)
     finally:
         db_session.close()
 
@@ -752,6 +754,6 @@ def import_common_dataset(context, config):
         })
         db_session.commit()
     except Exception as e:
-        dtable_io_logger.error('insert dtable coomo dataset sync error: %s', e)
+        dtable_io_logger.error('insert dtable common dataset sync error: %s', e)
     finally:
         db_session.close()
