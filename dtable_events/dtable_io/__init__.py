@@ -133,7 +133,14 @@ def post_dtable_import_files(username, repo_id, workspace_id, dtable_uuid, dtabl
             db_session.close()
 
     try:
-        update_page_design_static_image(dtable_content, repo_id, workspace_id, dtable_uuid, username)
+        if dtable_content:
+            plugin_settings = dtable_content.get('plugin_settings', {})
+            page_design_settings = plugin_settings.get('page-design', [])
+            page_design_content_json_tmp_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'page-design')
+            # handle different url in settings.py
+            dtable_web_service_url = task_manager.conf['dtable_web_service_url'].rstrip('/')
+            file_server_port = task_manager.conf['file_server_port']
+            update_page_design_static_image(page_design_settings, repo_id, workspace_id, dtable_uuid, page_design_content_json_tmp_path, dtable_web_service_url, file_server_port, username)
     except Exception as e:
         dtable_io_logger.error('update page design static image failed. ERROR: {}'.format(e))
 
