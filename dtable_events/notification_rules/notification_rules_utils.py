@@ -10,7 +10,7 @@ import sys
 import re
 import pytz
 
-from dtable_events.utils import is_valid_email
+from dtable_events.utils import is_valid_email, uuid_str_to_36_chars
 from dtable_events.utils.constants import ColumnTypes
 from dtable_events.cache import redis_cache as cache
 
@@ -145,7 +145,7 @@ def deal_invalid_rule(rule_id, db_session):
 
 def list_rows_near_deadline(dtable_uuid, table_id, view_id, date_column_name, alarm_days, dtable_server_access_token, rule_id=None, db_session=None):
     api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-    url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + dtable_uuid + '/list-rows-near-deadline/'
+    url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + uuid_str_to_36_chars(dtable_uuid) + '/list-rows-near-deadline/'
     headers = {'Authorization': 'Token ' + dtable_server_access_token}
     now_date = date.today()
     now_plus_alarm_date = now_date + timedelta(days=int(alarm_days))

@@ -239,7 +239,7 @@ class LockRowAction(BaseAction):
                 filter_groups.append({'filters': trigger_filters, 'filter_conjunction': filter_conjunction})
 
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-        client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
+        client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + uuid_str_to_36_chars(self.auto_rule.dtable_uuid) + '/filter-rows/'
         json_data = {
             'table_id': table_id,
             'filter_conditions': {
@@ -903,7 +903,7 @@ class LinkRecordsAction(BaseAction):
             'limit': 500
         }
         api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
-        client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + self.auto_rule.dtable_uuid + '/filter-rows/'
+        client_url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + uuid_str_to_36_chars(self.auto_rule.dtable_uuid) + '/filter-rows/'
         try:
             response = requests.post(client_url, headers=self.auto_rule.headers, json=json_data)
             rows_data = response.json().get('rows')
