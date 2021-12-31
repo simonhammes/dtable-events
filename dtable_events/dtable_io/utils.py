@@ -693,3 +693,157 @@ def update_append_excel_json_to_dtable_server(username, dtable_uuid, rows_data, 
 def delete_file(username, repo_id, file_name):
     filename = file_name + '.xlsx\t' + file_name + '.json\t' + file_name + '.csv\t'
     seafile_api.del_file(repo_id, EXCEL_DIR_PATH, filename, username)
+
+
+def get_converted_cell_value(converted_cell_value, src_row, transfered_column, col):
+    from dtable_events.dtable_io import dtable_io_logger
+    from dtable_events.utils.constants import ColumnTypes
+    from copy import deepcopy
+    import re
+
+    col_key = col.get('key')
+    col_type = col.get('type')
+    select_options_dict = {}
+    if col_type == ColumnTypes.SINGLE_SELECT or col_type == ColumnTypes.MULTIPLE_SELECT:
+        options = col.get('data', {}).get('options', [])
+        select_options_dict = {op['name']: op['id'] for op in options}
+    if col_type in [
+        ColumnTypes.TEXT,
+        ColumnTypes.LONG_TEXT,
+        ColumnTypes.IMAGE,
+        ColumnTypes.FILE,
+        ColumnTypes.RATE,
+        ColumnTypes.NUMBER,
+        ColumnTypes.COLLABORATOR,
+        ColumnTypes.DURATION,
+        ColumnTypes.EMAIL,
+        ColumnTypes.DATE,
+        ColumnTypes.CHECKBOX,
+        ColumnTypes.AUTO_NUMBER,
+        ColumnTypes.CREATOR,
+        ColumnTypes.CTIME,
+        ColumnTypes.LAST_MODIFIER,
+        ColumnTypes.MTIME,
+        ColumnTypes.URL,
+        ColumnTypes.GEOLOCATION
+    ]:
+        return deepcopy(src_row.get(col_key))
+
+    elif col_type == ColumnTypes.SINGLE_SELECT:
+        if not isinstance(converted_cell_value, str):
+            return
+        return select_options_dict.get(converted_cell_value)
+
+    elif col_type == ColumnTypes.MULTIPLE_SELECT:
+        if not isinstance(converted_cell_value, list):
+            return
+        return [select_options_dict.get(value) for value in converted_cell_value if
+                               select_options_dict.get(value)]
+
+    elif col_type == ColumnTypes.LINK:
+        if not isinstance(converted_cell_value, list):
+            return
+        return ', '.join([str(v.get('display_value', '')) for v in converted_cell_value])
+
+    elif col_type == ColumnTypes.FORMULA:
+        result_type = col.get('data', {}).get('result_type')
+        if result_type == 'number':
+            try:
+                re_number = r'(\-|\+)?\d+(\.\d+)?'
+                match_obj = re.search(re_number, str(converted_cell_value))
+                if not match_obj:
+                    return
+                start, end = match_obj.span()
+                return float(str(converted_cell_value)[start: end])
+            except Exception as e:
+                dtable_io_logger.error('re search: %s in: %s error: %s', re_number, converted_cell_value, e)
+                return
+        elif result_type == 'date':
+            return converted_cell_value
+        elif result_type == 'bool':
+            if isinstance(converted_cell_value, bool):
+                return converted_cell_value
+            return str(converted_cell_value).upper() == 'TRUE'
+        elif result_type == 'string':
+            options = col.get('data', {}).get('options')
+            if options and isinstance(options, list):
+                options_dict = {option.get('id'): option.get('name', '') for option in options}
+                if isinstance(converted_cell_value, list):
+                    values = [options_dict.get(item, item) for item in converted_cell_value]
+                    return ', '.join(values)
+                else:
+                    return options_dict.get(converted_cell_value, converted_cell_value)
+            else:
+                if isinstance(converted_cell_value, list):
+                    return ', '.join(str(v) for v in converted_cell_value)
+                else:
+                    return converted_cell_value
+        else:
+            if isinstance(converted_cell_value, list):
+                return ', '.join(str(v) for v in converted_cell_value)
+            else:
+                return converted_cell_value
+
+    elif col_type == ColumnTypes.LINK_FORMULA:
+        result_type = col.get('data', {}).get('result_type')
+        if result_type == 'number':
+            try:
+                re_number = r'(\-|\+)?\d+(\.\d+)?'
+                match_obj = re.search(re_number, str(converted_cell_value))
+                if not match_obj:
+                    return
+                start, end = match_obj.span()
+                return int(str(converted_cell_value)[start: end])
+            except Exception as e:
+                dtable_io_logger.error('re search: %s in: %s error: %s', re_number, converted_cell_value, e)
+                return
+        elif result_type == 'date':
+            return converted_cell_value
+        elif result_type == 'bool':
+            if isinstance(converted_cell_value, bool):
+                return converted_cell_value
+            return str(converted_cell_value).upper() == 'TRUE'
+        elif result_type == 'array':
+            transfered_type = transfered_column.get('type')
+            if not isinstance(converted_cell_value, list):
+                return
+            if transfered_type in [
+                ColumnTypes.TEXT,
+                ColumnTypes.LONG_TEXT,
+                ColumnTypes.IMAGE,
+                ColumnTypes.FILE,
+                ColumnTypes.RATE,
+                ColumnTypes.NUMBER,
+                ColumnTypes.COLLABORATOR,
+                ColumnTypes.DURATION,
+                ColumnTypes.EMAIL,
+                ColumnTypes.CHECKBOX,
+                ColumnTypes.AUTO_NUMBER,
+                ColumnTypes.CREATOR,
+                ColumnTypes.CTIME,
+                ColumnTypes.LAST_MODIFIER,
+                ColumnTypes.MTIME,
+                ColumnTypes.URL,
+                ColumnTypes.GEOLOCATION,
+                ColumnTypes.SINGLE_SELECT
+            ]:
+                if converted_cell_value:
+                    return converted_cell_value[0]
+            elif transfered_type == ColumnTypes.MULTIPLE_SELECT:
+                if converted_cell_value:
+                    return [converted_cell_value[0]]
+            elif transfered_type == ColumnTypes.DATE:
+                if converted_cell_value:
+                    try:
+                        value = datetime.datetime.fromisoformat(converted_cell_value[0])
+                    except:
+                        pass
+                    else:
+                        data_format = transfered_column.get('data', {}).get('format')
+                        if data_format == 'YYYY-MM-DD':
+                            return value.strftime('%Y-%m-%d')
+                        elif data_format == 'YYYY-MM-DD HH:mm':
+                            return value.strftime('%Y-%m-%d %H:%M')
+                        else:
+                            return value.strftime('%Y-%m-%d')
+    return

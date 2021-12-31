@@ -7,12 +7,12 @@ import jwt
 import requests
 
 from dtable_events.db import init_db_session_class
-from dtable_events.dtable_io.utils import setup_logger
+from dtable_events.dtable_io.utils import get_converted_cell_value
 from dtable_events.dtable_io.task_manager import task_manager
+from dtable_events.utils import uuid_str_to_32_chars
 from dtable_events.utils.constants import ColumnTypes
+from dtable_events.dtable_io import dtable_io_logger
 
-
-dtable_io_logger = setup_logger('dtable_events_io.log')
 
 DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
 DTABLE_PRIVATE_KEY = task_manager.conf['dtable_private_key']
@@ -63,7 +63,8 @@ def convert_db_rows(metadata, results):
                         else:
                             value = date_value.strftime('%Y-%m-%d %H:%M')
                     except Exception as e:
-                        dtable_io_logger.error(e)
+                        pass
+                        # dtable_io_logger.error(e)
                     item[column_name] = value
                 else:
                     item[column_name] = value
@@ -190,198 +191,20 @@ def generate_synced_columns(src_columns, dst_columns=None):
     if not dst_columns:
         return None, transfered_columns, None
     to_be_updated_columns, to_be_appended_columns = [], []
-    dst_column_names = [col.get('name') for col in dst_columns]
+    dst_column_name_dict = {col.get('name'): True for col in dst_columns}
+    dst_column_key_dict = {col.get('key'): col for col in dst_columns}
+
     for col in transfered_columns:
-        exists = False
-        for dst_col in dst_columns:
-            if dst_col.get('key') != col.get('key'):
-                continue
-            exists = True
+        dst_col = dst_column_key_dict.get(col.get('key'))
+        if dst_col:
             dst_col['type'] = col.get('type')
             dst_col['data'] = col.get('data')
             to_be_updated_columns.append(dst_col)
-            break
-        if not exists:
-            if col.get('name') in dst_column_names:
+        else:
+            if dst_column_name_dict.get(col.get('name')):
                 return None, None, 'Column %s exists' % (col.get('name'),)
             to_be_appended_columns.append(col)
     return to_be_updated_columns, to_be_appended_columns, None
-
-
-def generate_single_row(converted_row, src_row, src_columns, transfered_columns_dict, dst_row=None):
-    """
-    generate new single row according to src column type
-
-    :param converted_row: {'_id': '', 'column_name_1': '', 'col_name_2'; ''} from dtable-db
-    :param src_columns: [{'key': 'column_key_1', 'name': 'column_name_1'}]
-    :param transfered_columns_dict: {'col_key_1': {'key': 'column_key_1', 'name': 'column_name_1'}}
-    :param dst_row: {'_id': '', 'column_key_1': '', 'col_key_2': ''}
-    """
-    dst_row = deepcopy(dst_row) if dst_row else {'_id': converted_row.get('_id')}
-    for col in src_columns:
-        col_key = col.get('key')
-        col_name = col.get('name')
-        col_type = col.get('type')
-
-        if not converted_row.get(col_name):
-            dst_row.pop(col_key, None)
-            continue
-        converted_cell_value = converted_row[col_name]
-        transfered_column = transfered_columns_dict.get(col_key)
-
-        if col_type in [
-            ColumnTypes.TEXT,
-            ColumnTypes.LONG_TEXT,
-            ColumnTypes.IMAGE,
-            ColumnTypes.FILE,
-            ColumnTypes.RATE,
-            ColumnTypes.NUMBER,
-            ColumnTypes.COLLABORATOR,
-            ColumnTypes.DURATION,
-            ColumnTypes.EMAIL,
-            ColumnTypes.DATE,
-            ColumnTypes.CHECKBOX,
-            ColumnTypes.AUTO_NUMBER,
-            ColumnTypes.CREATOR,
-            ColumnTypes.CTIME,
-            ColumnTypes.LAST_MODIFIER,
-            ColumnTypes.MTIME,
-            ColumnTypes.URL,
-            ColumnTypes.GEOLOCATION
-        ]:
-            dst_row[col_key] = deepcopy(src_row.get(col_key))
-
-        elif col_type == ColumnTypes.SINGLE_SELECT:
-            if not isinstance(converted_cell_value, str):
-                continue
-            options = col.get('data', {}).get('options', [])
-            single_value = None
-            for option in options:
-                if option.get('name') == converted_cell_value:
-                    single_value = option.get('id')
-                    break
-            if single_value:
-                dst_row[col_key] = single_value
-
-        elif col_type == ColumnTypes.MULTIPLE_SELECT:
-            if not isinstance(converted_cell_value, list):
-                continue
-            options = col.get('data', {}).get('options', [])
-            multi_value = []
-            for option in options:
-                if option.get('name') in converted_cell_value:
-                    multi_value.append(option.get('id'))
-            if multi_value:
-                dst_row[col_key] = multi_value
-
-        elif col_type == ColumnTypes.LINK:
-            if not isinstance(converted_cell_value, list):
-                continue
-            dst_row[col_key] = ', '.join([str(v.get('display_value', '')) for v in converted_cell_value])
-
-        elif col_type == ColumnTypes.FORMULA:
-            result_type = col.get('data', {}).get('result_type')
-            if result_type == 'number':
-                try:
-                    re_number = r'(\-|\+)?\d+(\.\d+)?'
-                    match_obj = re.search(re_number, str(converted_cell_value))
-                    if not match_obj:
-                        continue
-                    start, end = match_obj.span()
-                    dst_row[col_key] = float(str(converted_cell_value)[start: end])
-                except Exception as e:
-                    dtable_io_logger.error('re search: %s in: %s error: %s', re_number, converted_cell_value, e)
-            elif result_type == 'date':
-                dst_row[col_key] = converted_cell_value
-            elif result_type == 'bool':
-                if isinstance(converted_cell_value, bool):
-                    dst_row[col_key] = converted_cell_value
-                    continue
-                dst_row[col_key] = str(converted_cell_value).upper() == 'TRUE'
-            elif result_type == 'string':
-                options = col.get('data', {}).get('options')
-                if options and isinstance(options, list):
-                    options_dict = {option.get('id'): option.get('name', '') for option in options}
-                    if isinstance(converted_cell_value, list):
-                        values = [options_dict.get(item, item) for item in converted_cell_value]
-                        dst_row[col_key] = ', '.join(values)
-                    else:
-                        dst_row[col_key] = options_dict.get(converted_cell_value, converted_cell_value)
-                else:
-                    if isinstance(converted_cell_value, list):
-                        dst_row[col_key] = ', '.join(str(v) for v in converted_cell_value)
-                    else:
-                        dst_row[col_key] = converted_cell_value
-            else:
-                if isinstance(converted_cell_value, list):
-                    dst_row[col_key] = ', '.join(str(v) for v in converted_cell_value)
-                else:
-                    dst_row[col_key] = converted_cell_value
-
-        elif col_type == ColumnTypes.LINK_FORMULA:
-            result_type = col.get('data', {}).get('result_type')
-            if result_type == 'number':
-                try:
-                    re_number = r'(\-|\+)?\d+(\.\d+)?'
-                    match_obj = re.search(re_number, str(converted_cell_value))
-                    if not match_obj:
-                        continue
-                    start, end = match_obj.span()
-                    dst_row[col_key] = int(str(converted_cell_value)[start: end])
-                except Exception as e:
-                    dtable_io_logger.error('re search: %s in: %s error: %s', re_number, converted_cell_value, e)
-            elif result_type == 'date':
-                dst_row[col_key] = converted_cell_value
-            elif result_type == 'bool':
-                if isinstance(converted_cell_value, bool):
-                    dst_row[col_key] = converted_cell_value
-                    continue
-                dst_row[col_key] = str(converted_cell_value).upper() == 'TRUE'
-            elif result_type == 'array':
-                transfered_type = transfered_column.get('type')
-                if not isinstance(converted_cell_value, list):
-                    continue
-                if transfered_type in [
-                    ColumnTypes.TEXT,
-                    ColumnTypes.LONG_TEXT,
-                    ColumnTypes.IMAGE,
-                    ColumnTypes.FILE,
-                    ColumnTypes.RATE,
-                    ColumnTypes.NUMBER,
-                    ColumnTypes.COLLABORATOR,
-                    ColumnTypes.DURATION,
-                    ColumnTypes.EMAIL,
-                    ColumnTypes.CHECKBOX,
-                    ColumnTypes.AUTO_NUMBER,
-                    ColumnTypes.CREATOR,
-                    ColumnTypes.CTIME,
-                    ColumnTypes.LAST_MODIFIER,
-                    ColumnTypes.MTIME,
-                    ColumnTypes.URL,
-                    ColumnTypes.GEOLOCATION,
-                    ColumnTypes.SINGLE_SELECT
-                ]:
-                    if converted_cell_value:
-                        dst_row[col_key] = converted_cell_value[0]
-                elif transfered_type == ColumnTypes.MULTIPLE_SELECT:
-                    if converted_cell_value:
-                        dst_row[col_key] = [converted_cell_value[0]]
-                elif transfered_type == ColumnTypes.DATE:
-                    if converted_cell_value:
-                        try:
-                            value = datetime.fromisoformat(converted_cell_value[0])
-                        except:
-                            pass
-                        else:
-                            data_format = transfered_column.get('data', {}).get('format')
-                            if data_format == 'YYYY-MM-DD':
-                                dst_row[col_key] = value.strftime('%Y-%m-%d')
-                            elif data_format == 'YYYY-MM-DD HH:mm':
-                                dst_row[col_key] = value.strftime('%Y-%m-%d %H:%M')
-                            else:
-                                dst_row[col_key] = value.strftime('%Y-%m-%d')
-
-    return dst_row
 
 
 def generate_synced_rows(converted_rows, src_rows, src_columns, synced_columns, dst_rows=None):
@@ -389,32 +212,79 @@ def generate_synced_rows(converted_rows, src_rows, src_columns, synced_columns, 
     generate synced rows divided into `rows to be updated`, `rows to be appended` and `rows to be deleted`
     return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
     """
+
     converted_rows_dict = {row.get('_id'): row for row in converted_rows}
     src_rows_dict = {row.get('_id'): row for row in src_rows}
     synced_columns_dict = {col.get('key'): col for col in synced_columns}
-    to_be_updated_rows, to_be_appended_rows, transfered_row_ids = [], [], set()
+
+    to_be_updated_rows, to_be_appended_rows, transfered_row_ids = [], [], {}
     if not dst_rows:
         dst_rows = []
     to_be_deleted_row_ids = []
     for row in dst_rows:
         row_id = row.get('_id')
-        if row_id not in converted_rows_dict:
-            to_be_deleted_row_ids.append(row_id)
-            continue
         src_row = src_rows_dict.get(row_id)
         converted_row = converted_rows_dict.get(row_id)
-        to_be_updated_rows.append(generate_single_row(converted_row, src_row, src_columns, synced_columns_dict, dst_row=row))
-        transfered_row_ids.add(row_id)
+        if not converted_row or not src_row:
+            to_be_deleted_row_ids.append(row_id)
+            continue
+
+        update_row = generate_single_row(converted_row, src_row, src_columns, synced_columns_dict, dst_row=row)
+        if update_row:
+            update_row['_id'] = row_id
+            to_be_updated_rows.append(update_row)
+        transfered_row_ids[row_id] = True
 
     for converted_row in converted_rows:
         row_id = converted_row.get('_id')
-        if row_id in transfered_row_ids:
-            continue
         src_row = src_rows_dict.get(row_id)
-        to_be_appended_rows.append(generate_single_row(converted_row, src_row, src_columns, synced_columns_dict, dst_row=None))
-        transfered_row_ids.add(row_id)
-
+        if not src_row or transfered_row_ids.get(row_id):
+            continue
+        append_row = generate_single_row(converted_row, src_row, src_columns, synced_columns_dict, dst_row=None)
+        if append_row:
+            append_row['_id'] = row_id
+            to_be_appended_rows.append(append_row)
+        transfered_row_ids[row_id] = True
     return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
+
+
+def generate_single_row(converted_row, src_row, src_columns, transfered_columns_dict, dst_row=None):
+    """
+        generate new single row according to src column type
+        :param converted_row: {'_id': '', 'column_name_1': '', 'col_name_2'; ''} from dtable-db
+        :param src_columns: [{'key': 'column_key_1', 'name': 'column_name_1'}]
+        :param transfered_columns_dict: {'col_key_1': {'key': 'column_key_1', 'name': 'column_name_1'}}
+        :param dst_row: {'_id': '', 'column_key_1': '', 'col_key_2': ''}
+    """
+    dataset_row = {}
+    op_type = 'update'
+    if not dst_row:
+        op_type = 'append'
+    dst_row = deepcopy(dst_row) if dst_row else {'_id': src_row.get('_id')}
+    for col in src_columns:
+        col_key = col.get('key')
+        col_name = col.get('name')
+        col_type = col.get('type')
+
+        converted_cell_value = converted_row.get(col_name)
+        if not converted_cell_value:
+            continue
+        transfered_column = transfered_columns_dict.get(col_key)
+
+        if op_type == 'update':
+            src_cell_value = src_row.get(col_key)
+            dst_cell_value = dst_row.get(col_key)
+            if col_type == ColumnTypes.MULTIPLE_SELECT:
+                src_cell_value = sorted(src_cell_value)
+                dst_cell_value = sorted(dst_row.get(col_key, []))
+
+            if src_cell_value == dst_cell_value:
+                continue
+
+        converted_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
+        if converted_value:
+            dataset_row[col_key] = converted_value
+    return dataset_row
 
 
 def import_or_sync(import_sync_context):
@@ -450,6 +320,7 @@ def import_or_sync(import_sync_context):
     ### get src view-rows
     result_rows = []
     start, limit = 0, 10000
+
     while True:
         url = dtable_server_url.rstrip('/') + '/api/v1/internal/dtables/' + str(src_dtable_uuid) + '/view-rows/?from=dtable_events'
         query_params = {
@@ -474,6 +345,7 @@ def import_or_sync(import_sync_context):
         start += limit
 
     final_columns = (to_be_updated_columns or []) + (to_be_appended_columns or [])
+
     to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids = generate_synced_rows(result_rows, src_rows, src_columns, final_columns, dst_rows=dst_rows)
 
     # sync table
@@ -625,6 +497,37 @@ def sync_common_dataset(context, config):
     dst_table_id = context['dst_table_id']
 
     dataset_id = context.get('dataset_id')
+    src_version = context.get('src_version')
+    dst_version = context.get('dst_version')
+
+    # get database version
+    try:
+        db_session = init_db_session_class(config)()
+    except Exception as e:
+        db_session = None
+        dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
+        return
+    sql = '''
+                SELECT id FROM dtable_common_dataset_sync 
+                WHERE dst_dtable_uuid=:dst_dtable_uuid AND dataset_id=:dataset_id AND dst_table_id=:dst_table_id 
+                AND src_version=:src_version AND dst_version=:dst_version
+            '''
+    try:
+        sync_dataset = db_session.execute(sql, {
+            'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
+            'dataset_id': dataset_id,
+            'dst_table_id': dst_table_id,
+            'src_version': src_version,
+            'dst_version': dst_version,
+        })
+    except Exception as e:
+        dtable_io_logger.error('get src version error: %s', e)
+        return
+    finally:
+        db_session.close()
+
+    if list(sync_dataset):
+        return
 
     # request dst_dtable
     url = dtable_server_url.strip('/') + '/dtables/' + str(dst_dtable_uuid) + '?from=dtable_events'
@@ -633,7 +536,7 @@ def sync_common_dataset(context, config):
         dst_dtable_json = resp.json()
     except Exception as e:
         dtable_io_logger.error('request dst dtable: %s error: %s', dst_dtable_uuid, e)
-        return None, 'request dst dtable: %s error: %s' % (dst_dtable_uuid, e)
+        return
 
     # check dst_table
     dst_table = None
@@ -642,7 +545,8 @@ def sync_common_dataset(context, config):
             dst_table = table
             break
     if not dst_table:
-        return None, 'Destination table: %s not found.' % dst_table_id
+        dtable_io_logger.error('Destination table: %s not found.' % dst_table_id)
+        return
     dst_columns = dst_table.get('columns')
     dst_rows = dst_table.get('rows')
 
@@ -669,23 +573,34 @@ def sync_common_dataset(context, config):
         dtable_io_logger.error('sync common dataset error: %s', e)
         return
 
+    # get base's metadata
+    url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(src_dtable_uuid) + '/metadata/?from=dtable_events'
+    dst_url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/metadata/?from=dtable_events'
     try:
-        db_session = init_db_session_class(config)()
+        dtable_metadata = requests.get(url, headers=src_headers)
+        dst_dtable_metadata = requests.get(dst_url, headers=dst_headers)
+        src_metadata = dtable_metadata.json()
+        dst_metadata = dst_dtable_metadata.json()
     except Exception as e:
-        db_session = None
-        dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
-        return
+        dtable_io_logger.error('get metadata error:  %s', e)
+        return None, 'get metadata error: %s' % (e,)
+
+    last_src_version = src_metadata.get('metadata', {}).get('version')
+    last_dst_version = dst_metadata.get('metadata', {}).get('version')
+
     sql = '''
         UPDATE dtable_common_dataset_sync SET
-        last_sync_time=:last_sync_time
+        last_sync_time=:last_sync_time, src_version=:last_src_version, dst_version=:last_dst_version
         WHERE dataset_id=:dataset_id AND dst_dtable_uuid=:dst_dtable_uuid AND dst_table_id=:dst_table_id
     '''
     try:
         db_session.execute(sql, {
-            'dst_dtable_uuid': dst_dtable_uuid.replace('-', ''),
+            'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
             'dst_table_id': dst_table_id,
             'last_sync_time': datetime.now(),
-            'dataset_id': dataset_id
+            'dataset_id': dataset_id,
+            'last_src_version': last_src_version,
+            'last_dst_version': last_dst_version
         })
         db_session.commit()
     except Exception as e:
@@ -711,6 +626,8 @@ def import_common_dataset(context, config):
 
     dataset_id = context.get('dataset_id')
     creator = context.get('creator')
+    src_version = context.get('src_version')
+    dst_version = context.get('dst_version')
 
     try:
         dst_table_id, error_msg = import_or_sync({
@@ -740,17 +657,21 @@ def import_common_dataset(context, config):
         dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
         return
     sql = '''
-        INSERT INTO dtable_common_dataset_sync (`dst_dtable_uuid`, `dst_table_id`, `created_at`, `creator`, `last_sync_time`, `dataset_id`)
-        VALUES (:dst_dtable_uuid, :dst_table_id, :created_at, :creator, :last_sync_time, :dataset_id)
+        INSERT INTO dtable_common_dataset_sync (`dst_dtable_uuid`, `dst_table_id`, `created_at`, `creator`, `last_sync_time`, `dataset_id`, `src_version`, `dst_version`)
+        VALUES (:dst_dtable_uuid, :dst_table_id, :created_at, :creator, :last_sync_time, :dataset_id, :src_version, :dst_version)
     '''
+    if not dst_version:
+        dst_version = 1
     try:
         db_session.execute(sql, {
-            'dst_dtable_uuid': dst_dtable_uuid.replace('-', ''),
+            'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
             'dst_table_id': dst_table_id,
             'created_at': datetime.now(),
             'creator': creator,
             'last_sync_time': datetime.now(),
-            'dataset_id': dataset_id
+            'dataset_id': dataset_id,
+            'src_version': src_version,
+            'dst_version': dst_version
         })
         db_session.commit()
     except Exception as e:
