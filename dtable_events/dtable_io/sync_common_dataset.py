@@ -282,7 +282,7 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
                 continue
 
         converted_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
-        if converted_value:
+        if converted_value is not None:
             dataset_row[col_key] = converted_value
     return dataset_row
 
@@ -626,8 +626,6 @@ def import_common_dataset(context, config):
 
     dataset_id = context.get('dataset_id')
     creator = context.get('creator')
-    src_version = context.get('src_version')
-    dst_version = context.get('dst_version')
 
     try:
         dst_table_id, error_msg = import_or_sync({
@@ -656,12 +654,29 @@ def import_common_dataset(context, config):
         db_session = None
         dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
         return
+
+    # get base's metadata
+    url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(
+        src_dtable_uuid) + '/metadata/?from=dtable_events'
+    dst_url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(
+        dst_dtable_uuid) + '/metadata/?from=dtable_events'
+    try:
+        dtable_metadata = requests.get(url, headers=src_headers)
+        dst_dtable_metadata = requests.get(dst_url, headers=dst_headers)
+        src_metadata = dtable_metadata.json()
+        dst_metadata = dst_dtable_metadata.json()
+    except Exception as e:
+        dtable_io_logger.error('get metadata error:  %s', e)
+        return None, 'get metadata error: %s' % (e,)
+
+    last_src_version = src_metadata.get('metadata', {}).get('version')
+    last_dst_version = dst_metadata.get('metadata', {}).get('version')
+
     sql = '''
         INSERT INTO dtable_common_dataset_sync (`dst_dtable_uuid`, `dst_table_id`, `created_at`, `creator`, `last_sync_time`, `dataset_id`, `src_version`, `dst_version`)
         VALUES (:dst_dtable_uuid, :dst_table_id, :created_at, :creator, :last_sync_time, :dataset_id, :src_version, :dst_version)
     '''
-    if not dst_version:
-        dst_version = 1
+
     try:
         db_session.execute(sql, {
             'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
@@ -670,8 +685,8 @@ def import_common_dataset(context, config):
             'creator': creator,
             'last_sync_time': datetime.now(),
             'dataset_id': dataset_id,
-            'src_version': src_version,
-            'dst_version': dst_version
+            'src_version': last_src_version,
+            'dst_version': last_dst_version
         })
         db_session.commit()
     except Exception as e:

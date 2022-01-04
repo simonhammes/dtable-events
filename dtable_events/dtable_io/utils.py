@@ -748,8 +748,8 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
     elif col_type == ColumnTypes.FORMULA:
         result_type = col.get('data', {}).get('result_type')
         if result_type == 'number':
+            re_number = r'(\-|\+)?\d+(\.\d+)?'
             try:
-                re_number = r'(\-|\+)?\d+(\.\d+)?'
                 match_obj = re.search(re_number, str(converted_cell_value))
                 if not match_obj:
                     return
@@ -787,8 +787,8 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
     elif col_type == ColumnTypes.LINK_FORMULA:
         result_type = col.get('data', {}).get('result_type')
         if result_type == 'number':
+            re_number = r'(\-|\+)?\d+(\.\d+)?'
             try:
-                re_number = r'(\-|\+)?\d+(\.\d+)?'
                 match_obj = re.search(re_number, str(converted_cell_value))
                 if not match_obj:
                     return
