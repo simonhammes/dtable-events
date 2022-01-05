@@ -267,16 +267,15 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
         col_type = col.get('type')
 
         converted_cell_value = converted_row.get(col_name)
-        if not converted_cell_value:
-            continue
         transfered_column = transfered_columns_dict.get(col_key)
 
         if op_type == 'update':
-            src_cell_value = src_row.get(col_key)
-            dst_cell_value = dst_row.get(col_key)
             if col_type == ColumnTypes.MULTIPLE_SELECT:
-                src_cell_value = sorted(src_cell_value)
+                src_cell_value = sorted(src_row.get(col_key, []))
                 dst_cell_value = sorted(dst_row.get(col_key, []))
+            else:
+                src_cell_value = src_row.get(col_key)
+                dst_cell_value = dst_row.get(col_key)
 
             if src_cell_value == dst_cell_value:
                 continue
