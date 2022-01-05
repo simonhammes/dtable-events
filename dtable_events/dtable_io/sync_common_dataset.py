@@ -498,7 +498,6 @@ def sync_common_dataset(context, config):
 
     dataset_id = context.get('dataset_id')
     src_version = context.get('src_version')
-    dst_version = context.get('dst_version')
 
     # get database version
     try:
@@ -510,15 +509,14 @@ def sync_common_dataset(context, config):
     sql = '''
                 SELECT id FROM dtable_common_dataset_sync 
                 WHERE dst_dtable_uuid=:dst_dtable_uuid AND dataset_id=:dataset_id AND dst_table_id=:dst_table_id 
-                AND src_version=:src_version AND dst_version=:dst_version
+                AND src_version=:src_version
             '''
     try:
         sync_dataset = db_session.execute(sql, {
             'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
             'dataset_id': dataset_id,
             'dst_table_id': dst_table_id,
-            'src_version': src_version,
-            'dst_version': dst_version,
+            'src_version': src_version
         })
     except Exception as e:
         dtable_io_logger.error('get src version error: %s', e)
@@ -574,23 +572,19 @@ def sync_common_dataset(context, config):
         return
 
     # get base's metadata
-    url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(src_dtable_uuid) + '/metadata/?from=dtable_events'
-    dst_url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/metadata/?from=dtable_events'
+    src_url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(src_dtable_uuid) + '/metadata/?from=dtable_events'
     try:
-        dtable_metadata = requests.get(url, headers=src_headers)
-        dst_dtable_metadata = requests.get(dst_url, headers=dst_headers)
+        dtable_metadata = requests.get(src_url, headers=src_headers)
         src_metadata = dtable_metadata.json()
-        dst_metadata = dst_dtable_metadata.json()
     except Exception as e:
         dtable_io_logger.error('get metadata error:  %s', e)
         return None, 'get metadata error: %s' % (e,)
 
     last_src_version = src_metadata.get('metadata', {}).get('version')
-    last_dst_version = dst_metadata.get('metadata', {}).get('version')
 
     sql = '''
         UPDATE dtable_common_dataset_sync SET
-        last_sync_time=:last_sync_time, src_version=:last_src_version, dst_version=:last_dst_version
+        last_sync_time=:last_sync_time, src_version=:last_src_version
         WHERE dataset_id=:dataset_id AND dst_dtable_uuid=:dst_dtable_uuid AND dst_table_id=:dst_table_id
     '''
     try:
@@ -599,8 +593,7 @@ def sync_common_dataset(context, config):
             'dst_table_id': dst_table_id,
             'last_sync_time': datetime.now(),
             'dataset_id': dataset_id,
-            'last_src_version': last_src_version,
-            'last_dst_version': last_dst_version
+            'last_src_version': last_src_version
         })
         db_session.commit()
     except Exception as e:
@@ -656,25 +649,19 @@ def import_common_dataset(context, config):
         return
 
     # get base's metadata
-    url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(
-        src_dtable_uuid) + '/metadata/?from=dtable_events'
-    dst_url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(
-        dst_dtable_uuid) + '/metadata/?from=dtable_events'
+    url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(src_dtable_uuid) + '/metadata/?from=dtable_events'
     try:
         dtable_metadata = requests.get(url, headers=src_headers)
-        dst_dtable_metadata = requests.get(dst_url, headers=dst_headers)
         src_metadata = dtable_metadata.json()
-        dst_metadata = dst_dtable_metadata.json()
     except Exception as e:
         dtable_io_logger.error('get metadata error:  %s', e)
         return None, 'get metadata error: %s' % (e,)
 
     last_src_version = src_metadata.get('metadata', {}).get('version')
-    last_dst_version = dst_metadata.get('metadata', {}).get('version')
 
     sql = '''
-        INSERT INTO dtable_common_dataset_sync (`dst_dtable_uuid`, `dst_table_id`, `created_at`, `creator`, `last_sync_time`, `dataset_id`, `src_version`, `dst_version`)
-        VALUES (:dst_dtable_uuid, :dst_table_id, :created_at, :creator, :last_sync_time, :dataset_id, :src_version, :dst_version)
+        INSERT INTO dtable_common_dataset_sync (`dst_dtable_uuid`, `dst_table_id`, `created_at`, `creator`, `last_sync_time`, `dataset_id`, `src_version`)
+        VALUES (:dst_dtable_uuid, :dst_table_id, :created_at, :creator, :last_sync_time, :dataset_id, :src_version)
     '''
 
     try:
@@ -685,8 +672,7 @@ def import_common_dataset(context, config):
             'creator': creator,
             'last_sync_time': datetime.now(),
             'dataset_id': dataset_id,
-            'src_version': last_src_version,
-            'dst_version': last_dst_version
+            'src_version': last_src_version
         })
         db_session.commit()
     except Exception as e:
