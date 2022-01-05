@@ -168,6 +168,12 @@ def uuid_str_to_36_chars(dtable_uuid):
     else:
         return dtable_uuid
 
+def uuid_str_to_32_chars(dtable_uuid):
+    if len(dtable_uuid) == 36:
+        return uuid.UUID(dtable_uuid).hex
+    else:
+        return dtable_uuid
+
 def is_valid_email(email):
     return True if EMAIL_RE.match(email) is not None else False
 
