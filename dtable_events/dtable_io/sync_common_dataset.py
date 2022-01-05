@@ -271,8 +271,14 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
 
         if op_type == 'update':
             if col_type == ColumnTypes.MULTIPLE_SELECT:
-                src_cell_value = sorted(src_row.get(col_key, []))
-                dst_cell_value = sorted(dst_row.get(col_key, []))
+                src_cell_value = src_row.get(col_key)
+                dst_cell_value = dst_row.get(col_key)
+                if not src_cell_value:
+                    src_cell_value = []
+                if not dst_cell_value:
+                    dst_cell_value = []
+                src_cell_value = sorted(src_cell_value)
+                dst_cell_value = sorted(dst_cell_value)
             else:
                 src_cell_value = src_row.get(col_key)
                 dst_cell_value = dst_row.get(col_key)
@@ -280,9 +286,8 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
             if src_cell_value == dst_cell_value:
                 continue
 
-        converted_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
-        if converted_value is not None:
-            dataset_row[col_key] = converted_value
+        dataset_row[col_key] = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
+
     return dataset_row
 
 
