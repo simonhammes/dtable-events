@@ -245,6 +245,7 @@ def generate_synced_rows(converted_rows, src_rows, src_columns, synced_columns, 
             append_row['_id'] = row_id
             to_be_appended_rows.append(append_row)
         transfered_row_ids[row_id] = True
+
     return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
 
 
@@ -279,15 +280,18 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
                     dst_cell_value = []
                 src_cell_value = sorted(src_cell_value)
                 dst_cell_value = sorted(dst_cell_value)
+            elif col_type == ColumnTypes.SINGLE_SELECT:
+                src_cell_value = src_row.get(col_key, '')
+                dst_cell_value = dst_row.get(col_key, '')
             else:
-                src_cell_value = src_row.get(col_key)
+                src_cell_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
                 dst_cell_value = dst_row.get(col_key)
 
             if src_cell_value == dst_cell_value:
                 continue
-
-        dataset_row[col_key] = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
-
+            dataset_row[col_key] = src_cell_value
+        else:
+            dataset_row[col_key] = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
     return dataset_row
 
 
