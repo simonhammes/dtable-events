@@ -287,7 +287,7 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
                 src_cell_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
                 dst_cell_value = dst_row.get(col_key)
 
-            if src_cell_value == dst_cell_value:
+            if src_cell_value == dst_cell_value and col_type != ColumnTypes.LONG_TEXT:
                 continue
             dataset_row[col_key] = src_cell_value
         else:

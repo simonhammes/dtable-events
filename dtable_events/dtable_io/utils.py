@@ -745,9 +745,7 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
         return ', '.join([str(v.get('display_value', '')) for v in converted_cell_value])
 
     elif col_type == ColumnTypes.FORMULA:
-        print('mmmmm')
         result_type = col.get('data', {}).get('result_type')
-        print(result_type)
         if result_type == 'number':
             re_number = r'(\-|\+)?\d+(\.\d+)?'
             try:
