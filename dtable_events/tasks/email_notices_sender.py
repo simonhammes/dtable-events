@@ -24,7 +24,7 @@ class EmailNoticesSender(object):
     def __init__(self, config):
         self._enabled = True
         self._logfile = None
-        self._interval = 30 * 60  # 30min
+        self._interval = 60 * 60  # 60min
         self._prepare_logfile()
         self._parse_config(config)
 
@@ -47,8 +47,8 @@ class EmailNoticesSender(object):
         enabled = parse_bool(enabled)
         self._enabled = enabled
         # interval
-        interval = get_opt_from_conf_or_env(config, section_name, key_interval, default=30 * 60)
-        interval = parse_interval(interval, 30 * 60)
+        interval = get_opt_from_conf_or_env(config, section_name, key_interval, default=60 * 60)
+        interval = parse_interval(interval, 60 * 60)
         self._interval = interval
 
     def start(self):
