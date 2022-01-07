@@ -497,3 +497,45 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
             dtable_io_logger.error('execute printToPDF error: {}'.format(e))
 
         driver.quit()
+
+
+def export_view_to_execl(context, config):
+    from dtable_events.dtable_io.excel import parse_grouped_rows, write_xls_with_type
+
+    dtable_uuid = context['dtable_uuid']
+    cols_without_hidden = context['cols_without_hidden']
+    name = context['name']
+    table_name = context['table_name']
+    view_name = context['view_name']
+    head_list = context['head_list']
+    view_rows = context['view_rows']
+    summary_col_info = context['summary_col_info']
+
+    target_dir = '/tmp/dtable-io/export-view-to-excel/' + dtable_uuid
+    if not os.path.isdir(target_dir):
+        os.makedirs(target_dir)
+
+    if view_rows and ('rows' in view_rows[0] or 'subgroups' in view_rows[0]):
+        first_col_name = head_list[0][0]
+        result_rows, grouped_row_num_map = parse_grouped_rows(view_rows, first_col_name, summary_col_info)
+    else:
+        result_rows, grouped_row_num_map = view_rows, {}
+
+    data_list = []
+    for row_from_server in result_rows:
+        row = []
+        for col in cols_without_hidden:
+            cell_data = row_from_server.get(col['name'], '')
+            row.append(cell_data)
+        data_list.append(row)
+
+    excel_name = name + '_' + table_name + ('_' + view_name if view_name else '') + '.xlsx'
+    try:
+        wb = write_xls_with_type(table_name + ('_' + view_name if view_name else ''), head_list, data_list,
+                                 grouped_row_num_map, config)
+    except Exception as e:
+        dtable_io_logger.error('head_list = {}\n{}'.format(head_list, e))
+        return
+    target_path = os.path.join(target_dir, excel_name)
+    wb.save(target_path)
+
