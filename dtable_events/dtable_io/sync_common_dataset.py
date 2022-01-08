@@ -20,6 +20,8 @@ DTABLE_PROXY_SERVER_URL = task_manager.conf['dtable_proxy_server_url']
 ENABLE_DTABLE_SERVER_CLUSTER = task_manager.conf['dtable_proxy_server_url']
 dtable_server_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
 
+SRC_ROWS_LIMIT = 50000
+
 
 def convert_db_rows(metadata, results):
     """ Convert dtable-db rows data to readable rows data
@@ -351,6 +353,8 @@ def import_or_sync(import_sync_context):
         if not temp_result_rows or len(temp_result_rows) < limit:
             break
         start += limit
+        if start == SRC_ROWS_LIMIT:
+            break
 
     final_columns = (to_be_updated_columns or []) + (to_be_appended_columns or [])
 
@@ -560,7 +564,7 @@ def sync_common_dataset(context, config):
         dst_table_id, error_msg = import_or_sync({
             'dst_dtable_uuid': dst_dtable_uuid,
             'src_dtable_uuid': src_dtable_uuid,
-            'src_rows': src_table.get('rows', []),
+            'src_rows': src_table.get('rows', [])[0:SRC_ROWS_LIMIT],
             'src_columns': src_columns,
             'src_table_name': src_table.get('name'),
             'src_view_name': src_view.get('name'),
@@ -632,7 +636,7 @@ def import_common_dataset(context, config):
         dst_table_id, error_msg = import_or_sync({
             'dst_dtable_uuid': dst_dtable_uuid,
             'src_dtable_uuid': src_dtable_uuid,
-            'src_rows': src_table.get('rows', []),
+            'src_rows': src_table.get('rows', [])[0:SRC_ROWS_LIMIT],
             'src_columns': src_columns,
             'src_table_name': src_table.get('name'),
             'src_view_name': src_view.get('name'),
