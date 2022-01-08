@@ -668,8 +668,9 @@ def sync_common_data():
     return make_response(({'task_id': task_id}, 200))
 
 
-@app.route('/export-view-to-excel', methods=['POST'])
-def export_view_to_excel():
+
+@app.route('/convert-view-to-excel', methods=['GET'])
+def convert_view_to_excel():
     is_valid, error = check_auth_token(request)
     if not is_valid:
         return make_response((error, 403))
@@ -681,13 +682,16 @@ def export_view_to_excel():
                                     task_manager.threads_is_alive()))
         return make_response(('dtable io server busy.', 400))
 
-    try:
-        context = json.loads(request.data)
-    except:
-        return make_response(('sync common dataset context invalid.', 400))
+    dtable_uuid = request.args.get('dtable_uuid')
+    table_id = request.args.get('table_id')
+    view_id = request.args.get('view_id')
+    username = request.args.get('username')
+    id_in_org = request.args.get('id_in_org')
+    permission = request.args.get('permission')
+    name = request.args.get('name')
 
     try:
-        task_id = task_manager.add_export_view_to_execl_task(context)
+        task_id = task_manager.add_convert_view_to_execl_task(dtable_uuid, table_id, view_id, username, id_in_org, permission, name)
     except Exception as e:
         logger.error(e)
         return make_response((e, 500))

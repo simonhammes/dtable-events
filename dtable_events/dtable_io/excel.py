@@ -846,36 +846,6 @@ def gen_decimal_format(num):
     return '0.' + '0' * decimal_cnt
 
 
-def write_xls(sheet_name, head, data_list):
-    """write listed data into excel
-    """
-    from dtable_events.dtable_io import dtable_io_logger
-    try:
-        wb = openpyxl.Workbook()
-        ws = wb.active
-    except Exception as e:
-        dtable_io_logger.error(e)
-        return None
-
-    ws.title = sheet_name
-
-    row_num = 0
-
-    # write table head
-    for col_num in range(len(head)):
-        c = ws.cell(row = row_num + 1, column = col_num + 1)
-        c.value = head[col_num]
-
-    # write table data
-    for row in data_list:
-        row_num += 1
-        for col_num in range(len(row)):
-            c = ws.cell(row = row_num + 1, column = col_num + 1)
-            c.value = row[col_num]
-
-    return wb
-
-
 def _get_strtime_time(time_str):
     from dtable_events.dtable_io import dtable_io_logger
     time_str = time_str.strip()
