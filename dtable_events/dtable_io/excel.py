@@ -123,7 +123,8 @@ def parse_excel_rows(sheet_rows, columns, head_index, max_column):
                     row_data[column_name] = str(cell_value)
             except Exception as e:
                 dtable_io_logger.exception(e)
-        rows.append(row_data)
+        if row_data:
+            rows.append(row_data)
 
     return rows
 
@@ -401,7 +402,8 @@ def parse_append_excel_rows(sheet_rows, columns, column_lenght):
             except Exception as e:
                 dtable_io_logger.exception(e)
                 row_data[column_name] = None
-        rows.append(row_data)
+        if row_data:
+            rows.append(row_data)
     return rows
 
 
@@ -584,7 +586,8 @@ def parse_update_excel_rows(sheet_rows, columns, column_length):
             except Exception as e:
                 dtable_io_logger.exception(e)
                 row_data[column_name] = None
-        rows.append(row_data)
+        if row_data:
+            rows.append(row_data)
     return rows
 
 
@@ -659,7 +662,8 @@ def parse_update_csv_rows(csv_file, columns, max_column):
             except Exception as e:
                 dtable_io_logger.exception(e)
                 row_data[column_name] = None
-        rows.append(row_data)
+        if row_data:
+            rows.append(row_data)
     return rows, max_column, csv_row_num, csv_column_num
 
 
