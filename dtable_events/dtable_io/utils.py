@@ -965,3 +965,23 @@ def convert_db_rows(metadata, results):
         converted_results.append(item)
 
     return converted_results
+
+
+def get_nicknames_from_dtable(dtable_uuid, username, permission):
+    DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
+    url = task_manager.conf['dtable_web_service_url'].strip('/') + '/api/v2.1/dtables/%s/related-users/' % dtable_uuid
+
+    payload = {
+        'exp': int(time.time()) + 60,
+        'dtable_uuid': dtable_uuid,
+        'username': username,
+        'permission': permission,
+    }
+    access_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256')
+    headers = {'Authorization': 'Token ' + access_token}
+
+    res = requests.get(url, headers=headers)
+
+    if res.status_code != 200:
+        raise ConnectionError('failed to get related users %s %s' % (dtable_uuid, res.text))
+    return res.json().get('user_list')

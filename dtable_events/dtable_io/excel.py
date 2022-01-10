@@ -794,7 +794,7 @@ def parse_geolocation(cell_data):
         return str(cell_data)
 
 
-def parse_link_formula(cell_data, db_session):
+def parse_link_formula(cell_data, email2nickname):
     from dtable_events.dtable_io import dtable_io_logger
     try:
         # collaborator
@@ -803,7 +803,7 @@ def parse_link_formula(cell_data, db_session):
                 and VIRTUAL_ID_EMAIL_DOMAIN in cell_data[0]:
             nickname_list = []
             for user in cell_data:
-                nickname_list.append(get_nickname_by_username(user, db_session))
+                nickname_list.append(email2nickname.get(user, ''))
             value = ', '.join(nickname_list)
         # ctime, mtime
         elif isinstance(cell_data, str) \
@@ -872,7 +872,7 @@ def check_and_replace_sheet_name(sheet_name):
     return sheet_name
 
 
-def handle_row(row, row_num, head, ws, grouped_row_num_map, db_session):
+def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname):
     for col_num in range(len(row)):
         c = ws.cell(row = row_num + 1, column = col_num + 1)
         if row_num in grouped_row_num_map:
@@ -911,27 +911,26 @@ def handle_row(row, row_num, head, ws, grouped_row_num_map, db_session):
         elif head[col_num][1] == ColumnTypes.COLLABORATOR:
             nickname_list = []
             for user in row[col_num]:
-                nickname_list.append(get_nickname_by_username(user, db_session))
+                nickname_list.append(email2nickname.get(user, ''))
             c.value = ', '.join(nickname_list)
         elif head[col_num][1] == ColumnTypes.CREATOR:
-            c.value = get_nickname_by_username(cell_data2str(row[col_num]), db_session)
+            c.value = email2nickname.get(cell_data2str(row[col_num]), '')
         elif head[col_num][1] == ColumnTypes.LAST_MODIFIER:
-            c.value = get_nickname_by_username(cell_data2str(row[col_num]), db_session)
+            c.value = email2nickname.get(cell_data2str(row[col_num]), '')
         elif head[col_num][1] == ColumnTypes.LINK_FORMULA:
-            c.value = parse_link_formula(row[col_num], db_session)
+            c.value = parse_link_formula(row[col_num], email2nickname)
         elif head[col_num][1] == ColumnTypes.MULTIPLE_SELECT:
             c.value = parse_multiple_select_formula(row[col_num])
         else:
             c.value = cell_data2str(row[col_num])
 
 
-def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, config):
+def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2nickname):
     """ write listed data into excel
         head is a list of tuples,
         e.g. head = [(col_name, col_type, col_date), (...), ...]
     """
     from dtable_events.dtable_io import dtable_io_logger
-    from dtable_events.db import init_db_session_class
     try:
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -952,46 +951,12 @@ def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, config
             dtable_io_logger.error('Error column in exporting excel: {}'.format(e))
             c.value = EXPORT2EXCEL_DEFAULT_STRING
 
-    try:
-        db_session = init_db_session_class(config)()
-    except Exception as e:
-        dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
-        return
-
     # write table data
     for row in data_list:
         row_num += 1
         try:
-            handle_row(row, row_num, head, ws, grouped_row_num_map, db_session)
+            handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname)
         except Exception as e:
             dtable_io_logger.error('Error row in exporting excel: {}'.format(e))
             continue
-    db_session.close()
     return wb
-
-
-def get_nickname_by_username(username, db_session):
-    """
-    fetch nickname by username from db / cache
-    return: nickname
-    """
-
-    from dtable_events.dtable_io import dtable_io_logger
-    from dtable_events.cache import redis_cache as cache
-    if not username:
-        return ''
-    cache_timeout = 60*60*24
-    key_format = 'user:nickname:%s'
-    nickname = cache.get(key_format % username)
-    if nickname is not None:
-        cache.set(key_format % username, nickname, timeout=cache_timeout)
-        return nickname
-
-    sql = "SELECT user, nickname FROM profile_profile WHERE user = :user"
-    try:
-        username, nickname = db_session.execute(sql, {'user': username}).fetchone()
-        cache.set(key_format % username, nickname, timeout=cache_timeout)
-    except Exception as e:
-        dtable_io_logger.error('check nickname error: %s', e)
-
-    return nickname

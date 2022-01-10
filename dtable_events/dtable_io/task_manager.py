@@ -226,7 +226,7 @@ class TaskManager(object):
         from dtable_events.dtable_io import convert_view_to_execl
 
         task_id = str(int(time.time()*1000))
-        task = (convert_view_to_execl, (dtable_uuid, table_id, view_id, username, id_in_org, permission, name, self.config))
+        task = (convert_view_to_execl, (dtable_uuid, table_id, view_id, username, id_in_org, permission, name))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
 
