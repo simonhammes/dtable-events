@@ -737,8 +737,7 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
     elif col_type == ColumnTypes.MULTIPLE_SELECT:
         if not isinstance(converted_cell_value, list):
             return
-        return [select_options_dict.get(value) for value in converted_cell_value if
-                               select_options_dict.get(value)]
+        return [select_options_dict.get(value) for value in converted_cell_value if select_options_dict.get(value)]
 
     elif col_type == ColumnTypes.LINK:
         if not isinstance(converted_cell_value, list):
@@ -776,6 +775,8 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
             else:
                 if isinstance(converted_cell_value, list):
                     return ', '.join(str(v) for v in converted_cell_value)
+                elif isinstance(converted_cell_value, dict):
+                    return ', '.join(str(converted_cell_value.get(v)) for v in converted_cell_value)
                 else:
                     return converted_cell_value
         else:
@@ -846,7 +847,7 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
                             return value.strftime('%Y-%m-%d %H:%M')
                         else:
                             return value.strftime('%Y-%m-%d')
-    return
+    return src_row.get(col_key)
 
 
 def get_metadata_from_dtable_server(dtable_uuid, table_id, view_id, username, id_in_org, permission):
