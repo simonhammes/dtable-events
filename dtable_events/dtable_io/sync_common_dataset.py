@@ -65,8 +65,7 @@ def convert_db_rows(metadata, results):
                         else:
                             value = date_value.strftime('%Y-%m-%d %H:%M')
                     except Exception as e:
-                        pass
-                        # dtable_io_logger.error(e)
+                        dtable_io_logger.error(e)
                     item[column_name] = value
                 else:
                     item[column_name] = value
@@ -333,6 +332,8 @@ def import_or_sync(import_sync_context):
 
     while True:
         url = dtable_server_url.rstrip('/') + '/api/v1/internal/dtables/' + str(src_dtable_uuid) + '/view-rows/?from=dtable_events'
+        if (start + limit) > SRC_ROWS_LIMIT:
+            limit = SRC_ROWS_LIMIT - start
         query_params = {
             'table_name': src_table_name,
             'view_name': src_view_name,
@@ -350,11 +351,9 @@ def import_or_sync(import_sync_context):
             dtable_io_logger.error('request src_dtable: %s params: %s view-rows error: %s', src_dtable_uuid, query_params, e)
             return None, 'request src_dtable: %s params: %s view-rows error: %s' % (src_dtable_uuid, query_params, e)
         result_rows.extend(temp_result_rows)
-        if not temp_result_rows or len(temp_result_rows) < limit:
+        if not temp_result_rows or len(temp_result_rows) < limit or (start + limit) >= SRC_ROWS_LIMIT:
             break
         start += limit
-        if start == SRC_ROWS_LIMIT:
-            break
 
     final_columns = (to_be_updated_columns or []) + (to_be_appended_columns or [])
 
@@ -564,7 +563,7 @@ def sync_common_dataset(context, config):
         dst_table_id, error_msg = import_or_sync({
             'dst_dtable_uuid': dst_dtable_uuid,
             'src_dtable_uuid': src_dtable_uuid,
-            'src_rows': src_table.get('rows', [])[0:SRC_ROWS_LIMIT],
+            'src_rows': src_table.get('rows', []),
             'src_columns': src_columns,
             'src_table_name': src_table.get('name'),
             'src_view_name': src_view.get('name'),
@@ -636,7 +635,7 @@ def import_common_dataset(context, config):
         dst_table_id, error_msg = import_or_sync({
             'dst_dtable_uuid': dst_dtable_uuid,
             'src_dtable_uuid': src_dtable_uuid,
-            'src_rows': src_table.get('rows', [])[0:SRC_ROWS_LIMIT],
+            'src_rows': src_table.get('rows', []),
             'src_columns': src_columns,
             'src_table_name': src_table.get('name'),
             'src_view_name': src_view.get('name'),
