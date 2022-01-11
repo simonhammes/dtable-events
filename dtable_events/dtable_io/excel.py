@@ -881,7 +881,10 @@ def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname):
         c = ws.cell(row = row_num + 1, column = col_num + 1)
         if row_num in grouped_row_num_map:
             fill_num = grouped_row_num_map[row_num]
-            c.fill = grouped_row_fills[fill_num]
+            try:
+                c.fill = grouped_row_fills[fill_num]
+            except:
+                pass
 
         if not row[col_num] and not isinstance(row[col_num], int) and not isinstance(row[col_num], float):
             continue
