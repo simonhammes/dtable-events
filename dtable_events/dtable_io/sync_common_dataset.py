@@ -20,6 +20,8 @@ DTABLE_PROXY_SERVER_URL = task_manager.conf['dtable_proxy_server_url']
 ENABLE_DTABLE_SERVER_CLUSTER = task_manager.conf['dtable_proxy_server_url']
 dtable_server_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
 
+SRC_ROWS_LIMIT = 50000
+
 
 def convert_db_rows(metadata, results):
     """ Convert dtable-db rows data to readable rows data
@@ -63,8 +65,7 @@ def convert_db_rows(metadata, results):
                         else:
                             value = date_value.strftime('%Y-%m-%d %H:%M')
                     except Exception as e:
-                        pass
-                        # dtable_io_logger.error(e)
+                        dtable_io_logger.error(e)
                     item[column_name] = value
                 else:
                     item[column_name] = value
@@ -331,6 +332,8 @@ def import_or_sync(import_sync_context):
 
     while True:
         url = dtable_server_url.rstrip('/') + '/api/v1/internal/dtables/' + str(src_dtable_uuid) + '/view-rows/?from=dtable_events'
+        if (start + limit) > SRC_ROWS_LIMIT:
+            limit = SRC_ROWS_LIMIT - start
         query_params = {
             'table_name': src_table_name,
             'view_name': src_view_name,
@@ -348,7 +351,7 @@ def import_or_sync(import_sync_context):
             dtable_io_logger.error('request src_dtable: %s params: %s view-rows error: %s', src_dtable_uuid, query_params, e)
             return None, 'request src_dtable: %s params: %s view-rows error: %s' % (src_dtable_uuid, query_params, e)
         result_rows.extend(temp_result_rows)
-        if not temp_result_rows or len(temp_result_rows) < limit:
+        if not temp_result_rows or len(temp_result_rows) < limit or (start + limit) >= SRC_ROWS_LIMIT:
             break
         start += limit
 
