@@ -1,18 +1,13 @@
-import re
-import time
-from copy import deepcopy
 from datetime import datetime
-
-import jwt
 import requests
 from dateutil import parser
 
 from dtable_events.db import init_db_session_class
-from dtable_events.dtable_io.utils import get_converted_cell_value
 from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.utils import uuid_str_to_32_chars
 from dtable_events.utils.constants import ColumnTypes
 from dtable_events.dtable_io import dtable_io_logger
+from dtable_events.dtable_io.utils import convert_db_rows, generate_synced_columns, generate_synced_rows
 
 
 DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']

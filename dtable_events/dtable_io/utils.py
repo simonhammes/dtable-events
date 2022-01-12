@@ -22,6 +22,9 @@ from django.utils.http import urlquote
 from seaserv import seafile_api
 
 from dtable_events.dtable_io.task_manager import task_manager
+from dtable_events.utils.constants import ColumnTypes
+from copy import deepcopy
+
 
 # this two prefix used in exported zip file
 FILE_URL_PREFIX = 'file://dtable-bundle/asset/files/'
@@ -1022,7 +1025,7 @@ def convert_db_rows(metadata, results):
                         else:
                             value = date_value.strftime('%Y-%m-%d %H:%M')
                     except Exception as e:
-                        dtable_io_logger.error(e)
+                        pass
                     item[column_name] = value
                 else:
                     item[column_name] = value
@@ -1051,3 +1054,223 @@ def get_nicknames_from_dtable(dtable_uuid, username, permission):
     if res.status_code != 200:
         raise ConnectionError('failed to get related users %s %s' % (dtable_uuid, res.text))
     return res.json().get('user_list')
+
+
+def transfer_column(src_column):
+    """
+    transfer origin column to new target column
+    """
+    if src_column.get('type') == ColumnTypes.BUTTON:
+        return None
+    column = deepcopy(src_column)
+    if src_column.get('type') == ColumnTypes.FORMULA:
+        data = src_column.get('data', {})
+        result_type = data.get('result_type', 'string')
+        if result_type == 'date':
+            column['type'] = ColumnTypes.DATE
+            column['data'] = {
+                'format': data.get('format', 'YYYY-MM-DD')
+            }
+        elif result_type == 'number':
+            column['type'] = ColumnTypes.NUMBER
+            column['data'] = {
+                'format': data.get('format', 'number'),
+                'precision': data.get('precision', 2),
+                'enable_precision': data.get('enable_precision', False),
+                'enable_fill_default_value': data.get('enable_fill_default_value', False),
+                'decimal': data.get('decimal', 'dot'),
+                'thousands': data.get('thousands', 'no'),
+                'currency_symbol': data.get('currency_symbol')
+            }
+        elif result_type == 'bool':
+            column['type'] = ColumnTypes.CHECKBOX
+            column['data'] = None
+        else:
+            column['type'] = ColumnTypes.TEXT
+            column['data'] = None
+    elif src_column.get('type') == ColumnTypes.LINK:
+        column['type'] = ColumnTypes.TEXT
+        column['data'] = None
+    elif src_column.get('type') == ColumnTypes.LINK_FORMULA:
+        data = src_column.get('data', {})
+        result_type = data.get('result_type', 'string')
+        if result_type == 'number':
+            column['type'] = ColumnTypes.NUMBER
+            column['data'] = {
+                'format': data.get('format', 'number'),
+                'precision': data.get('precision', 2),
+                'enable_precision': data.get('enable_precision', False),
+                'enable_fill_default_value': data.get('enable_fill_default_value', False),
+                'decimal': data.get('decimal', 'dot'),
+                'thousands': data.get('thousands', 'no'),
+                'currency_symbol': data.get('currency_symbol')
+            }
+        elif result_type == 'string':
+            column['type'] = ColumnTypes.TEXT
+            column['data'] = None
+        elif result_type == 'date':
+            column['type'] = ColumnTypes.DATE
+            column['data'] = {
+                'format': data.get('format', 'YYYY-MM-DD')
+            }
+        elif result_type == 'bool':
+            column['type'] = ColumnTypes.CHECKBOX,
+            column['data'] = None
+        elif result_type == 'array':
+            array_type = data.get('array_type')
+            array_data = data.get('array_data')
+            if not array_type:
+                column['type'] = ColumnTypes.TEXT
+                column['data'] = None
+            elif array_type in [
+                ColumnTypes.NUMBER,
+                ColumnTypes.DATE,
+                ColumnTypes.SINGLE_SELECT,
+                ColumnTypes.MULTIPLE_SELECT,
+                ColumnTypes.DURATION,
+                ColumnTypes.GEOLOCATION
+            ]:
+                column['type'] = array_type
+                column['data'] = array_data
+            elif array_type in [
+                ColumnTypes.TEXT,
+                ColumnTypes.LONG_TEXT,
+                ColumnTypes.COLLABORATOR,
+                ColumnTypes.IMAGE,
+                ColumnTypes.FILE,
+                ColumnTypes.EMAIL,
+                ColumnTypes.URL,
+                ColumnTypes.CHECKBOX,
+                ColumnTypes.CREATOR,
+                ColumnTypes.CTIME,
+                ColumnTypes.LAST_MODIFIER,
+                ColumnTypes.MTIME,
+                ColumnTypes.AUTO_NUMBER,
+            ]:
+                column['type'] = array_type
+                column['data'] = None
+            else:
+                column['type'] = ColumnTypes.TEXT
+                column['data'] = None
+        else:
+            column['type'] = ColumnTypes.TEXT
+            column['data'] = None
+    return column
+
+
+def generate_synced_columns(src_columns, dst_columns=None):
+    """
+    generate synced columns
+
+    return: to_be_updated_columns -> list or None, to_be_appended_columns -> list or None, error_msg -> str or None
+    """
+    transfered_columns = []
+    for col in src_columns:
+        new_col = transfer_column(col)
+        if new_col:
+            transfered_columns.append(new_col)
+    if not dst_columns:
+        return None, transfered_columns, None
+    to_be_updated_columns, to_be_appended_columns = [], []
+    dst_column_name_dict = {col.get('name'): True for col in dst_columns}
+    dst_column_key_dict = {col.get('key'): col for col in dst_columns}
+
+    for col in transfered_columns:
+        dst_col = dst_column_key_dict.get(col.get('key'))
+        if dst_col:
+            dst_col['type'] = col.get('type')
+            dst_col['data'] = col.get('data')
+            to_be_updated_columns.append(dst_col)
+        else:
+            if dst_column_name_dict.get(col.get('name')):
+                return None, None, 'Column %s exists' % (col.get('name'),)
+            to_be_appended_columns.append(col)
+    return to_be_updated_columns, to_be_appended_columns, None
+
+
+def generate_synced_rows(converted_rows, src_rows, src_columns, synced_columns, dst_rows=None):
+    """
+    generate synced rows divided into `rows to be updated`, `rows to be appended` and `rows to be deleted`
+    return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
+    """
+
+    converted_rows_dict = {row.get('_id'): row for row in converted_rows}
+    src_rows_dict = {row.get('_id'): row for row in src_rows}
+    synced_columns_dict = {col.get('key'): col for col in synced_columns}
+
+    to_be_updated_rows, to_be_appended_rows, transfered_row_ids = [], [], {}
+    if not dst_rows:
+        dst_rows = []
+    to_be_deleted_row_ids = []
+    for row in dst_rows:
+        row_id = row.get('_id')
+        src_row = src_rows_dict.get(row_id)
+        converted_row = converted_rows_dict.get(row_id)
+        if not converted_row or not src_row:
+            to_be_deleted_row_ids.append(row_id)
+            continue
+
+        update_row = generate_single_row(converted_row, src_row, src_columns, synced_columns_dict, dst_row=row)
+        if update_row:
+            update_row['_id'] = row_id
+            to_be_updated_rows.append(update_row)
+        transfered_row_ids[row_id] = True
+
+    for converted_row in converted_rows:
+        row_id = converted_row.get('_id')
+        src_row = src_rows_dict.get(row_id)
+        if not src_row or transfered_row_ids.get(row_id):
+            continue
+        append_row = generate_single_row(converted_row, src_row, src_columns, synced_columns_dict, dst_row=None)
+        if append_row:
+            append_row['_id'] = row_id
+            to_be_appended_rows.append(append_row)
+        transfered_row_ids[row_id] = True
+
+    return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
+
+
+def generate_single_row(converted_row, src_row, src_columns, transfered_columns_dict, dst_row=None):
+    """
+        generate new single row according to src column type
+        :param converted_row: {'_id': '', 'column_name_1': '', 'col_name_2'; ''} from dtable-db
+        :param src_columns: [{'key': 'column_key_1', 'name': 'column_name_1'}]
+        :param transfered_columns_dict: {'col_key_1': {'key': 'column_key_1', 'name': 'column_name_1'}}
+        :param dst_row: {'_id': '', 'column_key_1': '', 'col_key_2': ''}
+    """
+    dataset_row = {}
+    op_type = 'update'
+    if not dst_row:
+        op_type = 'append'
+    dst_row = deepcopy(dst_row) if dst_row else {'_id': src_row.get('_id')}
+    for col in src_columns:
+        col_key = col.get('key')
+        col_name = col.get('name')
+        col_type = col.get('type')
+
+        converted_cell_value = converted_row.get(col_name)
+        transfered_column = transfered_columns_dict.get(col_key)
+
+        if op_type == 'update':
+            if col_type == ColumnTypes.MULTIPLE_SELECT:
+                src_cell_value = src_row.get(col_key)
+                dst_cell_value = dst_row.get(col_key)
+                if not src_cell_value:
+                    src_cell_value = []
+                if not dst_cell_value:
+                    dst_cell_value = []
+                src_cell_value = sorted(src_cell_value)
+                dst_cell_value = sorted(dst_cell_value)
+            elif col_type == ColumnTypes.SINGLE_SELECT:
+                src_cell_value = src_row.get(col_key, '')
+                dst_cell_value = dst_row.get(col_key, '')
+            else:
+                src_cell_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
+                dst_cell_value = dst_row.get(col_key)
+
+            if src_cell_value == dst_cell_value and col_type != ColumnTypes.LONG_TEXT:
+                continue
+            dataset_row[col_key] = src_cell_value
+        else:
+            dataset_row[col_key] = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
+    return dataset_row
