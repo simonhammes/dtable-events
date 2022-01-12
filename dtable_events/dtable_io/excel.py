@@ -5,6 +5,52 @@ from datetime import datetime, time
 from openpyxl import load_workbook
 import csv
 
+import logging
+import os
+import sys
+import openpyxl
+from openpyxl.styles import PatternFill
+from dtable_events.utils import utc_to_tz
+from dtable_events.utils.constants import ColumnTypes
+
+# DTABLE_WEB_DIR
+dtable_web_dir = os.environ.get('DTABLE_WEB_DIR', '')
+if not dtable_web_dir:
+    logging.critical('dtable_web_dir is not set')
+    raise RuntimeError('dtable_web_dir is not set')
+if not os.path.exists(dtable_web_dir):
+    logging.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
+    raise RuntimeError('dtable_web_dir does not exist')
+
+sys.path.insert(0, dtable_web_dir)
+try:
+    from seahub.settings import EXPORT2EXCEL_DEFAULT_STRING
+except ImportError as err:
+    EXPORT2EXCEL_DEFAULT_STRING = 'illegal character in excel'
+    logging.warning('Can not import seahub.settings: %s.' % err)
+
+# CONF DIR
+central_conf_dir, timezone = os.environ.get('SEAFILE_CENTRAL_CONF_DIR', ''), 'UTC'
+if central_conf_dir:
+    sys.path.insert(0, central_conf_dir)
+    try:
+        import dtable_web_settings
+        timezone = getattr(dtable_web_settings, 'TIME_ZONE', 'UTC')
+    except Exception as e:
+        logging.error('import dtable_web_settings error: %s', e)
+    else:
+        del dtable_web_settings
+else:
+    logging.error('no conf dir SEAFILE_CENTRAL_CONF_DIR find')
+
+VIRTUAL_ID_EMAIL_DOMAIN = '@auth.local'
+
+first_grouped_row_fill = PatternFill(fill_type='solid', fgColor='ffa18b')
+second_grouped_row_fill = PatternFill(fill_type='solid', fgColor='ffff4d')
+third_grouped_row_fill = PatternFill(fill_type='solid', fgColor='a5f89b')
+grouped_row_fills = [first_grouped_row_fill, second_grouped_row_fill, third_grouped_row_fill]
+
+
 CHECKBOX_TUPLE = (
     ('√', 'x'),
     ('checked', 'unchecked'),
@@ -703,3 +749,221 @@ def parse_row(column_type, cell_value):
         return None
     else:
         return str(cell_value)
+
+
+def get_summary(summary, summary_col_info, column_name):
+    summary_type = summary_col_info.get(column_name, 'sum').lower()
+    return summary.get(summary_type)
+
+
+def parse_grouped_rows(grouped_rows, first_col_name, summary_col_info):
+    def parse(grouped_rows, sub_level, rows, grouped_row_num_map):
+        for group in grouped_rows:
+            summaries = group.get('summaries', {})
+            grouped_row = {column_name: get_summary(summary, summary_col_info, column_name) for column_name, summary in summaries.items()}
+            grouped_row[first_col_name] = group.get('cell_value')
+            rows.append(grouped_row)
+            grouped_row_num_map[len(rows)] = sub_level
+
+            group_subgroups = group.get('subgroups')
+            group_rows = group.get('rows')
+            if group_rows is None and group_subgroups:
+                parse(group_subgroups, sub_level + 1, rows, grouped_row_num_map)
+            else:
+                rows.extend(group_rows)
+
+    rows = []
+    grouped_row_num_map = {}
+    parse(grouped_rows, 0, rows, grouped_row_num_map)
+    return rows, grouped_row_num_map
+
+
+def parse_geolocation(cell_data):
+    if not isinstance(cell_data, dict):
+        return str(cell_data)
+    if 'country_region' in cell_data:
+        return cell_data['country_region']
+    elif 'lng' in cell_data:
+        return str(cell_data['lng']) + ', ' + str(cell_data['lat'])
+    elif 'province' in cell_data:
+        value = cell_data['province']
+        if 'city' in cell_data:
+            value = value + ' ' + cell_data['city']
+        if 'district' in cell_data:
+            value = value + ' ' + cell_data['district']
+        if 'detail' in cell_data:
+            value = value + ' ' + cell_data['detail']
+        return value
+    else:
+        return str(cell_data)
+
+
+def parse_link_formula(cell_data, email2nickname):
+    from dtable_events.dtable_io import dtable_io_logger
+    try:
+        # collaborator
+        if isinstance(cell_data, list) \
+                and isinstance(cell_data[0], str) \
+                and VIRTUAL_ID_EMAIL_DOMAIN in cell_data[0]:
+            nickname_list = []
+            for user in cell_data:
+                nickname_list.append(email2nickname.get(user, ''))
+            value = ', '.join(nickname_list)
+        # ctime, mtime
+        elif isinstance(cell_data, str) \
+                and '+00:00' in cell_data \
+                and 'T' in cell_data:
+            utc_time = datetime.strptime(cell_data, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+            value = utc_to_tz(utc_time, timezone).strftime('%Y-%m-%d %H:%M:%S')
+        # string
+        else:
+            value = cell_data2str(cell_data)
+        return value
+    except Exception as e:
+        dtable_io_logger.warning(e)
+        return cell_data2str(cell_data)
+
+
+def cell_data2str(cell_data):
+    if isinstance(cell_data, list):
+        return ' '.join(cell_data2str(item) for item in cell_data)
+    else:
+        return str(cell_data)
+
+
+def parse_multiple_select_formula(cell_data):
+    if isinstance(cell_data, list):
+        return ', '.join(cell_data)
+    else:
+        return str(cell_data)
+
+
+def is_int_str(num):
+    return '.' not in str(num)
+
+
+def gen_decimal_format(num):
+    if is_int_str(num):
+        return '0'
+
+    decimal_cnt = len(str(num).split('.')[1])
+    return '0.' + '0' * decimal_cnt
+
+
+def _get_strtime_time(time_str):
+    from dtable_events.dtable_io import dtable_io_logger
+    time_str = time_str.strip()
+    if not time_str:
+        return ''
+
+    try:
+        if ' ' in time_str:
+            return datetime.strptime(time_str, '%Y-%m-%d %H:%M')
+        else:
+            return datetime.strptime(time_str, '%Y-%m-%d')
+    except Exception as e:
+        dtable_io_logger.debug(e)
+    return time_str
+
+
+def check_and_replace_sheet_name(sheet_name):
+    """/ ?\ * [ ] chars is invalid excel sheet name, replace these chars with _ """
+
+    invalid_chars = ['/', '?', '\\', '*', '[', ']', ':']
+    for char in invalid_chars:
+        if char in sheet_name:
+            sheet_name = sheet_name.replace(char, '_')
+    return sheet_name
+
+
+def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname):
+    for col_num in range(len(row)):
+        c = ws.cell(row = row_num + 1, column = col_num + 1)
+        if row_num in grouped_row_num_map:
+            fill_num = grouped_row_num_map[row_num]
+            try:
+                c.fill = grouped_row_fills[fill_num]
+            except:
+                pass
+
+        if not row[col_num] and not isinstance(row[col_num], int) and not isinstance(row[col_num], float):
+            continue
+
+        # excel format see
+        # https://support.office.com/en-us/article/Number-format-codes-5026bbd6-04bc-48cd-bf33-80f18b4eae68
+        if head[col_num][1] == ColumnTypes.NUMBER:
+            # if value cannot convert to float or int, just pass, e.g. empty srt ''
+            try:
+                if is_int_str(row[col_num]):
+                    c.value = int(row[col_num])
+                else:
+                    c.value = float(row[col_num])
+            except Exception as e:
+                pass
+            c.number_format = gen_decimal_format(c.value)
+        elif head[col_num][1] == ColumnTypes.DATE:
+            c.value = _get_strtime_time(row[col_num])
+            if head[col_num][2]:
+                c.number_format = head[col_num][2].get('format', '')
+            else:
+                c.number_format = 'YYYY-MM-DD'
+        elif head[col_num][1] in (ColumnTypes.CTIME, ColumnTypes.MTIME):
+            if 'Z' in row[col_num]:
+                utc_time = datetime.strptime(row[col_num], '%Y-%m-%dT%H:%M:%S.%fZ')
+            else:
+                utc_time = datetime.strptime(row[col_num], '%Y-%m-%dT%H:%M:%S.%f+00:00')
+            c.value = utc_to_tz(utc_time, timezone).strftime('%Y-%m-%d %H:%M:%S')
+        elif head[col_num][1] == ColumnTypes.GEOLOCATION:
+            c.value = parse_geolocation(row[col_num])
+        elif head[col_num][1] == ColumnTypes.COLLABORATOR:
+            nickname_list = []
+            for user in row[col_num]:
+                nickname_list.append(email2nickname.get(user, ''))
+            c.value = ', '.join(nickname_list)
+        elif head[col_num][1] == ColumnTypes.CREATOR:
+            c.value = email2nickname.get(cell_data2str(row[col_num]), '')
+        elif head[col_num][1] == ColumnTypes.LAST_MODIFIER:
+            c.value = email2nickname.get(cell_data2str(row[col_num]), '')
+        elif head[col_num][1] == ColumnTypes.LINK_FORMULA:
+            c.value = parse_link_formula(row[col_num], email2nickname)
+        elif head[col_num][1] == ColumnTypes.MULTIPLE_SELECT:
+            c.value = parse_multiple_select_formula(row[col_num])
+        else:
+            c.value = cell_data2str(row[col_num])
+
+
+def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2nickname):
+    """ write listed data into excel
+        head is a list of tuples,
+        e.g. head = [(col_name, col_type, col_date), (...), ...]
+    """
+    from dtable_events.dtable_io import dtable_io_logger
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+    except Exception as e:
+        dtable_io_logger.error(e)
+        return None
+
+    ws.title = check_and_replace_sheet_name(sheet_name)
+
+    row_num = 0
+
+    # write table head
+    for col_num in range(len(head)):
+        c = ws.cell(row = row_num + 1, column = col_num + 1)
+        try:
+            c.value = head[col_num][0]
+        except Exception as e:
+            dtable_io_logger.error('Error column in exporting excel: {}'.format(e))
+            c.value = EXPORT2EXCEL_DEFAULT_STRING
+
+    # write table data
+    for row in data_list:
+        row_num += 1
+        try:
+            handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname)
+        except Exception as e:
+            dtable_io_logger.error('Error row in exporting excel: {}'.format(e))
+            continue
+    return wb

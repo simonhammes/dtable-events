@@ -848,3 +848,141 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
                         else:
                             return value.strftime('%Y-%m-%d')
     return src_row.get(col_key)
+
+
+def get_metadata_from_dtable_server(dtable_uuid, table_id, view_id, username, id_in_org, permission):
+    # generate json web token
+    # internal usage exp 60 seconds, username = request.user.username
+    DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
+    ENABLE_DTABLE_SERVER_CLUSTER = task_manager.conf['enable_dtable_server_cluster']
+    DTABLE_PROXY_SERVER_URL = task_manager.conf['dtable_proxy_server_url']
+    DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
+    api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+    url = api_url.rstrip('/') + '/api/v1/dtables/' + dtable_uuid + '/metadata/?from=dtable_events'
+
+    payload = {
+        'exp': int(time.time()) + 60,
+        'dtable_uuid': dtable_uuid,
+        'table_id': table_id,
+        'view_id': view_id,
+        'username': username,
+        'id_in_org': id_in_org,
+        'permission': permission,
+    }
+    access_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256')
+
+    # 1. get cols from dtable-server
+    headers = {'Authorization': 'Token ' + access_token}
+    res = requests.get(url, headers=headers)
+
+    if res.status_code != 200:
+        raise ConnectionError('failed to get metadata %s %s' % (dtable_uuid, res.text))
+    return json.loads(res.content)['metadata']
+
+
+def get_view_rows_from_dtable_server(dtable_uuid, table_id, view_id, username, id_in_org, permission, table_name, view_name):
+    DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
+    ENABLE_DTABLE_SERVER_CLUSTER = task_manager.conf['enable_dtable_server_cluster']
+    DTABLE_PROXY_SERVER_URL = task_manager.conf['dtable_proxy_server_url']
+    DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
+    api_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+    url = api_url.rstrip('/') + '/api/v1/internal/dtables/' + dtable_uuid + '/view-rows/?from=dtable_events'
+
+    payload = {
+        'exp': int(time.time()) + 60,
+        'dtable_uuid': dtable_uuid,
+        'table_id': table_id,
+        'view_id': view_id,
+        'username': username,
+        'id_in_org': id_in_org,
+        'permission': permission,
+    }
+    access_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256')
+
+    # 1. get cols from dtable-server
+    headers = {'Authorization': 'Token ' + access_token}
+
+    query_param = {
+        'table_name': table_name,
+        'view_name': view_name,
+        'convert_link_id': True,
+    }
+
+    res = requests.get(url, headers=headers, params=query_param)
+
+    if res.status_code != 200:
+        raise ConnectionError('failed to get view rows %s %s' % (dtable_uuid, res.text))
+    return res.json()
+
+
+def convert_db_rows(metadata, results):
+    """ Convert dtable-db rows data to readable rows data
+    :param metadata: list
+    :param results: list
+    :return: list
+    """
+    from dtable_events.dtable_io import dtable_io_logger
+    converted_results = []
+    column_map = {column['key']: column for column in metadata}
+    select_map = {}
+    for column in metadata:
+            column_type = column['type']
+            if column_type in ('single-select', 'multiple-select'):
+                column_data = column['data']
+                if not column_data:
+                    continue
+                column_key = column['key']
+                column_options = column['data']['options']
+                select_map[column_key] = {
+                    select['id']: select['name'] for select in column_options}
+
+    for result in results:
+        item = {}
+        for column_key, value in result.items():
+            if column_key in column_map:
+                column = column_map[column_key]
+                column_name = column['name']
+                column_type = column['type']
+                s_map = select_map.get(column_key)
+                if column_type == 'single-select' and value and s_map:
+                    item[column_name] = s_map.get(value, value)
+                elif column_type == 'multiple-select' and value and s_map:
+                    item[column_name] = [s_map.get(s, s) for s in value]
+                elif column_type == 'date' and value:
+                    try:
+                        date_value = datetime.datetime.fromisoformat(value)
+                        date_format = column['data']['format']
+                        if date_format == 'YYYY-MM-DD':
+                            value = date_value.strftime('%Y-%m-%d')
+                        else:
+                            value = date_value.strftime('%Y-%m-%d %H:%M')
+                    except Exception as e:
+                        dtable_io_logger.error(e)
+                    item[column_name] = value
+                else:
+                    item[column_name] = value
+            else:
+                item[column_key] = value
+        converted_results.append(item)
+
+    return converted_results
+
+
+def get_nicknames_from_dtable(dtable_uuid, username, permission):
+    DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
+    url = task_manager.conf['dtable_web_service_url'].strip('/') + '/api/v2.1/dtables/%s/related-users/' % dtable_uuid
+
+    payload = {
+        'exp': int(time.time()) + 60,
+        'dtable_uuid': dtable_uuid,
+        'username': username,
+        'permission': permission,
+    }
+    access_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256')
+    headers = {'Authorization': 'Token ' + access_token}
+
+    res = requests.get(url, headers=headers)
+
+    if res.status_code != 200:
+        raise ConnectionError('failed to get related users %s %s' % (dtable_uuid, res.text))
+    return res.json().get('user_list')
