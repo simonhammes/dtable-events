@@ -18,7 +18,8 @@ class DTableIOServer(Thread):
         task_manager.init(
             self._workers, self._dtable_private_key, self._dtable_web_service_url,
             self._file_server_port, self._dtable_server_url, self._enable_dtable_server_cluster,
-            self._dtable_proxy_server_url, self._io_task_timeout, self._session_cookie_name, config
+            self._dtable_proxy_server_url, self._io_task_timeout, self._session_cookie_name, 
+            self._enable_dtable_storage_server, self._dtable_storage_server_url, config
         )
         message_task_manager.init(
             self._workers, self._dtable_private_key, self._dtable_web_service_url,
@@ -69,12 +70,16 @@ class DTableIOServer(Thread):
                     ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
                     DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
                     SESSION_COOKIE_NAME = getattr(seahub_settings, 'SESSION_COOKIE_NAME', 'sessionid')
+                    ENABLE_DTABLE_STORAGE_SERVER = getattr(seahub_settings, 'ENABLE_DTABLE_STORAGE_SERVER', False)
+                    DTABLE_STORAGE_SERVER_URL = getattr(seahub_settings, 'DTABLE_STORAGE_SERVER_URL', 'http://127.0.0.1:6666')
                     self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
                     self._dtable_private_key = DTABLE_PRIVATE_KEY
                     self._dtable_server_url = DTABLE_SERVER_URL
                     self._enable_dtable_server_cluster = ENABLE_DTABLE_SERVER_CLUSTER
                     self._dtable_proxy_server_url = DTABLE_PROXY_SERVER_URL
                     self._session_cookie_name = SESSION_COOKIE_NAME
+                    self._enable_dtable_storage_server = ENABLE_DTABLE_STORAGE_SERVER
+                    self._dtable_storage_server_url = DTABLE_STORAGE_SERVER_URL
             except ImportError:
                 dtable_web_seahub_dir = os.path.join(os.environ.get('DTABLE_WEB_DIR', ''), 'seahub')
                 if os.path.exists(dtable_web_seahub_dir):
@@ -86,12 +91,16 @@ class DTableIOServer(Thread):
                     ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
                     DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
                     SESSION_COOKIE_NAME = getattr(seahub_settings, 'SESSION_COOKIE_NAME', 'sessionid')
+                    ENABLE_DTABLE_STORAGE_SERVER = getattr(seahub_settings, 'ENABLE_DTABLE_STORAGE_SERVER', False)
+                    DTABLE_STORAGE_SERVER_URL = getattr(seahub_settings, 'DTABLE_STORAGE_SERVER_URL', 'http://127.0.0.1:6666')
                     self._dtable_web_service_url = DTABLE_WEB_SERVICE_URL
                     self._dtable_private_key = DTABLE_PRIVATE_KEY 
                     self._dtable_server_url = DTABLE_SERVER_URL
                     self._enable_dtable_server_cluster = ENABLE_DTABLE_SERVER_CLUSTER
                     self._dtable_proxy_server_url = DTABLE_PROXY_SERVER_URL
                     self._session_cookie_name = SESSION_COOKIE_NAME
+                    self._enable_dtable_storage_server = ENABLE_DTABLE_STORAGE_SERVER
+                    self._dtable_storage_server_url = DTABLE_STORAGE_SERVER_URL
             except Exception as e:
                 logging.error(f'import settings from SEAFILE_CENTRAL_CONF_DIR/dtable_web_settings.py failed {e}')
 

@@ -319,6 +319,14 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     :param dtable_file_name:    xxx.dtable, the name of zip we imported
     :return:
     """
+    ENABLE_DTABLE_STORAGE_SERVER = task_manager.conf['enable_dtable_storage_server']
+    DTABLE_STORAGE_SERVER_URL = task_manager.conf['dtable_storage_server_url']
+    if ENABLE_DTABLE_STORAGE_SERVER:
+        from dtable_events.utils.dtable_storage_server_api import DTableStorageServerAPI
+        storage_api = DTableStorageServerAPI(DTABLE_STORAGE_SERVER_URL)
+    else:
+        storage_api = None
+
     # change url in content json, then save it at file server
     content_json_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/', 'content.json')
     with open(content_json_file_path, 'r') as f:
@@ -329,7 +337,13 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     except:
         content = ''
     if not content:
-        seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
+        try:
+            if ENABLE_DTABLE_STORAGE_SERVER:
+                storage_api.create_dtable(dtable_uuid)
+            else:
+                seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
+        except Exception as e:
+            raise e
         return
 
     content_json = convert_dtable_import_file_url(content, workspace_id, dtable_uuid)
@@ -337,7 +351,11 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
         f.write(json.dumps(content_json))
 
     try:
-        seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
+        if ENABLE_DTABLE_STORAGE_SERVER:
+            json_string = json.dumps(content_json)
+            storage_api.save_dtable(dtable_uuid, json_string)
+        else:
+            seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
     except Exception as e:
         raise e
     
