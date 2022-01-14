@@ -532,11 +532,11 @@ def trigger_near_deadline_notification_rule(rule, db_session):
         columns = get_table_view_columns(dtable_uuid, table_id, view_id, dtable_server_access_token)
         column_blanks, col_name_dict = _get_column_blanks(blanks, columns)
 
+    dtable_metadata = _get_dtable_metadata(dtable_uuid)
     for row in rows_near_deadline[:25]:
         row_id = row['_id']
 
         if users_column_key:
-            dtable_metadata = _get_dtable_metadata(dtable_uuid)
             user_column = _get_column_by_key(dtable_metadata, table_id, users_column_key)
             users_column_name = user_column.get('name')
             users_from_cell = list_users_by_column_name(dtable_uuid, table_id, view_id, row_id, users_column_name, dtable_server_access_token)
