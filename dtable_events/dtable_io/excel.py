@@ -280,8 +280,8 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
         max_column = sheet.max_column
         if max_row > 50000:
             max_row = 50000  # rows limit
-        if max_column > 300:
-            max_column = 300  # columns limit
+        if max_column > 500:
+            max_column = 500  # columns limit
         if max_row == 0:
             continue
 
