@@ -188,8 +188,9 @@ class TaskManager(object):
         task = self.tasks_map[task_id]
         if task == 'success':
             self.tasks_map.pop(task_id, None)
-            return True
-        return False
+            task_result = self.tasks_map.pop('result', {})
+            return True, task_result
+        return False, None
 
     def convert_page_to_pdf(self, dtable_uuid, page_id, row_id, access_token, session_id):
         from dtable_events.dtable_io import convert_page_to_pdf
@@ -258,8 +259,9 @@ class TaskManager(object):
                 start_time = time.time()
 
                 # run
-                task[0](*task[1])
+                result = task[0](*task[1])
                 self.tasks_map[task_id] = 'success'
+                self.tasks_map['result'] = result
 
                 finish_time = time.time()
                 dtable_io_logger.info('Run task success: %s cost %ds \n' % (task_info, int(finish_time - start_time)))

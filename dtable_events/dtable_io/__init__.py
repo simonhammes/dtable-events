@@ -568,6 +568,9 @@ def convert_view_to_execl(dtable_uuid, table_id, view_id, username, id_in_org, p
         dtable_io_logger.error('get view rows. ERROR: {}'.format(e))
         return
 
+    if res_json.get('error_msg'):
+        return res_json
+
     if is_archive:
         archive_rows = res_json.get('rows', [])
         archive_metadata = res_json.get('metadata')
