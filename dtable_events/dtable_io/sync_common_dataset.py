@@ -5,6 +5,7 @@ from datetime import datetime
 
 import jwt
 import requests
+from dateutil import parser
 
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io.utils import get_converted_cell_value
@@ -34,15 +35,15 @@ def convert_db_rows(metadata, results):
     column_map = {column['key']: column for column in metadata}
     select_map = {}
     for column in metadata:
-            column_type = column['type']
-            if column_type in ('single-select', 'multiple-select'):
-                column_data = column['data']
-                if not column_data:
-                    continue
-                column_key = column['key']
-                column_options = column['data']['options']
-                select_map[column_key] = {
-                    select['id']: select['name'] for select in column_options}
+        column_type = column['type']
+        if column_type in ('single-select', 'multiple-select'):
+            column_data = column['data']
+            if not column_data:
+                continue
+            column_key = column['key']
+            column_options = column['data']['options']
+            select_map[column_key] = {
+                select['id']: select['name'] for select in column_options}
 
     for result in results:
         item = {}
@@ -58,14 +59,14 @@ def convert_db_rows(metadata, results):
                     item[column_name] = [s_map.get(s, s) for s in value]
                 elif column_type == 'date' and value:
                     try:
-                        date_value = datetime.fromisoformat(value)
+                        date_value = parser.isoparse(value)
                         date_format = column['data']['format']
                         if date_format == 'YYYY-MM-DD':
                             value = date_value.strftime('%Y-%m-%d')
                         else:
                             value = date_value.strftime('%Y-%m-%d %H:%M')
                     except Exception as e:
-                        dtable_io_logger.error(e)
+                        dtable_io_logger.warning(e)
                     item[column_name] = value
                 else:
                     item[column_name] = value
@@ -83,7 +84,10 @@ def transfer_column(src_column):
     if src_column.get('type') == ColumnTypes.BUTTON:
         return None
     column = deepcopy(src_column)
-    if src_column.get('type') == ColumnTypes.FORMULA:
+    if src_column.get('type') == ColumnTypes.AUTO_NUMBER:
+        column['type'] = ColumnTypes.TEXT
+        column['data'] = None
+    elif src_column.get('type') == ColumnTypes.FORMULA:
         data = src_column.get('data', {})
         result_type = data.get('result_type', 'string')
         if result_type == 'date':
@@ -165,7 +169,6 @@ def transfer_column(src_column):
                 ColumnTypes.CTIME,
                 ColumnTypes.LAST_MODIFIER,
                 ColumnTypes.MTIME,
-                ColumnTypes.AUTO_NUMBER,
             ]:
                 column['type'] = array_type
                 column['data'] = None
