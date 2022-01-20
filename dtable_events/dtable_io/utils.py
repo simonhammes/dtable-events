@@ -14,6 +14,7 @@ import jwt
 import sys
 from io import BytesIO
 from zipfile import ZipFile, is_zipfile
+from dateutil import parser
 
 from django.utils.http import urlquote
 from seaserv import seafile_api
@@ -836,7 +837,7 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
             elif transfered_type == ColumnTypes.DATE:
                 if converted_cell_value:
                     try:
-                        value = datetime.datetime.fromisoformat(converted_cell_value[0])
+                        value = parser.isoparse(converted_cell_value[0])
                     except:
                         pass
                     else:
