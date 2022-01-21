@@ -912,7 +912,7 @@ def get_view_rows_from_dtable_server(dtable_uuid, table_id, view_id, username, i
     res = requests.get(url, headers=headers, params=query_param)
 
     if res.status_code != 200:
-        raise ConnectionError('failed to get view rows %s %s' % (dtable_uuid, res.text))
+        raise Exception(res.json().get('error_msg'))
     return res.json()
 
 

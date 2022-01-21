@@ -188,8 +188,11 @@ class TaskManager(object):
         task = self.tasks_map[task_id]
         if task == 'success':
             self.tasks_map.pop(task_id, None)
-            return True
-        return False
+            return True, None
+        if isinstance(task, str) and task.startswith('error_'):
+            self.tasks_map.pop(task_id, None)
+            return True, task[6:]
+        return False, None
 
     def convert_page_to_pdf(self, dtable_uuid, page_id, row_id, access_token, session_id):
         from dtable_events.dtable_io import convert_page_to_pdf
@@ -266,7 +269,7 @@ class TaskManager(object):
                 self.current_task_info.pop(task_id, None)
             except Exception as e:
                 dtable_io_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
-                self.tasks_map.pop(task_id, None)
+                self.tasks_map[task_id] = 'error_' + str(e.args[0])
                 self.current_task_info.pop(task_id, None)
 
     def run(self):

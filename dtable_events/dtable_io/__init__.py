@@ -561,12 +561,8 @@ def convert_view_to_execl(dtable_uuid, table_id, view_id, username, id_in_org, p
         if summary_configs.get(col.get('key')):
             summary_col_info.update({col.get('name'): summary_configs.get(col.get('key'))})
 
-    try:
-        res_json = get_view_rows_from_dtable_server(dtable_uuid, table_id, view_id, username, id_in_org, permission,
-                                                    table_name, view_name)
-    except Exception as e:
-        dtable_io_logger.error('get view rows. ERROR: {}'.format(e))
-        return
+    res_json = get_view_rows_from_dtable_server(dtable_uuid, table_id, view_id, username, id_in_org, permission,
+                                                table_name, view_name)
 
     if is_archive:
         archive_rows = res_json.get('rows', [])
