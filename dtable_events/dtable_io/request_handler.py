@@ -289,7 +289,7 @@ def query_message_send_status():
         return make_response((e, 500))
 
     resp = dict(is_finished=is_finished)
-    resp['result'] = result if result else ''
+    resp['result'] = result if result else {}
     return make_response((resp, 200))
 
 
