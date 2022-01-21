@@ -185,8 +185,6 @@ class TaskManager(object):
         return task_id
 
     def query_status(self, task_id):
-        print('self.tasks_map')
-        print(self.tasks_map)
         task = self.tasks_map[task_id]
         if task == 'success':
             self.tasks_map.pop(task_id, None)
