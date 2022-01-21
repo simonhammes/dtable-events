@@ -269,7 +269,7 @@ class TaskManager(object):
                 self.current_task_info.pop(task_id, None)
             except Exception as e:
                 dtable_io_logger.error('Failed to handle task %s, error: %s \n' % (task_id, e))
-                self.tasks_map[task_id] = 'error_' + e.args[0]
+                self.tasks_map[task_id] = 'error_' + str(e.args[0])
                 self.current_task_info.pop(task_id, None)
 
     def run(self):

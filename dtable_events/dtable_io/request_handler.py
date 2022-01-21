@@ -248,9 +248,10 @@ def query_status():
         logger.debug(e)  # task_id not found
         return make_response((e, 500))
 
-    resp = dict(is_finished=is_finished)
-    resp['error'] = error if error else ''
-    return make_response((resp, 200))
+    if error:
+        return make_response((error, 500))
+
+    return make_response(({'is_finished': is_finished}, 200))
 
 
 @app.route('/cancel-task', methods=['GET'])
