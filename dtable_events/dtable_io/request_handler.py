@@ -243,13 +243,13 @@ def query_status():
         return make_response(('task_id invalid.', 400))
 
     try:
-        is_finished, result = task_manager.query_status(task_id)
+        is_finished, error = task_manager.query_status(task_id)
     except Exception as e:
         logger.debug(e)  # task_id not found
         return make_response((e, 500))
 
     resp = dict(is_finished=is_finished)
-    resp['result'] = result if result else {}
+    resp['error'] = error if error else ''
     return make_response((resp, 200))
 
 
@@ -289,7 +289,7 @@ def query_message_send_status():
         return make_response((e, 500))
 
     resp = dict(is_finished=is_finished)
-    resp['result'] = result if result else {}
+    resp['result'] = result if result else ''
     return make_response((resp, 200))
 
 
