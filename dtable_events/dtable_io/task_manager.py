@@ -193,7 +193,7 @@ class TaskManager(object):
             return True, None
         if isinstance(task, str) and task.startswith('error_'):
             self.tasks_map.pop(task_id, None)
-            return False, task[6:]
+            return True, task[6:]
         return False, None
 
     def convert_page_to_pdf(self, dtable_uuid, page_id, row_id, access_token, session_id):
