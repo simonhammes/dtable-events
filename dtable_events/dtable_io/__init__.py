@@ -43,11 +43,13 @@ def get_dtable_export_content(username, repo_id, dtable_uuid, asset_dir_id, conf
     tmp_file_path = os.path.join('/tmp/dtable-io', dtable_uuid,
                                  'dtable_asset/')  # used to store asset files and json from file_server
     tmp_zip_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'zip_file') + '.zip'  # zip path of zipped xxx.dtable
+
     try:
         db_session = init_db_session_class(config)()
     except Exception as e:
         db_session = None
         dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
+        raise Exception('create db session failed. ERROR: {}'.format(e))
 
     dtable_io_logger.info('Clear tmp dirs and files before prepare.')
     clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path)
@@ -58,9 +60,9 @@ def get_dtable_export_content(username, repo_id, dtable_uuid, asset_dir_id, conf
     dtable_io_logger.info('Create content.json file.')
     try:
         prepare_dtable_json_from_memory(dtable_uuid, username)
-
     except Exception as e:
         dtable_io_logger.error('prepare dtable json failed. ERROR: {}'.format(e))
+        raise Exception('prepare dtable json failed. ERROR: {}'.format(e))
 
     # 2. get asset file folder, asset could be empty
     if asset_dir_id:
@@ -69,16 +71,18 @@ def get_dtable_export_content(username, repo_id, dtable_uuid, asset_dir_id, conf
             prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id)
         except Exception as e:
             dtable_io_logger.error('create asset folder failed. ERROR: {}'.format(e))
+            raise Exception('create asset folder failed. ERROR: {}'.format(e))
+
 
     # 3. copy forms
     try:
         copy_src_forms_to_json(dtable_uuid, tmp_file_path, db_session)
     except Exception as e:
         dtable_io_logger.error('copy forms failed. ERROR: {}'.format(e))
+        raise Exception('copy forms failed. ERROR: {}'.format(e))
     finally:
         if db_session:
             db_session.close()
-
 
     """
     /tmp/dtable-io/<dtable_uuid>/dtable_asset/
@@ -93,6 +97,7 @@ def get_dtable_export_content(username, repo_id, dtable_uuid, asset_dir_id, conf
         shutil.make_archive('/tmp/dtable-io/' + dtable_uuid +  '/zip_file', "zip", root_dir=tmp_file_path)
     except Exception as e:
         dtable_io_logger.error('make zip failed. ERROR: {}'.format(e))
+        raise Exception('make zip failed. ERROR: {}'.format(e))
 
     dtable_io_logger.info('Create /tmp/dtable-io/{}/zip_file.zip success!'.format(dtable_uuid))
     # we remove '/tmp/dtable-io/<dtable_uuid>' in dtable web api
