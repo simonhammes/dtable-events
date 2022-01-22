@@ -1,4 +1,5 @@
 import json
+
 import requests
 import os
 import time
@@ -166,7 +167,11 @@ def prepare_dtable_json_from_memory(dtable_uuid, username):
     json_url = api_url.rstrip('/') + '/dtables/' + dtable_uuid + '/'
     content_json = requests.get(json_url, headers=headers).content
     if content_json:
-        dtable_content = convert_dtable_export_file_and_image_url(json.loads(content_json))
+        try:
+            json_content = json.loads(content_json)
+        except Exception as e:
+            raise Exception('decode json error: %s' % content_json.decode()[0:200])
+        dtable_content = convert_dtable_export_file_and_image_url(json_content)
     else:
         dtable_content = ''
     content_json = json.dumps(dtable_content).encode('utf-8')
