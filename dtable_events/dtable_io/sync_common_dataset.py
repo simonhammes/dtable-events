@@ -215,7 +215,7 @@ def transfer_column(src_column):
             ]:
                 column['type'] = array_type
                 column['data'] = array_data
-                if column['type'] not in [ColumnTypes.SINGLE_SELECT, ColumnTypes.MULTIPLE_SELECT]:
+                if column['type'] not in [ColumnTypes.SINGLE_SELECT, ColumnTypes.MULTIPLE_SELECT] and array_data:
                     column = fix_column_data(column)
             elif array_type in [
                 ColumnTypes.TEXT,
