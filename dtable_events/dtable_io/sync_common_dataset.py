@@ -89,6 +89,7 @@ DATA_NEED_KEY_VALUES = {
         'default': 'h:mm'
     }, {
         'name': 'format',
+        'optional_params': ['duration'],
         'default': 'duration'
     }],
     ColumnTypes.NUMBER: [{
@@ -107,7 +108,7 @@ DATA_NEED_KEY_VALUES = {
     ColumnTypes.GEOLOCATION: [{
         'name': 'geo_format',
         'optional_params': ['geolocation', 'lng_lat', 'country_region', 'province_city_district', 'province', 'province_city'],
-        'default': 'geo_format'
+        'default': 'lng_lat'
     }]
 }
 
