@@ -42,7 +42,7 @@ def list_synchronizing_common_dataset(db_session):
             INNER JOIN dtable_common_dataset_sync b ON b.dataset_id=a.id
             INNER JOIN dtables c ON a.dtable_uuid=c.uuid and c.deleted=0
             INNER JOIN dtables d ON b.dst_dtable_uuid=d.uuid AND d.deleted=0
-            WHERE last_sync_time<:per_day_check_time
+            WHERE is_sync_periodical=1 and last_sync_time<:per_day_check_time
         '''
 
     per_day_check_time = datetime.utcnow() - timedelta(hours=23)
