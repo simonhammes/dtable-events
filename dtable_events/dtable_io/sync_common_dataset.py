@@ -77,6 +77,52 @@ def convert_db_rows(metadata, results):
     return converted_results
 
 
+DATA_NEED_KEY_VALUES = {
+    ColumnTypes.DATE: [{
+        'name': 'format',
+        'optional_params': ['YYYY-MM-DD', 'M/D/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD HH:mm', 'DD.MM.YYYY', 'DD.MM.YYYY HH:mm', 'M/D/YYYY HH:mm'],
+        'default': 'YYYY-MM-DD'
+    }],
+    ColumnTypes.DURATION: [{
+        'name': 'duration_format',
+        'optional_params': ['h:mm', 'h:mm:ss'],
+        'default': 'h:mm'
+    }, {
+        'name': 'format',
+        'default': 'duration'
+    }],
+    ColumnTypes.NUMBER: [{
+        'name': 'format',
+        'optional_params': ['number', 'percent', 'yuan', 'dollar', 'euro', 'custom_currency'],
+        'default': 'number'
+    }, {
+        'name': 'decimal',
+        'optional_params': ['comma', 'dot'],
+        'default': 'dot'
+    }, {
+        'name': 'thousands',
+        'optional_params': ['no', 'comma', 'dot', 'space'],
+        'default': 'no'
+    }],
+    ColumnTypes.GEOLOCATION: [{
+        'name': 'geo_format',
+        'optional_params': ['geolocation', 'lng_lat', 'country_region', 'province_city_district', 'province', 'province_city'],
+        'default': 'geo_format'
+    }]
+}
+
+
+def fix_column_data(column):
+    data_need_key_values = DATA_NEED_KEY_VALUES[column['type']]
+    for need_key_value in data_need_key_values:
+        if need_key_value['name'] not in column['data']:
+            column['data'][need_key_value['name']] = need_key_value['default']
+        else:
+            if column['data'][need_key_value['name']] not in need_key_value['optional_params']:
+                column['data'][need_key_value['name']] = need_key_value['default']
+    return column
+
+
 def transfer_column(src_column):
     """
     transfer origin column to new target column
@@ -84,6 +130,18 @@ def transfer_column(src_column):
     if src_column.get('type') == ColumnTypes.BUTTON:
         return None
     column = deepcopy(src_column)
+    if column.get('type') in [
+        ColumnTypes.DATE,
+        ColumnTypes.DURATION,
+        ColumnTypes.NUMBER,
+        ColumnTypes.GEOLOCATION
+    ]:
+        """
+        Because these column types need specific keys and values in column['data'],
+        need to fix column data result of dtable version iteration
+        """
+        if column.get('data'):
+            column = fix_column_data(column)
     if src_column.get('type') == ColumnTypes.AUTO_NUMBER:
         column['type'] = ColumnTypes.TEXT
         column['data'] = None
@@ -156,6 +214,8 @@ def transfer_column(src_column):
             ]:
                 column['type'] = array_type
                 column['data'] = array_data
+                if column['type'] not in [ColumnTypes.SINGLE_SELECT, ColumnTypes.MULTIPLE_SELECT]:
+                    column = fix_column_data(column)
             elif array_type in [
                 ColumnTypes.TEXT,
                 ColumnTypes.LONG_TEXT,
