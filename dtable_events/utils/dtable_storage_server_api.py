@@ -40,7 +40,7 @@ class DTableStorageServerAPI(object):
 
         return data
 
-    def create_dtable(self, dtable_uuid):
+    def empty_dtable(self, dtable_uuid):
         dtable_uuid = uuid_str_to_36_chars(dtable_uuid)
         url = self.server_url + '/dtables/' + dtable_uuid
         response = requests.put(url, timeout=TIMEOUT)

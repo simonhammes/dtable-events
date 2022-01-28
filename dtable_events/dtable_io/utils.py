@@ -339,7 +339,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     if not content:
         try:
             if ENABLE_DTABLE_STORAGE_SERVER:
-                storage_api.create_dtable(dtable_uuid)
+                storage_api.empty_dtable(dtable_uuid)
             else:
                 seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
         except Exception as e:
