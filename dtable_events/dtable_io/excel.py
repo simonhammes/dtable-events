@@ -275,7 +275,10 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
             'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
         if sheet.max_row is None or sheet.max_column is None:
             continue
-        sheet_rows = list(sheet.rows)
+        try:
+            sheet_rows = list(sheet.rows)
+        except Exception as e:
+            raise Exception('excel format error')
         max_row = len(sheet_rows)
         max_column = sheet.max_column
         if max_row > 50000:
