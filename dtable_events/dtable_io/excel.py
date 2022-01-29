@@ -278,7 +278,7 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
         try:
             sheet_rows = list(sheet.rows)
         except Exception as e:
-            raise Exception('excel format error')
+            raise Exception('Excel format error')
         max_row = len(sheet_rows)
         max_column = sheet.max_column
         if max_row > 50000:

@@ -189,8 +189,8 @@ def parse_excel(username, repo_id, workspace_id, dtable_name, custom, config):
     try:
         parse_excel_to_json(repo_id, dtable_name, custom)
     except Exception as e:
-        if str(e.args[0]) == 'excel format error':
-            raise Exception('excel format error')
+        if str(e.args[0]) == 'Excel format error':
+            raise Exception('Excel format error')
         dtable_io_logger.exception('parse excel failed. ERROR: {}'.format(e))
     else:
         dtable_io_logger.info('parse excel %s.xlsx success!' % dtable_name)
