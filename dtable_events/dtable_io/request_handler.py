@@ -240,12 +240,12 @@ def query_status():
 
     task_id = request.args.get('task_id')
     if not task_manager.is_valid_task_id(task_id):
-        return make_response(('task_id invalid.', 400))
+        return make_response(('task_id not found.', 404))
 
     try:
         is_finished, error = task_manager.query_status(task_id)
     except Exception as e:
-        logger.debug(e)  # task_id not found
+        logger.debug(e)
         return make_response((e, 500))
 
     if error:
