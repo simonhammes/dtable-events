@@ -891,7 +891,7 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
                         return converted_cell_value
             elif transfered_type == ColumnTypes.LONG_TEXT:
                 if converted_cell_value:
-                    return parse_long_text(converted_cell_value[0])
+                    return converted_cell_value[0]
             elif transfered_type == ColumnTypes.MULTIPLE_SELECT:
                 if converted_cell_value:
                     if isinstance(converted_cell_value[0], list):

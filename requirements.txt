@@ -6,5 +6,3 @@ selenium
 gevent
 Flask
 python-dateutil
-bs4
-markdown
