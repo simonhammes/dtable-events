@@ -24,59 +24,6 @@ dtable_server_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else
 SRC_ROWS_LIMIT = 50000
 
 
-def convert_db_rows(metadata, results):
-    """ Convert dtable-db rows data to readable rows data
-
-    :param metadata: list
-    :param results: list
-    :return: list
-    """
-    converted_results = []
-    column_map = {column['key']: column for column in metadata}
-    select_map = {}
-    for column in metadata:
-        column_type = column['type']
-        if column_type in ('single-select', 'multiple-select'):
-            column_data = column['data']
-            if not column_data:
-                continue
-            column_key = column['key']
-            column_options = column['data']['options']
-            select_map[column_key] = {
-                select['id']: select['name'] for select in column_options}
-
-    for result in results:
-        item = {}
-        for column_key, value in result.items():
-            if column_key in column_map:
-                column = column_map[column_key]
-                column_name = column['name']
-                column_type = column['type']
-                s_map = select_map.get(column_key)
-                if column_type == 'single-select' and value and s_map:
-                    item[column_name] = s_map.get(value, value)
-                elif column_type == 'multiple-select' and value and s_map:
-                    item[column_name] = [s_map.get(s, s) for s in value]
-                elif column_type == 'date' and value:
-                    try:
-                        date_value = parser.isoparse(value)
-                        date_format = column['data']['format']
-                        if date_format == 'YYYY-MM-DD':
-                            value = date_value.strftime('%Y-%m-%d')
-                        else:
-                            value = date_value.strftime('%Y-%m-%d %H:%M')
-                    except Exception as e:
-                        dtable_io_logger.warning(e)
-                    item[column_name] = value
-                else:
-                    item[column_name] = value
-            else:
-                item[column_key] = value
-        converted_results.append(item)
-
-    return converted_results
-
-
 DATA_NEED_KEY_VALUES = {
     ColumnTypes.DATE: [{
         'name': 'format',
@@ -114,7 +61,9 @@ DATA_NEED_KEY_VALUES = {
 
 
 def fix_column_data(column):
-    data_need_key_values = DATA_NEED_KEY_VALUES[column['type']]
+    data_need_key_values = DATA_NEED_KEY_VALUES.get(column['type'])
+    if not data_need_key_values:
+        return column
     for need_key_value in data_need_key_values:
         if need_key_value['name'] not in column['data']:
             column['data'][need_key_value['name']] = need_key_value['default']
@@ -165,6 +114,7 @@ def transfer_column(src_column):
                 'thousands': data.get('thousands', 'no'),
                 'currency_symbol': data.get('currency_symbol')
             }
+            column = fix_column_data(column)
         elif result_type == 'bool':
             column['type'] = ColumnTypes.CHECKBOX
             column['data'] = None
@@ -211,11 +161,12 @@ def transfer_column(src_column):
                 ColumnTypes.SINGLE_SELECT,
                 ColumnTypes.MULTIPLE_SELECT,
                 ColumnTypes.DURATION,
-                ColumnTypes.GEOLOCATION
+                ColumnTypes.GEOLOCATION,
+                ColumnTypes.RATE,
             ]:
                 column['type'] = array_type
                 column['data'] = array_data
-                if column['type'] not in [ColumnTypes.SINGLE_SELECT, ColumnTypes.MULTIPLE_SELECT] and array_data:
+                if column['type'] not in [ColumnTypes.SINGLE_SELECT, ColumnTypes.MULTIPLE_SELECT] and array_data is not None:
                     column = fix_column_data(column)
             elif array_type in [
                 ColumnTypes.TEXT,
@@ -332,7 +283,7 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
         col_name = col.get('name')
         col_type = col.get('type')
 
-        converted_cell_value = converted_row.get(col_name)
+        converted_cell_value = converted_row.get(col_key)
         transfered_column = transfered_columns_dict.get(col_key)
 
         if op_type == 'update':
@@ -357,6 +308,7 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
             dataset_row[col_key] = src_cell_value
         else:
             dataset_row[col_key] = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
+
     return dataset_row
 
 
@@ -372,6 +324,7 @@ def import_or_sync(import_sync_context):
 
     src_rows = import_sync_context.get('src_rows')
     src_columns = import_sync_context.get('src_columns')
+    src_column_keys_set = {col['key'] for col in src_columns}
     src_table_name = import_sync_context.get('src_table_name')
     src_view_name = import_sync_context.get('src_view_name')
     src_headers = import_sync_context.get('src_headers')
@@ -385,14 +338,16 @@ def import_or_sync(import_sync_context):
     lang = import_sync_context.get('lang', 'en')
 
     # generate cols and rows
-    ## generate cols
-    to_be_updated_columns, to_be_appended_columns, error = generate_synced_columns(src_columns, dst_columns=dst_columns)
-    if error:
-        return None, error
+    ## Old generate-cols is from src_columns from dtable json, but some (link-)formula columns have wrong array_type
+    ## For example, a LOOKUP(GEOLOCATION) link-formula column, whose array_type in dtable json is `string`, but should being `GEOLOCATION`
+    ## So, generate columns from the columns(archive columns) returned by SQL query instead of from the columns in dtable json, and remove old code
+    ## New code and more details is in the following code
+
     ## generate rows
     ### get src view-rows
     result_rows = []
     start, limit = 0, 10000
+    to_be_updated_columns, to_be_appended_columns = [], []
 
     while True:
         url = dtable_server_url.rstrip('/') + '/api/v1/internal/dtables/' + str(src_dtable_uuid) + '/view-rows/?from=dtable_events'
@@ -410,12 +365,17 @@ def import_or_sync(import_sync_context):
             res_json = resp.json()
             archive_rows = res_json.get('rows', [])
             archive_metadata = res_json.get('metadata')
-            temp_result_rows = convert_db_rows(archive_metadata, archive_rows)
         except Exception as e:
             dtable_io_logger.error('request src_dtable: %s params: %s view-rows error: %s', src_dtable_uuid, query_params, e)
             return None, 'request src_dtable: %s params: %s view-rows error: %s' % (src_dtable_uuid, query_params, e)
-        result_rows.extend(temp_result_rows)
-        if not temp_result_rows or len(temp_result_rows) < limit or (start + limit) >= SRC_ROWS_LIMIT:
+        if start == 0:
+            ## generate columns from the columns(archive_metadata) returned from SQL query
+            sync_columns = [col for col in archive_metadata if col['key'] in src_column_keys_set]
+            to_be_updated_columns, to_be_appended_columns, error = generate_synced_columns(sync_columns, dst_columns=dst_columns)
+            if error:
+                return None, error
+        result_rows.extend(archive_rows)
+        if not archive_rows or len(archive_rows) < limit or (start + limit) >= SRC_ROWS_LIMIT:
             break
         start += limit
 

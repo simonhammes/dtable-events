@@ -13,9 +13,12 @@ import random
 import string
 import jwt
 import sys
+import re
 from io import BytesIO
 from zipfile import ZipFile, is_zipfile
 from dateutil import parser
+from bs4 import BeautifulSoup
+import markdown
 
 from django.utils.http import urlquote
 from seaserv import seafile_api
@@ -701,18 +704,54 @@ def delete_file(username, repo_id, file_name):
     seafile_api.del_file(repo_id, EXCEL_DIR_PATH, filename, username)
 
 
+def get_preview_info(preview_content):
+    bf = BeautifulSoup(preview_content, features="lxml")
+    links = []
+    images = []
+    checked_count = 0
+    unchecked_count = 0
+    for link in bf.find_all(name='a'):
+        links.append(link.attrs.get('href'))
+    for img in bf.find_all(name='img'):
+        images.append(img.attrs.get('src'))
+    for check_text in bf.find_all(name='li'):
+        if check_text.text.startswith('[x]'):
+            checked_count += 1
+        elif check_text.text.startswith('[ ]'):
+            unchecked_count += 1
+
+    return links, images, checked_count, unchecked_count
+
+
+def parse_long_text(cell_value):
+    if not cell_value:
+        return {}
+    preview_content = markdown.markdown(cell_value)
+    links, images, checked_count, unchecked_count = get_preview_info(preview_content)
+    total = checked_count + unchecked_count
+
+    HREF_REG = r'\[.+\]\(\S+\)|<img src=\S+.+\/>|!\[\]\(\S+\)|<\S+>'
+    href_reg = re.compile(HREF_REG)
+    preview = href_reg.sub(' ', cell_value)
+    preview = preview[:20].replace('\n', ' ')
+    return {
+            'text': cell_value,
+            'preview': preview,
+            'checklist': {'completed': checked_count, 'total': total},
+            'images': images,
+            'links': links,
+        }
+
+
 def get_converted_cell_value(converted_cell_value, src_row, transfered_column, col):
     from dtable_events.dtable_io import dtable_io_logger
     from dtable_events.utils.constants import ColumnTypes
     from copy import deepcopy
-    import re
 
     col_key = col.get('key')
     col_type = col.get('type')
-    select_options_dict = {}
     if col_type == ColumnTypes.SINGLE_SELECT or col_type == ColumnTypes.MULTIPLE_SELECT:
         options = col.get('data', {}).get('options', [])
-        select_options_dict = {op['name']: op['id'] for op in options}
     if col_type in [
         ColumnTypes.TEXT,
         ColumnTypes.LONG_TEXT,
@@ -738,12 +777,12 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
     elif col_type == ColumnTypes.SINGLE_SELECT:
         if not isinstance(converted_cell_value, str):
             return
-        return select_options_dict.get(converted_cell_value)
+        return converted_cell_value
 
     elif col_type == ColumnTypes.MULTIPLE_SELECT:
         if not isinstance(converted_cell_value, list):
             return
-        return [select_options_dict.get(value) for value in converted_cell_value if select_options_dict.get(value)]
+        return converted_cell_value
 
     elif col_type == ColumnTypes.LINK:
         if not isinstance(converted_cell_value, list):
@@ -800,7 +839,10 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
                 if not match_obj:
                     return
                 start, end = match_obj.span()
-                return int(str(converted_cell_value)[start: end])
+                if '.' not in str(converted_cell_value)[start: end]:
+                    return int(str(converted_cell_value)[start: end])
+                else:
+                    return float(str(converted_cell_value)[start: end])
             except Exception as e:
                 dtable_io_logger.error('re search: %s in: %s error: %s', re_number, converted_cell_value, e)
                 return
@@ -816,12 +858,8 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
                 return
             if transfered_type in [
                 ColumnTypes.TEXT,
-                ColumnTypes.LONG_TEXT,
-                ColumnTypes.IMAGE,
-                ColumnTypes.FILE,
                 ColumnTypes.RATE,
                 ColumnTypes.NUMBER,
-                ColumnTypes.COLLABORATOR,
                 ColumnTypes.DURATION,
                 ColumnTypes.EMAIL,
                 ColumnTypes.CHECKBOX,
@@ -836,9 +874,30 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
             ]:
                 if converted_cell_value:
                     return converted_cell_value[0]
+            elif transfered_type == ColumnTypes.COLLABORATOR:
+                if converted_cell_value:
+                    if isinstance(converted_cell_value[0], list):
+                        return list(set(converted_cell_value[0]))
+                    else:
+                        return list(set(converted_cell_value))
+            elif transfered_type in [
+                ColumnTypes.IMAGE,
+                ColumnTypes.FILE
+            ]:
+                if converted_cell_value:
+                    if isinstance(converted_cell_value[0], list):
+                        return converted_cell_value[0]
+                    else:
+                        return converted_cell_value
+            elif transfered_type == ColumnTypes.LONG_TEXT:
+                if converted_cell_value:
+                    return parse_long_text(converted_cell_value[0])
             elif transfered_type == ColumnTypes.MULTIPLE_SELECT:
                 if converted_cell_value:
-                    return [converted_cell_value[0]]
+                    if isinstance(converted_cell_value[0], list):
+                        return sorted(list(set(converted_cell_value[0])))
+                    else:
+                        return sorted(list(set(converted_cell_value)))
             elif transfered_type == ColumnTypes.DATE:
                 if converted_cell_value:
                     try:
@@ -853,6 +912,9 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
                             return value.strftime('%Y-%m-%d %H:%M')
                         else:
                             return value.strftime('%Y-%m-%d')
+        elif result_type == 'string':
+            if converted_cell_value:
+                return str(converted_cell_value)
     return src_row.get(col_key)
 
 
