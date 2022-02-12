@@ -17,8 +17,6 @@ import re
 from io import BytesIO
 from zipfile import ZipFile, is_zipfile
 from dateutil import parser
-from bs4 import BeautifulSoup
-import markdown
 
 from django.utils.http import urlquote
 from seaserv import seafile_api
