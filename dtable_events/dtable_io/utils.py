@@ -748,8 +748,6 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
 
     col_key = col.get('key')
     col_type = col.get('type')
-    if col_type == ColumnTypes.SINGLE_SELECT or col_type == ColumnTypes.MULTIPLE_SELECT:
-        options = col.get('data', {}).get('options', [])
     if col_type in [
         ColumnTypes.TEXT,
         ColumnTypes.LONG_TEXT,
@@ -807,7 +805,8 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
                 return converted_cell_value
             return str(converted_cell_value).upper() == 'TRUE'
         elif result_type == 'string':
-            options = col.get('data', {}).get('options')
+            col_data = col.get('data', {})
+            options = col_data.get('options') if col_data else None
             if options and isinstance(options, list):
                 options_dict = {option.get('id'): option.get('name', '') for option in options}
                 if isinstance(converted_cell_value, list):
