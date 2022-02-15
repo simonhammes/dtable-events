@@ -841,6 +841,38 @@ def parse_multiple_select_formula(cell_data):
         return str(cell_data)
 
 
+def parse_formula_number(cell_data, src_format):
+    value = cell_data
+    number_format = '0'
+    if src_format == 'number':
+        number_format = gen_decimal_format(cell_data)
+    elif src_format == 'percent':
+        value = cell_data[:-1]
+        try:
+            value = float(value) / 100
+        except Exception as e:
+            pass
+        number_format = gen_decimal_format(value) + '%'
+    elif src_format == 'euro':
+        value = cell_data[1:]
+        number_format = '[$EUR ]#,##' + gen_decimal_format(value)+'_-'
+    elif src_format == 'dollar':
+        value = cell_data[1:]
+        number_format = '"$"#,##' + gen_decimal_format(value)+'_-'
+    elif src_format == 'yuan':
+        value = cell_data[1:]
+        number_format = '"¥"#,##' + gen_decimal_format(value)+'_-'
+    try:
+        if is_int_str(value):
+            value = int(value)
+        else:
+            value = float(value)
+    except Exception as e:
+        pass
+
+    return value, number_format
+
+
 def is_int_str(num):
     return '.' not in str(num)
 
@@ -850,6 +882,8 @@ def gen_decimal_format(num):
         return '0'
 
     decimal_cnt = len(str(num).split('.')[1])
+    if decimal_cnt > 8:
+        decimal_cnt = 8
     return '0.' + '0' * decimal_cnt
 
 
@@ -931,6 +965,10 @@ def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname):
             c.value = parse_link_formula(row[col_num], email2nickname)
         elif head[col_num][1] == ColumnTypes.MULTIPLE_SELECT:
             c.value = parse_multiple_select_formula(row[col_num])
+        elif head[col_num][1] == ColumnTypes.FORMULA \
+                and isinstance(head[col_num][2], dict) and head[col_num][2].get('result_type') == 'number':
+            c.value, c.number_format = parse_formula_number(
+                row[col_num], head[col_num][2].get('format'))
         else:
             c.value = cell_data2str(row[col_num])
 
