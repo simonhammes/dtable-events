@@ -1,4 +1,3 @@
-import json
 import uuid
 import requests
 
@@ -36,8 +35,11 @@ class DTableStorageServerAPI(object):
         dtable_uuid = uuid_str_to_36_chars(dtable_uuid)
         url = self.server_url + '/dtables/' + dtable_uuid
         response = requests.get(url, timeout=TIMEOUT)
-        data = parse_response(response)
-
+        try:
+            data = parse_response(response)
+        except ConnectionError as e:
+            if e.args[0] == 404:
+                return None
         return data
 
     def empty_dtable(self, dtable_uuid):
@@ -52,5 +54,4 @@ class DTableStorageServerAPI(object):
         url = self.server_url + '/dtables/' + dtable_uuid
         response = requests.put(url, json=json_string, timeout=TIMEOUT)
         data = parse_response(response)
-
         return data
