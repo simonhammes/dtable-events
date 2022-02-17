@@ -47,10 +47,7 @@ class Webhooks(Base):
         must return dict
         """
         if event.get('event') == 'update':
-            return {
-                'event': 'update',
-                'data': event.get('data')
-            }
+            return {'event': 'update', 'data': event.get('data')}
         return {}
 
     def gen_request_headers(self):
@@ -59,13 +56,11 @@ class Webhooks(Base):
         """
         hook_settings = self.hook_settings
         if not hook_settings:
-            return None
+            return {}
         secret = hook_settings.get('secret')
         if not secret:
             return {}
-        return {
-            'X-SeaTable-Signature': sha1(secret.encode('utf-8')).hexdigest()
-        }
+        return {'X-SeaTable-Signature': sha1(secret.encode('utf-8')).hexdigest()}
 
 
 class WebhookJobs(Base):
