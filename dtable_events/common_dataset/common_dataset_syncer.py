@@ -174,7 +174,7 @@ def list_pending_common_dataset_syncs(db_session):
             INNER JOIN dtable_common_dataset_sync dcds ON dcds.dataset_id=dcd.id
             INNER JOIN dtables d_src ON dcd.dtable_uuid=d_src.uuid AND d_src.deleted=0
             INNER JOIN dtables d_dst ON dcds.dst_dtable_uuid=d_dst.uuid AND d_dst.deleted=0
-            WHERE is_sync_periodical=1 AND last_sync_time<:per_day_check_time
+            WHERE is_sync_periodically=1 AND last_sync_time<:per_day_check_time
         '''
 
     per_day_check_time = datetime.utcnow() - timedelta(hours=23)
