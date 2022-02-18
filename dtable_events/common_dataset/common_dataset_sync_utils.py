@@ -1,20 +1,41 @@
-from datetime import datetime
+# -*- coding: utf-8 -*-
+import logging
+import os
+import re
+import sys
+from copy import deepcopy
+
 import requests
 from dateutil import parser
 
-from dtable_events.db import init_db_session_class
-from dtable_events.dtable_io.task_manager import task_manager
-from dtable_events.utils import uuid_str_to_32_chars
 from dtable_events.utils.constants import ColumnTypes
-from dtable_events.dtable_io import dtable_io_logger
-from dtable_events.dtable_io.utils import convert_db_rows, generate_synced_columns, generate_synced_rows
 
+logger = logging.getLogger(__name__)
 
-DTABLE_SERVER_URL = task_manager.conf['dtable_server_url']
-DTABLE_PRIVATE_KEY = task_manager.conf['dtable_private_key']
-DTABLE_PROXY_SERVER_URL = task_manager.conf['dtable_proxy_server_url']
-ENABLE_DTABLE_SERVER_CLUSTER = task_manager.conf['dtable_proxy_server_url']
+# DTABLE_WEB_DIR
+dtable_web_dir = os.environ.get('DTABLE_WEB_DIR', '')
+if not dtable_web_dir:
+    logging.critical('dtable_web_dir is not set')
+    raise RuntimeError('dtable_web_dir is not set')
+if not os.path.exists(dtable_web_dir):
+    logging.critical('dtable_web_dir %s does not exist' % dtable_web_dir)
+    raise RuntimeError('dtable_web_dir does not exist.')
+
+sys.path.insert(0, dtable_web_dir)
+
+try:
+    import seahub.settings as seahub_settings
+    DTABLE_PRIVATE_KEY = getattr(seahub_settings, 'DTABLE_PRIVATE_KEY')
+    DTABLE_SERVER_URL = getattr(seahub_settings, 'DTABLE_SERVER_URL')
+    ENABLE_DTABLE_SERVER_CLUSTER = getattr(seahub_settings, 'ENABLE_DTABLE_SERVER_CLUSTER', False)
+    DTABLE_PROXY_SERVER_URL = getattr(seahub_settings, 'DTABLE_PROXY_SERVER_URL', '')
+    SESSION_COOKIE_NAME = getattr(seahub_settings, 'SESSION_COOKIE_NAME', 'sessionid')
+except ImportError as e:
+    logger.critical("Can not import dtable_web settings: %s." % e)
+    raise RuntimeError("Can not import dtable_web settings: %s" % e)
+
 dtable_server_url = DTABLE_PROXY_SERVER_URL if ENABLE_DTABLE_SERVER_CLUSTER else DTABLE_SERVER_URL
+
 
 SRC_ROWS_LIMIT = 50000
 
@@ -191,7 +212,6 @@ def transfer_column(src_column):
 def generate_synced_columns(src_columns, dst_columns=None):
     """
     generate synced columns
-
     return: to_be_updated_columns -> list or None, to_be_appended_columns -> list or None, error_msg -> str or None
     """
     transfered_columns = []
@@ -260,13 +280,183 @@ def generate_synced_rows(converted_rows, src_rows, src_columns, synced_columns, 
     return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
 
 
+def get_converted_cell_value(converted_cell_value, src_row, transfered_column, col):
+    col_key = col.get('key')
+    col_type = col.get('type')
+    if col_type in [
+        ColumnTypes.TEXT,
+        ColumnTypes.LONG_TEXT,
+        ColumnTypes.IMAGE,
+        ColumnTypes.FILE,
+        ColumnTypes.RATE,
+        ColumnTypes.NUMBER,
+        ColumnTypes.COLLABORATOR,
+        ColumnTypes.DURATION,
+        ColumnTypes.EMAIL,
+        ColumnTypes.DATE,
+        ColumnTypes.CHECKBOX,
+        ColumnTypes.AUTO_NUMBER,
+        ColumnTypes.CREATOR,
+        ColumnTypes.CTIME,
+        ColumnTypes.LAST_MODIFIER,
+        ColumnTypes.MTIME,
+        ColumnTypes.URL,
+        ColumnTypes.GEOLOCATION
+    ]:
+        return deepcopy(src_row.get(col_key))
+
+    elif col_type == ColumnTypes.SINGLE_SELECT:
+        if not isinstance(converted_cell_value, str):
+            return
+        return converted_cell_value
+
+    elif col_type == ColumnTypes.MULTIPLE_SELECT:
+        if not isinstance(converted_cell_value, list):
+            return
+        return converted_cell_value
+
+    elif col_type == ColumnTypes.LINK:
+        if not isinstance(converted_cell_value, list):
+            return
+        return ', '.join([str(v.get('display_value', '')) for v in converted_cell_value])
+
+    elif col_type == ColumnTypes.FORMULA:
+        result_type = col.get('data', {}).get('result_type')
+        if result_type == 'number':
+            re_number = r'(\-|\+)?\d+(\.\d+)?'
+            try:
+                match_obj = re.search(re_number, str(converted_cell_value))
+                if not match_obj:
+                    return
+                start, end = match_obj.span()
+                return float(str(converted_cell_value)[start: end])
+            except Exception as e:
+                logger.error('re search: %s in: %s error: %s', re_number, converted_cell_value, e)
+                return
+        elif result_type == 'date':
+            return converted_cell_value
+        elif result_type == 'bool':
+            if isinstance(converted_cell_value, bool):
+                return converted_cell_value
+            return str(converted_cell_value).upper() == 'TRUE'
+        elif result_type == 'string':
+            col_data = col.get('data', {})
+            options = col_data.get('options') if col_data else None
+            if options and isinstance(options, list):
+                options_dict = {option.get('id'): option.get('name', '') for option in options}
+                if isinstance(converted_cell_value, list):
+                    values = [options_dict.get(item, item) for item in converted_cell_value]
+                    return ', '.join(values)
+                else:
+                    return options_dict.get(converted_cell_value, converted_cell_value)
+            else:
+                if isinstance(converted_cell_value, list):
+                    return ', '.join(str(v) for v in converted_cell_value)
+                elif isinstance(converted_cell_value, dict):
+                    return ', '.join(str(converted_cell_value.get(v)) for v in converted_cell_value)
+                else:
+                    return converted_cell_value
+        else:
+            if isinstance(converted_cell_value, list):
+                return ', '.join(str(v) for v in converted_cell_value)
+            else:
+                return converted_cell_value
+
+    elif col_type == ColumnTypes.LINK_FORMULA:
+        result_type = col.get('data', {}).get('result_type')
+        if result_type == 'number':
+            re_number = r'(\-|\+)?\d+(\.\d+)?'
+            try:
+                match_obj = re.search(re_number, str(converted_cell_value))
+                if not match_obj:
+                    return
+                start, end = match_obj.span()
+                if '.' not in str(converted_cell_value)[start: end]:
+                    return int(str(converted_cell_value)[start: end])
+                else:
+                    return float(str(converted_cell_value)[start: end])
+            except Exception as e:
+                logger.error('re search: %s in: %s error: %s', re_number, converted_cell_value, e)
+                return
+        elif result_type == 'date':
+            return converted_cell_value
+        elif result_type == 'bool':
+            if isinstance(converted_cell_value, bool):
+                return converted_cell_value
+            return str(converted_cell_value).upper() == 'TRUE'
+        elif result_type == 'array':
+            transfered_type = transfered_column.get('type')
+            if not isinstance(converted_cell_value, list):
+                return
+            if transfered_type in [
+                ColumnTypes.TEXT,
+                ColumnTypes.RATE,
+                ColumnTypes.NUMBER,
+                ColumnTypes.DURATION,
+                ColumnTypes.EMAIL,
+                ColumnTypes.CHECKBOX,
+                ColumnTypes.AUTO_NUMBER,
+                ColumnTypes.CREATOR,
+                ColumnTypes.CTIME,
+                ColumnTypes.LAST_MODIFIER,
+                ColumnTypes.MTIME,
+                ColumnTypes.URL,
+                ColumnTypes.GEOLOCATION,
+                ColumnTypes.SINGLE_SELECT
+            ]:
+                if converted_cell_value:
+                    return converted_cell_value[0]
+            elif transfered_type == ColumnTypes.COLLABORATOR:
+                if converted_cell_value:
+                    if isinstance(converted_cell_value[0], list):
+                        return list(set(converted_cell_value[0]))
+                    else:
+                        return list(set(converted_cell_value))
+            elif transfered_type in [
+                ColumnTypes.IMAGE,
+                ColumnTypes.FILE
+            ]:
+                if converted_cell_value:
+                    if isinstance(converted_cell_value[0], list):
+                        return converted_cell_value[0]
+                    else:
+                        return converted_cell_value
+            elif transfered_type == ColumnTypes.LONG_TEXT:
+                if converted_cell_value:
+                    return converted_cell_value[0]
+            elif transfered_type == ColumnTypes.MULTIPLE_SELECT:
+                if converted_cell_value:
+                    if isinstance(converted_cell_value[0], list):
+                        return sorted(list(set(converted_cell_value[0])))
+                    else:
+                        return sorted(list(set(converted_cell_value)))
+            elif transfered_type == ColumnTypes.DATE:
+                if converted_cell_value:
+                    try:
+                        value = parser.isoparse(converted_cell_value[0])
+                    except:
+                        pass
+                    else:
+                        data_format = transfered_column.get('data', {}).get('format')
+                        if data_format == 'YYYY-MM-DD':
+                            return value.strftime('%Y-%m-%d')
+                        elif data_format == 'YYYY-MM-DD HH:mm':
+                            return value.strftime('%Y-%m-%d %H:%M')
+                        else:
+                            return value.strftime('%Y-%m-%d')
+        elif result_type == 'string':
+            if converted_cell_value:
+                return str(converted_cell_value)
+    return src_row.get(col_key)
+
+
 def generate_single_row(converted_row, src_row, src_columns, transfered_columns_dict, dst_row=None):
     """
-        generate new single row according to src column type
-        :param converted_row: {'_id': '', 'column_name_1': '', 'col_name_2'; ''} from dtable-db
-        :param src_columns: [{'key': 'column_key_1', 'name': 'column_name_1'}]
-        :param transfered_columns_dict: {'col_key_1': {'key': 'column_key_1', 'name': 'column_name_1'}}
-        :param dst_row: {'_id': '', 'column_key_1': '', 'col_key_2': ''}
+    generate new single row according to src column type
+    :param converted_row: {'_id': '', 'column_name_1': '', 'col_name_2'; ''} from dtable-db
+    :param src_columns: [{'key': 'column_key_1', 'name': 'column_name_1'}]
+    :param transfered_columns_dict: {'col_key_1': {'key': 'column_key_1', 'name': 'column_name_1'}}
+    :param dst_row: {'_id': '', 'column_key_1': '', 'col_key_2': ''}
     """
     dataset_row = {}
     op_type = 'update'
@@ -308,7 +498,6 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
 def import_or_sync(import_sync_context):
     """
     import or sync common dataset
-
     return: dst_table_id, error_msg -> str or None
     """
     # extract necessary assets
@@ -359,7 +548,7 @@ def import_or_sync(import_sync_context):
             archive_rows = res_json.get('rows', [])
             archive_metadata = res_json.get('metadata')
         except Exception as e:
-            dtable_io_logger.error('request src_dtable: %s params: %s view-rows error: %s', src_dtable_uuid, query_params, e)
+            logger.error('request src_dtable: %s params: %s view-rows error: %s', src_dtable_uuid, query_params, e)
             return None, 'request src_dtable: %s params: %s view-rows error: %s' % (src_dtable_uuid, query_params, e)
         if start == 0:
             ## generate columns from the columns(archive_metadata) returned from SQL query
@@ -393,11 +582,11 @@ def import_or_sync(import_sync_context):
         try:
             resp = requests.post(url, headers=dst_headers, json=data)
             if resp.status_code != 200:
-                dtable_io_logger.error('create new table error status code: %s, resp text: %s', resp.status_code, resp.text)
+                logger.error('create new table error status code: %s, resp text: %s', resp.status_code, resp.text)
                 return None, 'create new table error status code: %s, resp text: %s' % (resp.status_code, resp.text)
             dst_table_id = resp.json().get('_id')
         except Exception as e:
-            dtable_io_logger.error(e)
+            logger.error(e)
             return None, str(e)
     ## or maybe append/update columns
     else:
@@ -416,10 +605,10 @@ def import_or_sync(import_sync_context):
             try:
                 resp = requests.post(url, headers=dst_headers, json=data)
                 if resp.status_code != 200:
-                    dtable_io_logger.error('batch append columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
+                    logger.error('batch append columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
                     return None, 'batch append columns to dst dtable: %s, table: %s error status code: %s text: %s' % (dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
             except Exception as e:
-                dtable_io_logger.error('batch append columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
+                logger.error('batch append columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
                 return None, 'batch append columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
         ### batch update columns
         if to_be_updated_columns:
@@ -435,10 +624,10 @@ def import_or_sync(import_sync_context):
             try:
                 resp = requests.put(url, headers=dst_headers, json=data)
                 if resp.status_code != 200:
-                    dtable_io_logger.error('batch update columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
+                    logger.error('batch update columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
                     return None, 'batch update columns to dst dtable: %s, table: %s error status code: %s text: %s' % (dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
             except Exception as e:
-                dtable_io_logger.error('batch update columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
+                logger.error('batch update columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
                 return None, 'batch update columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
 
     ## update delete append rows step by step
@@ -460,10 +649,10 @@ def import_or_sync(import_sync_context):
         try:
             resp = requests.put(url, headers=dst_headers, json=data)
             if resp.status_code != 200:
-                dtable_io_logger.error('sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
+                logger.error('sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
                 return None, 'sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s' % (dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
         except Exception as e:
-            dtable_io_logger.error('sync dataset update rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
+            logger.error('sync dataset update rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
             return None, 'sync dataset update rows dst dtable: %s dst table: %s error: %s' % (dst_dtable_uuid, dst_table_name, e)
 
     ### delete rows
@@ -476,10 +665,10 @@ def import_or_sync(import_sync_context):
         try:
             resp = requests.delete(url, headers=dst_headers, json=data)
             if resp.status_code != 200:
-                dtable_io_logger.error('sync dataset delete rows dst dtable: %s dst table: %s error status code: %s, content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
+                logger.error('sync dataset delete rows dst dtable: %s dst table: %s error status code: %s, content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
                 return None, 'sync dataset delete rows dst dtable: %s dst table: %s error status code: %s, content: %s' % (dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
         except Exception as e:
-            dtable_io_logger.error('sync dataset delete rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
+            logger.error('sync dataset delete rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
             return None, 'sync dataset delete rows dst dtable: %s dst table: %s error: %s' % (dst_dtable_uuid, dst_table_name, e)
 
     ### append rows
@@ -493,217 +682,10 @@ def import_or_sync(import_sync_context):
         try:
             resp = requests.post(url, headers=dst_headers, json=data)
             if resp.status_code != 200:
-                dtable_io_logger.error('sync dataset append rows dst dtable: %s dst table: %s error status code: %s', dst_dtable_uuid, dst_table_name, resp.status_code)
+                logger.error('sync dataset append rows dst dtable: %s dst table: %s error status code: %s', dst_dtable_uuid, dst_table_name, resp.status_code)
                 return None, 'sync dataset append rows dst dtable: %s dst table: %s error status code: %s' % (dst_dtable_uuid, dst_table_name, resp.status_code)
         except Exception as e:
-            dtable_io_logger.error('sync dataset append rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
+            logger.error('sync dataset append rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
             return None, 'sync dataset append rows dst dtable: %s dst table: %s error: %s' % (dst_dtable_uuid, dst_table_name, e)
 
     return dst_table_id, None
-
-
-def sync_common_dataset(context, config):
-    """
-    sync common dataset to destination table
-
-    :param dst_dtable: destination dtable
-    :param src_dtable: source dtable
-    :param table_id: source table id
-    :param view_id: source view id
-    :param dst_table_id: destination table id
-
-    :return api_error or None
-    """
-    dst_headers = context['dst_headers']
-    src_table = context['src_table']
-    src_view = context['src_view']
-    src_columns = context['src_columns']
-    src_headers = context['src_headers']
-
-    dst_dtable_uuid = context['dst_dtable_uuid']
-    src_dtable_uuid = context['src_dtable_uuid']
-    dst_table_id = context['dst_table_id']
-
-    dataset_id = context.get('dataset_id')
-    src_version = context.get('src_version')
-
-    # get database version
-    try:
-        db_session = init_db_session_class(config)()
-    except Exception as e:
-        db_session = None
-        dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
-        return
-    sql = '''
-                SELECT id FROM dtable_common_dataset_sync 
-                WHERE dst_dtable_uuid=:dst_dtable_uuid AND dataset_id=:dataset_id AND dst_table_id=:dst_table_id 
-                AND src_version=:src_version
-            '''
-    try:
-        sync_dataset = db_session.execute(sql, {
-            'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
-            'dataset_id': dataset_id,
-            'dst_table_id': dst_table_id,
-            'src_version': src_version
-        })
-    except Exception as e:
-        dtable_io_logger.error('get src version error: %s', e)
-        return
-    finally:
-        db_session.close()
-
-    if list(sync_dataset):
-        return
-
-    # request dst_dtable
-    url = dtable_server_url.strip('/') + '/dtables/' + str(dst_dtable_uuid) + '?from=dtable_events'
-    try:
-        resp = requests.get(url, headers=dst_headers)
-        dst_dtable_json = resp.json()
-    except Exception as e:
-        dtable_io_logger.error('request dst dtable: %s error: %s', dst_dtable_uuid, e)
-        return
-
-    # check dst_table
-    dst_table = None
-    for table in dst_dtable_json.get('tables', []):
-        if table.get('_id') == dst_table_id:
-            dst_table = table
-            break
-    if not dst_table:
-        dtable_io_logger.error('Destination table: %s not found.' % dst_table_id)
-        return
-    dst_columns = dst_table.get('columns')
-    dst_rows = dst_table.get('rows')
-
-    try:
-        dst_table_id, error_msg = import_or_sync({
-            'dst_dtable_uuid': dst_dtable_uuid,
-            'src_dtable_uuid': src_dtable_uuid,
-            'src_rows': src_table.get('rows', []),
-            'src_columns': src_columns,
-            'src_table_name': src_table.get('name'),
-            'src_view_name': src_view.get('name'),
-            'src_headers': src_headers,
-            'dst_table_id': dst_table_id,
-            'dst_table_name': dst_table.get('name'),
-            'dst_headers': dst_headers,
-            'dst_rows': dst_rows,
-            'dst_columns': dst_columns
-        })
-        if error_msg:
-            dtable_io_logger.error(error_msg)
-            return
-    except Exception as e:
-        dtable_io_logger.exception(e)
-        dtable_io_logger.error('sync common dataset error: %s', e)
-        return
-
-    # get base's metadata
-    src_url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(src_dtable_uuid) + '/metadata/?from=dtable_events'
-    try:
-        dtable_metadata = requests.get(src_url, headers=src_headers)
-        src_metadata = dtable_metadata.json()
-    except Exception as e:
-        dtable_io_logger.error('get metadata error:  %s', e)
-        return None, 'get metadata error: %s' % (e,)
-
-    last_src_version = src_metadata.get('metadata', {}).get('version')
-
-    sql = '''
-        UPDATE dtable_common_dataset_sync SET
-        last_sync_time=:last_sync_time, src_version=:last_src_version
-        WHERE dataset_id=:dataset_id AND dst_dtable_uuid=:dst_dtable_uuid AND dst_table_id=:dst_table_id
-    '''
-    try:
-        db_session.execute(sql, {
-            'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
-            'dst_table_id': dst_table_id,
-            'last_sync_time': datetime.now(),
-            'dataset_id': dataset_id,
-            'last_src_version': last_src_version
-        })
-        db_session.commit()
-    except Exception as e:
-        dtable_io_logger.error('insert dtable common dataset sync error: %s', e)
-    finally:
-        db_session.close()
-
-
-def import_common_dataset(context, config):
-    """
-    import common dataset to destination table
-    """
-    dst_headers = context['dst_headers']
-    src_table = context['src_table']
-    src_columns = context['src_columns']
-    src_view = context['src_view']
-    src_headers = context['src_headers']
-
-    dst_dtable_uuid = context['dst_dtable_uuid']
-    src_dtable_uuid = context['src_dtable_uuid']
-    dst_table_name = context['dst_table_name']
-    lang = context.get('lang', 'en')
-
-    dataset_id = context.get('dataset_id')
-    creator = context.get('creator')
-
-    try:
-        dst_table_id, error_msg = import_or_sync({
-            'dst_dtable_uuid': dst_dtable_uuid,
-            'src_dtable_uuid': src_dtable_uuid,
-            'src_rows': src_table.get('rows', []),
-            'src_columns': src_columns,
-            'src_table_name': src_table.get('name'),
-            'src_view_name': src_view.get('name'),
-            'src_headers': src_headers,
-            'dst_table_name': dst_table_name,
-            'dst_headers': dst_headers,
-            'lang': lang
-        })
-        if error_msg:
-            dtable_io_logger.error(error_msg)
-            return
-    except Exception as e:
-        dtable_io_logger.exception(e)
-        dtable_io_logger.error('import common dataset error: %s', e)
-        return
-
-    try:
-        db_session = init_db_session_class(config)()
-    except Exception as e:
-        db_session = None
-        dtable_io_logger.error('create db session failed. ERROR: {}'.format(e))
-        return
-
-    # get base's metadata
-    url = dtable_server_url.rstrip('/') + '/api/v1/dtables/' + str(src_dtable_uuid) + '/metadata/?from=dtable_events'
-    try:
-        dtable_metadata = requests.get(url, headers=src_headers)
-        src_metadata = dtable_metadata.json()
-    except Exception as e:
-        dtable_io_logger.error('get metadata error:  %s', e)
-        return None, 'get metadata error: %s' % (e,)
-
-    last_src_version = src_metadata.get('metadata', {}).get('version')
-
-    sql = '''
-        INSERT INTO dtable_common_dataset_sync (`dst_dtable_uuid`, `dst_table_id`, `created_at`, `creator`, `last_sync_time`, `dataset_id`, `src_version`)
-        VALUES (:dst_dtable_uuid, :dst_table_id, :created_at, :creator, :last_sync_time, :dataset_id, :src_version)
-    '''
-
-    try:
-        db_session.execute(sql, {
-            'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
-            'dst_table_id': dst_table_id,
-            'created_at': datetime.now(),
-            'creator': creator,
-            'last_sync_time': datetime.now(),
-            'dataset_id': dataset_id,
-            'src_version': last_src_version
-        })
-        db_session.commit()
-    except Exception as e:
-        dtable_io_logger.error('insert dtable common dataset sync error: %s', e)
-    finally:
-        db_session.close()
