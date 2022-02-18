@@ -22,9 +22,6 @@ from django.utils.http import urlquote
 from seaserv import seafile_api
 
 from dtable_events.dtable_io.task_manager import task_manager
-from dtable_events.utils.constants import ColumnTypes
-from copy import deepcopy
-
 
 # this two prefix used in exported zip file
 FILE_URL_PREFIX = 'file://dtable-bundle/asset/files/'
@@ -805,7 +802,7 @@ def convert_db_rows(metadata, results):
                     item[column_name] = [s_map.get(s, s) for s in value]
                 elif column_type == 'date' and value:
                     try:
-                        date_value = datetime.datetime.fromisoformat(value)
+                        date_value = parser.isoparse(value)
                         date_format = column['data']['format']
                         if date_format == 'YYYY-MM-DD':
                             value = date_value.strftime('%Y-%m-%d')
