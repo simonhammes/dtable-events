@@ -206,7 +206,7 @@ class TaskManager(object):
         return task_id
 
     def add_import_common_dataset_task(self, context):
-        from dtable_events.dtable_io.sync_common_dataset import import_common_dataset
+        from dtable_events.dtable_io.import_sync_common_dataset import import_common_dataset
 
         task_id = str(int(time.time()*1000))
         task = (import_common_dataset, (context, self.config))
@@ -216,7 +216,7 @@ class TaskManager(object):
         return task_id
 
     def add_sync_common_dataset_task(self, context):
-        from dtable_events.dtable_io.sync_common_dataset import sync_common_dataset
+        from dtable_events.dtable_io.import_sync_common_dataset import sync_common_dataset
 
         task_id = str(int(time.time()*1000))
         task = (sync_common_dataset, (context, self.config))
