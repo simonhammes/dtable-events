@@ -177,7 +177,7 @@ def list_pending_common_dataset_syncs(db_session):
             WHERE is_sync_periodically=1 AND last_sync_time<:per_day_check_time
         '''
 
-    per_day_check_time = datetime.utcnow() - timedelta(hours=23)
+    per_day_check_time = datetime.now() - timedelta(hours=23)
     dataset_list = db_session.execute(sql, {
         'per_day_check_time': per_day_check_time,
     })
@@ -197,7 +197,7 @@ def update_sync_time_and_version(db_session, update_map):
           + src_version_sql + " END WHERE id IN :dataset_sync_id_list"
 
     dataset_sync_id_list = [dataset_sync_id for dataset_sync_id in update_map]
-    db_session.execute(sql, {'dataset_sync_id_list': dataset_sync_id_list, 'last_sync_time': datetime.utcnow()})
+    db_session.execute(sql, {'dataset_sync_id_list': dataset_sync_id_list, 'last_sync_time': datetime.now()})
     db_session.commit()
 
 
