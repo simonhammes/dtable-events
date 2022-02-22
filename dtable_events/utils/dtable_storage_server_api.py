@@ -4,6 +4,10 @@ import requests
 TIMEOUT = 60
 
 
+class StorageAPIError(Exception):
+    pass
+
+
 def uuid_str_to_36_chars(dtable_uuid):
     if len(dtable_uuid) == 32:
         return str(uuid.UUID(dtable_uuid))
@@ -13,12 +17,12 @@ def uuid_str_to_36_chars(dtable_uuid):
 
 def parse_response(response):
     if response.status_code >= 400:
-        raise ConnectionError(response.status_code, response.text)
+        raise StorageAPIError(response.status_code, response.text)
     else:
         if response.text:
-            return response.json()
+            return response.json()  # json data
         else:
-            return response.text
+            return response.text  # empty string ''
 
 
 class DTableStorageServerAPI(object):
@@ -40,7 +44,7 @@ class DTableStorageServerAPI(object):
         response = requests.get(url, timeout=TIMEOUT)
         try:
             data = parse_response(response)
-        except ConnectionError as e:
+        except StorageAPIError as e:
             if e.args[0] == 404:
                 return None
         return data
