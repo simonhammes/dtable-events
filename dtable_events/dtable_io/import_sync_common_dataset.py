@@ -133,7 +133,7 @@ def sync_common_dataset(context, config):
         db_session.execute(sql, {
             'dst_dtable_uuid': uuid_str_to_32_chars(dst_dtable_uuid),
             'dst_table_id': dst_table_id,
-            'last_sync_time': datetime.utcnow(),
+            'last_sync_time': datetime.now(),
             'dataset_id': dataset_id,
             'last_src_version': last_src_version
         })
@@ -212,7 +212,7 @@ def import_common_dataset(context, config):
             'dst_table_id': dst_table_id,
             'created_at': datetime.now(),
             'creator': creator,
-            'last_sync_time': datetime.utcnow(),
+            'last_sync_time': datetime.now(),
             'dataset_id': dataset_id,
             'src_version': last_src_version
         })
