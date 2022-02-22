@@ -15,7 +15,10 @@ def parse_response(response):
     if response.status_code >= 400:
         raise ConnectionError(response.status_code, response.text)
     else:
-        return response.text
+        if response.text:
+            return response.json()
+        else:
+            return response.text
 
 
 class DTableStorageServerAPI(object):
