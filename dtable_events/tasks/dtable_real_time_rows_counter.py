@@ -97,7 +97,7 @@ def count_rows_by_uuids(session, dtable_uuids):
                 for org_id in sub_org_ids:
                     if org_id in org_id_set:
                         continue
-                    # user who has no dtables deleted=False
+                    # org who has no dtables deleted=False
                     org_counts.append((org_id, 0, ':update_at'))
                 if org_counts:
                     update_sql = '''
