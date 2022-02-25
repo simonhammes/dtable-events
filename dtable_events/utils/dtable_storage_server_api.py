@@ -49,7 +49,7 @@ class DTableStorageServerAPI(object):
                 return None
         return data
 
-    def empty_dtable(self, dtable_uuid):
+    def create_empty_dtable(self, dtable_uuid):
         dtable_uuid = uuid_str_to_36_chars(dtable_uuid)
         url = self.server_url + '/dtables/' + dtable_uuid
         response = requests.put(url, timeout=TIMEOUT)
@@ -61,4 +61,15 @@ class DTableStorageServerAPI(object):
         url = self.server_url + '/dtables/' + dtable_uuid
         response = requests.put(url, json=json_string, timeout=TIMEOUT)
         data = parse_response(response)
+        return data
+
+    def delete_dtable(self, dtable_uuid):
+        dtable_uuid = uuid_str_to_36_chars(dtable_uuid)
+        url = self.server_url + '/dtables/' + dtable_uuid
+        response = requests.delete(url, timeout=TIMEOUT)
+        try:
+            data = parse_response(response)
+        except StorageAPIError as e:
+            if e.args[0] == 404:
+                return None
         return data
