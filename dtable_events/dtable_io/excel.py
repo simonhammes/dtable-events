@@ -855,7 +855,7 @@ def parse_formula_number(cell_data, src_format):
         number_format = gen_decimal_format(value) + '%'
     elif src_format == 'euro':
         value = cell_data[1:]
-        number_format = '[$EUR ]#,##' + gen_decimal_format(value)+'_-'
+        number_format = '"€"#,##' + gen_decimal_format(value)+'_-'
     elif src_format == 'dollar':
         value = cell_data[1:]
         number_format = '"$"#,##' + gen_decimal_format(value)+'_-'
