@@ -241,7 +241,7 @@ def generate_synced_columns(src_columns, dst_columns=None):
 def generate_synced_rows(converted_rows, src_rows, src_columns, synced_columns, dst_rows=None):
     """
     generate synced rows divided into `rows to be updated`, `rows to be appended` and `rows to be deleted`
-    return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
+    return: to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
     """
 
     converted_rows_dict = {row.get('_id'): row for row in converted_rows}
@@ -498,7 +498,11 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
 def import_or_sync(import_sync_context):
     """
     import or sync common dataset
-    return: dst_table_id, error_msg -> str or None
+    return: {
+        dst_table_id: destination table id,
+        error_msg: error msg,
+        task_status_code: return frontend status code, 40x 50x...
+    }
     """
     # extract necessary assets
     dst_dtable_uuid = import_sync_context.get('dst_dtable_uuid')
@@ -549,13 +553,21 @@ def import_or_sync(import_sync_context):
             archive_metadata = res_json.get('metadata')
         except Exception as e:
             logger.error('request src_dtable: %s params: %s view-rows error: %s', src_dtable_uuid, query_params, e)
-            return None, 'request src_dtable: %s params: %s view-rows error: %s' % (src_dtable_uuid, query_params, e)
+            return {
+                'dst_table_id': None,
+                'error_msg': 'fetch view rows error',
+                'task_status_code': 500
+            }
         if start == 0:
             ## generate columns from the columns(archive_metadata) returned from SQL query
             sync_columns = [col for col in archive_metadata if col['key'] in src_column_keys_set]
             to_be_updated_columns, to_be_appended_columns, error = generate_synced_columns(sync_columns, dst_columns=dst_columns)
             if error:
-                return None, error
+                return {
+                    'dst_table_id': None,
+                    'error_msg': str(error),  # generally, this error is caused by client
+                    'task_status_code': 400
+                }
         result_rows.extend(archive_rows)
         if not archive_rows or len(archive_rows) < limit or (start + limit) >= SRC_ROWS_LIMIT:
             break
@@ -583,11 +595,28 @@ def import_or_sync(import_sync_context):
             resp = requests.post(url, headers=dst_headers, json=data)
             if resp.status_code != 200:
                 logger.error('create new table error status code: %s, resp text: %s', resp.status_code, resp.text)
-                return None, 'create new table error status code: %s, resp text: %s' % (resp.status_code, resp.text)
+                error_msg = 'create table error'
+                status_code = 500
+                try:
+                    resp_json = resp.json()
+                    if resp_json.get('error_message'):
+                        error_msg = resp_json['error_message']
+                    status_code = resp.status_code
+                except:
+                    pass
+                return {
+                    'dst_table_id': None,
+                    'error_msg': error_msg,
+                    'task_status_code': status_code
+                }
             dst_table_id = resp.json().get('_id')
         except Exception as e:
             logger.error(e)
-            return None, str(e)
+            return {
+                'dst_table_id': None,
+                'error_msg': 'create table error',
+                'task_status_code': 500
+            }
     ## or maybe append/update columns
     else:
         ### batch append columns
@@ -606,10 +635,18 @@ def import_or_sync(import_sync_context):
                 resp = requests.post(url, headers=dst_headers, json=data)
                 if resp.status_code != 200:
                     logger.error('batch append columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
-                    return None, 'batch append columns to dst dtable: %s, table: %s error status code: %s text: %s' % (dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
+                    return {
+                        'dst_table_id': None,
+                        'error_msg': 'append columns error',
+                        'task_status_code': 500
+                    }
             except Exception as e:
                 logger.error('batch append columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
-                return None, 'batch append columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
+                return {
+                    'dst_table_id': None,
+                    'error_msg': 'append columns error',
+                    'task_status_code': 500
+                }
         ### batch update columns
         if to_be_updated_columns:
             url = dtable_server_url.strip('/') + '/api/v1/dtables/' + str(dst_dtable_uuid) + '/batch-update-columns/?from=dtable_events'
@@ -625,10 +662,18 @@ def import_or_sync(import_sync_context):
                 resp = requests.put(url, headers=dst_headers, json=data)
                 if resp.status_code != 200:
                     logger.error('batch update columns to dst dtable: %s, table: %s error status code: %s text: %s', dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
-                    return None, 'batch update columns to dst dtable: %s, table: %s error status code: %s text: %s' % (dst_dtable_uuid, dst_table_id, resp.status_code, resp.text)
+                    return {
+                        'dst_table_id': None,
+                        'error_msg': 'update columns error',
+                        'task_status_code': 500
+                    }
             except Exception as e:
                 logger.error('batch update columns to dst dtable: %s, table: %s error: %s', dst_dtable_uuid, dst_table_id, e)
-                return None, 'batch update columns to dst dtable: %s, table: %s error: %s' % (dst_dtable_uuid, dst_table_id, e)
+                return {
+                    'dst_table_id': None,
+                    'error_msg': 'update columns error',
+                    'task_status_code': 500
+                }
 
     ## update delete append rows step by step
     step = 1000
@@ -650,10 +695,18 @@ def import_or_sync(import_sync_context):
             resp = requests.put(url, headers=dst_headers, json=data)
             if resp.status_code != 200:
                 logger.error('sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
-                return None, 'sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s' % (dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
+                return {
+                    'dst_table_id': None,
+                    'error_msg': 'update rows error',
+                    'task_status_code': 500
+                }
         except Exception as e:
             logger.error('sync dataset update rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
-            return None, 'sync dataset update rows dst dtable: %s dst table: %s error: %s' % (dst_dtable_uuid, dst_table_name, e)
+            return {
+                'dst_table_id': None,
+                'error_msg': 'update rows error',
+                'task_status_code': 500
+            }
 
     ### delete rows
     url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-delete-rows/?from=dtable_events' % (str(dst_dtable_uuid),)
@@ -666,10 +719,18 @@ def import_or_sync(import_sync_context):
             resp = requests.delete(url, headers=dst_headers, json=data)
             if resp.status_code != 200:
                 logger.error('sync dataset delete rows dst dtable: %s dst table: %s error status code: %s, content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
-                return None, 'sync dataset delete rows dst dtable: %s dst table: %s error status code: %s, content: %s' % (dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
+                return {
+                    'dst_table_id': None,
+                    'error_msg': 'delete rows error',
+                    'task_status_code': 500
+                }
         except Exception as e:
             logger.error('sync dataset delete rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
-            return None, 'sync dataset delete rows dst dtable: %s dst table: %s error: %s' % (dst_dtable_uuid, dst_table_name, e)
+            return {
+                'dst_table_id': None,
+                'error_msg': 'delete rows error',
+                'task_status_code': 500
+            }
 
     ### append rows
     url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-append-rows/' % (str(dst_dtable_uuid),)
@@ -683,9 +744,21 @@ def import_or_sync(import_sync_context):
             resp = requests.post(url, headers=dst_headers, json=data)
             if resp.status_code != 200:
                 logger.error('sync dataset append rows dst dtable: %s dst table: %s error status code: %s', dst_dtable_uuid, dst_table_name, resp.status_code)
-                return None, 'sync dataset append rows dst dtable: %s dst table: %s error status code: %s' % (dst_dtable_uuid, dst_table_name, resp.status_code)
+                return {
+                    'dst_table_id': None,
+                    'error_msg': 'append rows error',
+                    'task_status_code': 500
+                }
         except Exception as e:
             logger.error('sync dataset append rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
-            return None, 'sync dataset append rows dst dtable: %s dst table: %s error: %s' % (dst_dtable_uuid, dst_table_name, e)
+            return {
+                'dst_table_id': None,
+                'error_msg': 'append rows error',
+                'task_status_code': 500
+            }
 
-    return dst_table_id, None
+    return {
+        'dst_table_id': dst_table_id,
+        'error_msg': None,
+        'task_status_code': 200
+    }
