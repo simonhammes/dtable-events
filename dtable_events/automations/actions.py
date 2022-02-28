@@ -58,7 +58,7 @@ CONDITION_PERIODICALLY_BY_CONDITION = 'run_periodically_by_condition'
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
 AUTO_RULE_TRIGGER_LIMIT_PER_MINUTE = 10
-AUTO_RULE_TRIGGER_TIMES_TIMEOUT = 60
+AUTO_RULE_TRIGGER_TIMES_PER_MINUTE_TIMEOUT = 60
 
 def get_third_party_account(session, account_id):
     account_query = session.query(BoundThirdPartyAccounts).filter(
@@ -1255,12 +1255,12 @@ class AutomationRule:
 
         trigger_times = redis_cache.get(self.cache_key)
         if not trigger_times:
-            redis_cache.set(self.cache_key, int(time.time()), timeout=AUTO_RULE_TRIGGER_TIMES_TIMEOUT)
+            redis_cache.set(self.cache_key, int(time.time()), timeout=AUTO_RULE_TRIGGER_TIMES_PER_MINUTE_TIMEOUT)
         else:
             trigger_times = trigger_times.split(',')
             trigger_times.append(str(int(time.time())))
             trigger_times = trigger_times[-AUTO_RULE_TRIGGER_LIMIT_PER_MINUTE:]
-            redis_cache.set(self.cache_key, ','.join([t for t in trigger_times]), timeout=AUTO_RULE_TRIGGER_TIMES_TIMEOUT)
+            redis_cache.set(self.cache_key, ','.join([t for t in trigger_times]), timeout=AUTO_RULE_TRIGGER_TIMES_PER_MINUTE_TIMEOUT)
 
     def set_invalid(self):
         try:
