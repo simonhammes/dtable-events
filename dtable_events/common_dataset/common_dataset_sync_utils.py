@@ -548,6 +548,22 @@ def import_or_sync(import_sync_context):
         }
         try:
             resp = requests.get(url, headers=src_headers, params=query_params)
+            if resp.status_code == 400:
+                try:
+                    res_json = resp.json()
+                except:
+                    return {
+                        'dst_table_id': None,
+                        'error_msg': 'fetch src view rows error',
+                        'task_status_code': 500
+                    }
+                else:
+                    return {
+                        'dst_table_id': None,
+                        'error_msg': 'fetch src view rows error',
+                        'error_type': res_json.get('error_type'),
+                        'task_status_code': 400
+                    }
             res_json = resp.json()
             archive_rows = res_json.get('rows', [])
             archive_metadata = res_json.get('metadata')

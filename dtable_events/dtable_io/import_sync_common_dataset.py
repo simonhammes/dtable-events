@@ -111,9 +111,9 @@ def sync_common_dataset(context, config):
         dtable_io_logger.error('sync common dataset error: %s', e)
         raise Exception(str(e))
     else:
-        if result and result.get('error_msg'):
-            dtable_io_logger.error(result['error_msg'])
-            error_msg = 'import_sync_common_dataset:%s' % json.dumps({'error_status_code': result.get('task_status_code', 500), 'error_msg': result['error_msg']})
+        if result and 'task_status_code' in result and result['task_status_code'] != 200:
+            dtable_io_logger.error(result)
+            error_msg = 'import_sync_common_dataset:%s' % json.dumps(result)
             raise Exception(error_msg)
 
     # get base's metadata
@@ -183,9 +183,9 @@ def import_common_dataset(context, config):
         dtable_io_logger.error('import common dataset error: %s', e)
         raise Exception(e)
     else:
-        if result and result.get('error_msg'):
+        if result and 'task_status_code' in result and result['task_status_code'] != 200:
             dtable_io_logger.error(result['error_msg'])
-            error_msg = 'import_sync_common_dataset:%s' % json.dumps({'error_status_code': result.get('task_status_code'), 'error_msg': result['error_msg']})
+            error_msg = 'import_sync_common_dataset:%s' % json.dumps(result)
             raise Exception(error_msg)
         dst_table_id = result.get('dst_table_id')
 
