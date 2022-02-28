@@ -1258,9 +1258,9 @@ class AutomationRule:
             redis_cache.set(self.cache_key, int(time.time()), timeout=AUTO_RULE_TRIGGER_TIMES_TIMEOUT)
         else:
             trigger_times = trigger_times.split(',')
-            trigger_times.append(int(time.time()))
+            trigger_times.append(str(int(time.time())))
             trigger_times = trigger_times[-AUTO_RULE_TRIGGER_LIMIT_PER_MINUTE:]
-            redis_cache.set(self.cache_key, ','.join([str(t) for t in trigger_times]), timeout=AUTO_RULE_TRIGGER_TIMES_TIMEOUT)
+            redis_cache.set(self.cache_key, ','.join([t for t in trigger_times]), timeout=AUTO_RULE_TRIGGER_TIMES_TIMEOUT)
 
     def set_invalid(self):
         try:
