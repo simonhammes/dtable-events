@@ -215,11 +215,14 @@ def prepare_asset_file_folder(username, repo_id, dtable_uuid, asset_dir_id):
         time.sleep(0.5)   # sleep 0.5 second
         try:
             progress = json.loads(seafile_api.query_zip_progress(token))
-        except Exception:
-            raise Exception
+        except Exception as e:
+            raise e
 
     asset_url = gen_dir_zip_download_url(token)
-    resp = requests.get(asset_url)
+    try:
+        resp = requests.get(asset_url)
+    except Exception as e:
+        raise e
     file_obj = io.BytesIO(resp.content)
     if is_zipfile(file_obj):
         with ZipFile(file_obj) as zp:
