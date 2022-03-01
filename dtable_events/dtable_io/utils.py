@@ -338,9 +338,10 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
         content = ''
     if not content:
         try:
-            seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
             if ENABLE_DTABLE_STORAGE_SERVER:
                 storage_api.create_empty_dtable(dtable_uuid)
+            else:
+                seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
         except Exception as e:
             raise e
         return
@@ -350,9 +351,10 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
         f.write(json.dumps(content_json))
 
     try:
-        seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
         if ENABLE_DTABLE_STORAGE_SERVER:
             storage_api.save_dtable(dtable_uuid, json.dumps(content_json))
+        else:
+            seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
     except Exception as e:
         raise e
     
