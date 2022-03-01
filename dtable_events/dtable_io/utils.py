@@ -120,36 +120,6 @@ def convert_dtable_export_file_and_image_url(dtable_content):
     return dtable_content
 
 
-def prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id):
-    """
-    used in export dtable
-    create dtable json file at /tmp/dtable-io/<dtable_uuid>/dtable_asset/content.json,
-    so that we can zip /tmp/dtable-io/<dtable_uuid>/dtable_asset
-
-    :param repo_id:            repo of this dtable
-    :param table_name:         name of dtable
-    :param dtable_file_dir_id: xxx.dtable's file dir id
-    :return:                   file stream
-    """
-    try:
-        token = seafile_api.get_fileserver_access_token(
-            repo_id, dtable_file_dir_id, 'download', '', use_onetime=False
-        )
-    except Exception as e:
-        raise e
-
-    json_url = gen_inner_file_get_url(token, table_name + '.dtable')
-    content_json = requests.get(json_url).content
-    if content_json:
-        dtable_content = convert_dtable_export_file_and_image_url(json.loads(content_json))
-    else:
-        dtable_content = ''
-    content_json = json.dumps(dtable_content).encode('utf-8')
-    path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_asset', 'content.json')
-
-    with open(path, 'wb') as f:
-       f.write(content_json)
-
 def prepare_dtable_json_from_memory(dtable_uuid, username):
     """
     Used in dtable file export in real-time from memory by request the api of dtable-server

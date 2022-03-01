@@ -9,7 +9,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 
-from dtable_events.dtable_io.utils import setup_logger, prepare_dtable_json, \
+from dtable_events.dtable_io.utils import setup_logger, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, \
     prepare_dtable_json_from_memory, update_page_design_static_image
