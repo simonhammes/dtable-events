@@ -520,8 +520,9 @@ def is_equal(v1, v2, column_type):
         files2 = [file['url'] for file in v2] if v2 else []
         return files1 == files2
     elif column_type == ColumnTypes.LONG_TEXT:
-        text = v1.get('text') if isinstance(v1, dict) else str(v1)
-        return text == v2
+        v1 = v1.get('text') if isinstance(v1, dict) else str(v1)
+        v2 = v2.get('text') if isinstance(v2, dict) else str(v2)
+        return v1 == v2
     elif column_type == ColumnTypes.MULTIPLE_SELECT:
         if v1 and v2:
             return sorted(v1) == sorted(v2)
@@ -732,9 +733,9 @@ def import_or_sync(import_sync_context):
     final_columns_dict = {col['key']: col for col in final_columns}
     ### update rows
     url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-update-rows/?from=dtable_events' % (str(dst_dtable_uuid),)
+    old_rows_dict = {row['_id']: row for row in dst_rows} if dst_rows else {}
     for i in range(0, len(to_be_updated_rows), step):
         updates = []
-        old_rows_dict = {row['_id']: row for row in dst_rows} if dst_rows else {}
         for row in to_be_updated_rows[i: i+step]:
             # check update current row or not
             row_id = row['_id']
