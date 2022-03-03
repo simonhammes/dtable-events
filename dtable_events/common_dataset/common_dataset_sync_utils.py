@@ -495,6 +495,42 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
     return dataset_row
 
 
+def is_equal(v1, v2, column_type):
+    if column_type in [
+        ColumnTypes.TEXT,
+        ColumnTypes.DATE,
+        ColumnTypes.CHECKBOX,
+        ColumnTypes.SINGLE_SELECT,
+        ColumnTypes.URL,
+        ColumnTypes.DURATION,
+        ColumnTypes.NUMBER,
+        ColumnTypes.CREATOR,
+        ColumnTypes.LAST_MODIFIER,
+        ColumnTypes.CTIME,
+        ColumnTypes.MTIME,
+        ColumnTypes.RATE,
+        ColumnTypes.COLLABORATOR,
+        ColumnTypes.EMAIL
+    ]:
+        return v1 == v2
+    elif column_type == ColumnTypes.IMAGE:
+        return v1 == v2
+    elif column_type == ColumnTypes.FILE:
+        files1 = [file['url'] for file in v1] if v1 else []
+        files2 = [file['url'] for file in v2] if v2 else []
+        return files1 == files2
+    elif column_type == ColumnTypes.LONG_TEXT:
+        text = v1.get('text') if isinstance(v1, dict) else str(v1)
+        return text == v2
+    elif column_type == ColumnTypes.MULTIPLE_SELECT:
+        if v1 and v2:
+            return sorted(v1) == sorted(v2)
+        elif (v1 and not v2) or (not v1 and v2):
+            return False
+    else:
+        return v1 == v2
+
+
 def import_or_sync(import_sync_context):
     """
     import or sync common dataset
@@ -693,36 +729,56 @@ def import_or_sync(import_sync_context):
 
     ## update delete append rows step by step
     step = 1000
+    final_columns_dict = {col['key']: col for col in final_columns}
     ### update rows
     url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-update-rows/?from=dtable_events' % (str(dst_dtable_uuid),)
     for i in range(0, len(to_be_updated_rows), step):
         updates = []
+        old_rows_dict = {row['_id']: row for row in dst_rows} if dst_rows else {}
         for row in to_be_updated_rows[i: i+step]:
-            updates.append({
-                'row_id': row['_id'],
-                'row': row
-            })
-        data = {
-            'table_name': dst_table_name,
-            'updates': updates,
-            'need_convert_back': False
-        }
-        try:
-            resp = requests.put(url, headers=dst_headers, json=data)
-            if resp.status_code != 200:
-                logger.error('sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
+            # check update current row or not
+            row_id = row['_id']
+            old_row = old_rows_dict[row_id]
+            update_row_data = {}
+            for key, value in row.items():
+                if key == '_id':
+                    continue
+                if key not in src_column_keys_set:
+                    continue
+                if key not in final_columns_dict:
+                    continue
+                if key not in old_row:
+                    update_row_data[key] = value
+                    continue
+                elif not is_equal(old_row[key], value, final_columns_dict[key]['type']):
+                    update_row_data[key] = value
+            if update_row_data:
+                updates.append({
+                    'row_id': row['_id'],
+                    'row': update_row_data
+                })
+        if updates:
+            data = {
+                'table_name': dst_table_name,
+                'updates': updates,
+                'need_convert_back': False
+            }
+            try:
+                resp = requests.put(url, headers=dst_headers, json=data)
+                if resp.status_code != 200:
+                    logger.error('sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
+                    return {
+                        'dst_table_id': None,
+                        'error_msg': 'update rows error',
+                        'task_status_code': 500
+                    }
+            except Exception as e:
+                logger.error('sync dataset update rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
                 return {
                     'dst_table_id': None,
                     'error_msg': 'update rows error',
                     'task_status_code': 500
                 }
-        except Exception as e:
-            logger.error('sync dataset update rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
-            return {
-                'dst_table_id': None,
-                'error_msg': 'update rows error',
-                'task_status_code': 500
-            }
 
     ### delete rows
     url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-delete-rows/?from=dtable_events' % (str(dst_dtable_uuid),)
