@@ -450,6 +450,71 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
     return src_row.get(col_key)
 
 
+def is_equal(v1, v2, column_type):
+    """
+    judge two values equal or not
+    different column types -- different judge method
+    """
+    if column_type in [
+        ColumnTypes.TEXT,
+        ColumnTypes.DATE,
+        ColumnTypes.SINGLE_SELECT,
+        ColumnTypes.URL,
+        ColumnTypes.CREATOR,
+        ColumnTypes.LAST_MODIFIER,
+        ColumnTypes.CTIME,
+        ColumnTypes.MTIME,
+        ColumnTypes.EMAIL
+    ]:
+        v1 = v1 if v1 else ''
+        v2 = v2 if v2 else ''
+        return v1 == v2
+    elif column_type == ColumnTypes.CHECKBOX:
+        v1 = True if v1 else False
+        v2 = True if v2 else False
+        return v1 == v2
+    elif column_type == ColumnTypes.DURATION:
+        v1 = v1 if v1 else 0
+        v2 = v2 if v2 else 0
+        return v1 == v2
+    elif column_type == ColumnTypes.NUMBER:
+        v1 = v1 if v1 else 0
+        v2 = v2 if v2 else 0
+        return v1 == v2
+    elif column_type == ColumnTypes.RATE:
+        v1 = v1 if v1 else 0
+        v2 = v2 if v2 else 0
+        return v1 == v2
+    elif column_type == ColumnTypes.COLLABORATOR:
+        return v1 == v2
+    elif column_type == ColumnTypes.IMAGE:
+        return v1 == v2
+    elif column_type == ColumnTypes.FILE:
+        files1 = [file['url'] for file in v1] if v1 else []
+        files2 = [file['url'] for file in v2] if v2 else []
+        return files1 == files2
+    elif column_type == ColumnTypes.LONG_TEXT:
+        if v1 is not None:
+            if isinstance(v1, dict):
+                v1 = v1['text']
+            else:
+                v1 = str(v1)
+        if v2 is not None:
+            if isinstance(v2, dict):
+                v2 = v2['text']
+            else:
+                v2 = str(v2)
+        return v1 == v2
+    elif column_type == ColumnTypes.MULTIPLE_SELECT:
+        if v1 is not None and isinstance(v1, list):
+            v1 = sorted(v1)
+        if v2 is not None and isinstance(v2, list):
+            v2 = sorted(v2)
+        return v1 == v2
+    else:
+        return v1 == v2
+
+
 def generate_single_row(converted_row, src_row, src_columns, transfered_columns_dict, dst_row=None):
     """
     generate new single row according to src column type
@@ -465,71 +530,20 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
     dst_row = deepcopy(dst_row) if dst_row else {'_id': src_row.get('_id')}
     for col in src_columns:
         col_key = col.get('key')
-        col_name = col.get('name')
-        col_type = col.get('type')
 
         converted_cell_value = converted_row.get(col_key)
         transfered_column = transfered_columns_dict.get(col_key)
+        if not transfered_column:
+            continue
 
         if op_type == 'update':
-            if col_type == ColumnTypes.MULTIPLE_SELECT:
-                src_cell_value = src_row.get(col_key)
-                dst_cell_value = dst_row.get(col_key)
-                if not src_cell_value:
-                    src_cell_value = []
-                if not dst_cell_value:
-                    dst_cell_value = []
-                src_cell_value = sorted(src_cell_value)
-                dst_cell_value = sorted(dst_cell_value)
-            elif col_type == ColumnTypes.SINGLE_SELECT:
-                src_cell_value = src_row.get(col_key, '')
-                dst_cell_value = dst_row.get(col_key, '')
-            else:
-                src_cell_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
-                dst_cell_value = dst_row.get(col_key)
-
-            dataset_row[col_key] = src_cell_value
+            converted_cell_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
+            if not is_equal(dst_row.get(col_key), converted_cell_value, transfered_column['type']):
+                dataset_row[col_key] = converted_cell_value
         else:
             dataset_row[col_key] = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
 
     return dataset_row
-
-
-def is_equal(v1, v2, column_type):
-    if column_type in [
-        ColumnTypes.TEXT,
-        ColumnTypes.DATE,
-        ColumnTypes.CHECKBOX,
-        ColumnTypes.SINGLE_SELECT,
-        ColumnTypes.URL,
-        ColumnTypes.DURATION,
-        ColumnTypes.NUMBER,
-        ColumnTypes.CREATOR,
-        ColumnTypes.LAST_MODIFIER,
-        ColumnTypes.CTIME,
-        ColumnTypes.MTIME,
-        ColumnTypes.RATE,
-        ColumnTypes.COLLABORATOR,
-        ColumnTypes.EMAIL
-    ]:
-        return v1 == v2
-    elif column_type == ColumnTypes.IMAGE:
-        return v1 == v2
-    elif column_type == ColumnTypes.FILE:
-        files1 = [file['url'] for file in v1] if v1 else []
-        files2 = [file['url'] for file in v2] if v2 else []
-        return files1 == files2
-    elif column_type == ColumnTypes.LONG_TEXT:
-        v1 = v1.get('text') if isinstance(v1, dict) else str(v1)
-        v2 = v2.get('text') if isinstance(v2, dict) else str(v2)
-        return v1 == v2
-    elif column_type == ColumnTypes.MULTIPLE_SELECT:
-        if v1 and v2:
-            return sorted(v1) == sorted(v2)
-        elif (v1 and not v2) or (not v1 and v2):
-            return False
-    else:
-        return v1 == v2
 
 
 def import_or_sync(import_sync_context):
@@ -730,56 +744,36 @@ def import_or_sync(import_sync_context):
 
     ## update delete append rows step by step
     step = 1000
-    final_columns_dict = {col['key']: col for col in final_columns}
     ### update rows
     url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-update-rows/?from=dtable_events' % (str(dst_dtable_uuid),)
-    old_rows_dict = {row['_id']: row for row in dst_rows} if dst_rows else {}
     for i in range(0, len(to_be_updated_rows), step):
         updates = []
         for row in to_be_updated_rows[i: i+step]:
-            # check update current row or not
-            row_id = row['_id']
-            old_row = old_rows_dict[row_id]
-            update_row_data = {}
-            for key, value in row.items():
-                if key == '_id':
-                    continue
-                if key not in src_column_keys_set:
-                    continue
-                if key not in final_columns_dict:
-                    continue
-                if key not in old_row:
-                    update_row_data[key] = value
-                    continue
-                elif not is_equal(old_row[key], value, final_columns_dict[key]['type']):
-                    update_row_data[key] = value
-            if update_row_data:
-                updates.append({
-                    'row_id': row['_id'],
-                    'row': update_row_data
-                })
-        if updates:
-            data = {
-                'table_name': dst_table_name,
-                'updates': updates,
-                'need_convert_back': False
-            }
-            try:
-                resp = requests.put(url, headers=dst_headers, json=data)
-                if resp.status_code != 200:
-                    logger.error('sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
-                    return {
-                        'dst_table_id': None,
-                        'error_msg': 'update rows error',
-                        'task_status_code': 500
-                    }
-            except Exception as e:
-                logger.error('sync dataset update rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
+            updates.append({
+                'row_id': row['_id'],
+                'row': row
+            })
+        data = {
+            'table_name': dst_table_name,
+            'updates': updates,
+            'need_convert_back': False
+        }
+        try:
+            resp = requests.put(url, headers=dst_headers, json=data)
+            if resp.status_code != 200:
+                logger.error('sync dataset update rows dst dtable: %s dst table: %s error status code: %s content: %s', dst_dtable_uuid, dst_table_name, resp.status_code, resp.text)
                 return {
                     'dst_table_id': None,
                     'error_msg': 'update rows error',
                     'task_status_code': 500
                 }
+        except Exception as e:
+            logger.error('sync dataset update rows dst dtable: %s dst table: %s error: %s', dst_dtable_uuid, dst_table_name, e)
+            return {
+                'dst_table_id': None,
+                'error_msg': 'update rows error',
+                'task_status_code': 500
+            }
 
     ### delete rows
     url = dtable_server_url.strip('/') + '/api/v1/dtables/%s/batch-delete-rows/?from=dtable_events' % (str(dst_dtable_uuid),)
