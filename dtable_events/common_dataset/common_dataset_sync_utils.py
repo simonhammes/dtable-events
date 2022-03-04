@@ -450,6 +450,71 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
     return src_row.get(col_key)
 
 
+def is_equal(v1, v2, column_type):
+    """
+    judge two values equal or not
+    different column types -- different judge method
+    """
+    if column_type in [
+        ColumnTypes.TEXT,
+        ColumnTypes.DATE,
+        ColumnTypes.SINGLE_SELECT,
+        ColumnTypes.URL,
+        ColumnTypes.CREATOR,
+        ColumnTypes.LAST_MODIFIER,
+        ColumnTypes.CTIME,
+        ColumnTypes.MTIME,
+        ColumnTypes.EMAIL
+    ]:
+        v1 = v1 if v1 else ''
+        v2 = v2 if v2 else ''
+        return v1 == v2
+    elif column_type == ColumnTypes.CHECKBOX:
+        v1 = True if v1 else False
+        v2 = True if v2 else False
+        return v1 == v2
+    elif column_type == ColumnTypes.DURATION:
+        v1 = v1 if v1 else 0
+        v2 = v2 if v2 else 0
+        return v1 == v2
+    elif column_type == ColumnTypes.NUMBER:
+        v1 = v1 if v1 else 0
+        v2 = v2 if v2 else 0
+        return v1 == v2
+    elif column_type == ColumnTypes.RATE:
+        v1 = v1 if v1 else 0
+        v2 = v2 if v2 else 0
+        return v1 == v2
+    elif column_type == ColumnTypes.COLLABORATOR:
+        return v1 == v2
+    elif column_type == ColumnTypes.IMAGE:
+        return v1 == v2
+    elif column_type == ColumnTypes.FILE:
+        files1 = [file['url'] for file in v1] if v1 else []
+        files2 = [file['url'] for file in v2] if v2 else []
+        return files1 == files2
+    elif column_type == ColumnTypes.LONG_TEXT:
+        if v1 is not None:
+            if isinstance(v1, dict):
+                v1 = v1['text']
+            else:
+                v1 = str(v1)
+        if v2 is not None:
+            if isinstance(v2, dict):
+                v2 = v2['text']
+            else:
+                v2 = str(v2)
+        return v1 == v2
+    elif column_type == ColumnTypes.MULTIPLE_SELECT:
+        if v1 is not None and isinstance(v1, list):
+            v1 = sorted(v1)
+        if v2 is not None and isinstance(v2, list):
+            v2 = sorted(v2)
+        return v1 == v2
+    else:
+        return v1 == v2
+
+
 def generate_single_row(converted_row, src_row, src_columns, transfered_columns_dict, dst_row=None):
     """
     generate new single row according to src column type
@@ -465,30 +530,16 @@ def generate_single_row(converted_row, src_row, src_columns, transfered_columns_
     dst_row = deepcopy(dst_row) if dst_row else {'_id': src_row.get('_id')}
     for col in src_columns:
         col_key = col.get('key')
-        col_name = col.get('name')
-        col_type = col.get('type')
 
         converted_cell_value = converted_row.get(col_key)
         transfered_column = transfered_columns_dict.get(col_key)
+        if not transfered_column:
+            continue
 
         if op_type == 'update':
-            if col_type == ColumnTypes.MULTIPLE_SELECT:
-                src_cell_value = src_row.get(col_key)
-                dst_cell_value = dst_row.get(col_key)
-                if not src_cell_value:
-                    src_cell_value = []
-                if not dst_cell_value:
-                    dst_cell_value = []
-                src_cell_value = sorted(src_cell_value)
-                dst_cell_value = sorted(dst_cell_value)
-            elif col_type == ColumnTypes.SINGLE_SELECT:
-                src_cell_value = src_row.get(col_key, '')
-                dst_cell_value = dst_row.get(col_key, '')
-            else:
-                src_cell_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
-                dst_cell_value = dst_row.get(col_key)
-
-            dataset_row[col_key] = src_cell_value
+            converted_cell_value = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
+            if not is_equal(dst_row.get(col_key), converted_cell_value, transfered_column['type']):
+                dataset_row[col_key] = converted_cell_value
         else:
             dataset_row[col_key] = get_converted_cell_value(converted_cell_value, src_row, transfered_column, col)
 
