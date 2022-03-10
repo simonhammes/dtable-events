@@ -455,64 +455,63 @@ def is_equal(v1, v2, column_type):
     judge two values equal or not
     different column types -- different judge method
     """
-    if column_type in [
-        ColumnTypes.TEXT,
-        ColumnTypes.DATE,
-        ColumnTypes.SINGLE_SELECT,
-        ColumnTypes.URL,
-        ColumnTypes.CREATOR,
-        ColumnTypes.LAST_MODIFIER,
-        ColumnTypes.CTIME,
-        ColumnTypes.MTIME,
-        ColumnTypes.EMAIL
-    ]:
-        v1 = v1 if v1 else ''
-        v2 = v2 if v2 else ''
-        return v1 == v2
-    elif column_type == ColumnTypes.CHECKBOX:
-        v1 = True if v1 else False
-        v2 = True if v2 else False
-        return v1 == v2
-    elif column_type == ColumnTypes.DURATION:
-        v1 = v1 if v1 else 0
-        v2 = v2 if v2 else 0
-        return v1 == v2
-    elif column_type == ColumnTypes.NUMBER:
-        v1 = v1 if v1 else 0
-        v2 = v2 if v2 else 0
-        return v1 == v2
-    elif column_type == ColumnTypes.RATE:
-        v1 = v1 if v1 else 0
-        v2 = v2 if v2 else 0
-        return v1 == v2
-    elif column_type == ColumnTypes.COLLABORATOR:
-        return v1 == v2
-    elif column_type == ColumnTypes.IMAGE:
-        return v1 == v2
-    elif column_type == ColumnTypes.FILE:
-        files1 = [file['url'] for file in v1] if v1 else []
-        files2 = [file['url'] for file in v2] if v2 else []
-        return files1 == files2
-    elif column_type == ColumnTypes.LONG_TEXT:
-        if v1 is not None:
-            if isinstance(v1, dict):
-                v1 = v1['text']
-            else:
-                v1 = str(v1)
-        if v2 is not None:
-            if isinstance(v2, dict):
-                v2 = v2['text']
-            else:
-                v2 = str(v2)
-        return v1 == v2
-    elif column_type == ColumnTypes.MULTIPLE_SELECT:
-        if v1 is not None and isinstance(v1, list):
-            v1 = sorted(v1)
-        if v2 is not None and isinstance(v2, list):
-            v2 = sorted(v2)
-        return v1 == v2
-    else:
-        return v1 == v2
+    try:
+        if column_type in [
+            ColumnTypes.TEXT,
+            ColumnTypes.DATE,
+            ColumnTypes.SINGLE_SELECT,
+            ColumnTypes.URL,
+            ColumnTypes.CREATOR,
+            ColumnTypes.LAST_MODIFIER,
+            ColumnTypes.CTIME,
+            ColumnTypes.MTIME,
+            ColumnTypes.EMAIL
+        ]:
+            v1 = v1 if v1 else ''
+            v2 = v2 if v2 else ''
+            return v1 == v2
+        elif column_type == ColumnTypes.CHECKBOX:
+            v1 = True if v1 else False
+            v2 = True if v2 else False
+            return v1 == v2
+        elif column_type == ColumnTypes.DURATION:
+            return v1 == v2
+        elif column_type == ColumnTypes.NUMBER:
+            return v1 == v2
+        elif column_type == ColumnTypes.RATE:
+            return v1 == v2
+        elif column_type == ColumnTypes.COLLABORATOR:
+            return v1 == v2
+        elif column_type == ColumnTypes.IMAGE:
+            return v1 == v2
+        elif column_type == ColumnTypes.FILE:
+            files1 = [file['url'] for file in v1] if v1 else []
+            files2 = [file['url'] for file in v2] if v2 else []
+            return files1 == files2
+        elif column_type == ColumnTypes.LONG_TEXT:
+            if v1 is not None:
+                if isinstance(v1, dict):
+                    v1 = v1['text']
+                else:
+                    v1 = str(v1)
+            if v2 is not None:
+                if isinstance(v2, dict):
+                    v2 = v2['text']
+                else:
+                    v2 = str(v2)
+            return v1 == v2
+        elif column_type == ColumnTypes.MULTIPLE_SELECT:
+            if v1 is not None and isinstance(v1, list):
+                v1 = sorted(v1)
+            if v2 is not None and isinstance(v2, list):
+                v2 = sorted(v2)
+            return v1 == v2
+        else:
+            return v1 == v2
+    except Exception as e:
+        logger.exception(e)
+        logger.error('sync common dataset value v1: %s, v2: %s type: %s error: %s', v1, v2, column_type, e)
+        return False
 
 
 def generate_single_row(converted_row, src_row, src_columns, transfered_columns_dict, dst_row=None):
