@@ -842,6 +842,7 @@ def parse_multiple_select_formula(cell_data):
 
 
 def parse_formula_number(cell_data, src_format):
+    cell_data = str(cell_data)
     value = cell_data
     number_format = '0'
     if src_format == 'number':
