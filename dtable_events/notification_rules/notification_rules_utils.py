@@ -425,13 +425,16 @@ def trigger_notification_rule(rule, message_table_id, row, converted_row, dtable
         if users_column_key:
             dtable_metadata = _get_dtable_metadata(dtable_uuid)
             user_column = _get_column_by_key(dtable_metadata, table_id, users_column_key)
-            users_column_name = user_column.get('name')
-            users_from_column = converted_row.get(users_column_name, [])
-            if not users_from_column:
-                users_from_column = []
-            if not isinstance(users_from_column, list):
-                users_from_column = [users_from_column, ]
-            users = list(set(users + users_from_column))
+            if user_column:
+                users_column_name = user_column.get('name')
+                users_from_column = converted_row.get(users_column_name, [])
+                if not users_from_column:
+                    users_from_column = []
+                if not isinstance(users_from_column, list):
+                    users_from_column = [users_from_column, ]
+                users = list(set(users + users_from_column))
+            else:
+                logger.warning('notification rule: %s notify user column: %s invalid', rule_id, users_column_key)
 
         for user in users:
             if not is_valid_email(user):

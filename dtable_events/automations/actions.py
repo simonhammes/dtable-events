@@ -462,13 +462,16 @@ class NotifyAction(BaseAction):
         users = self.users
         if self.users_column_key:
             user_column = self.get_user_column_by_key()
-            users_column_name = user_column.get('name')
-            users_from_column = row.get(users_column_name, [])
-            if not users_from_column:
-                users_from_column = []
-            if not isinstance(users_from_column, list):
-                users_from_column = [users_from_column, ]
-            users = list(set(self.users + users_from_column))
+            if user_column:
+                users_column_name = user_column.get('name')
+                users_from_column = row.get(users_column_name, [])
+                if not users_from_column:
+                    users_from_column = []
+                if not isinstance(users_from_column, list):
+                    users_from_column = [users_from_column, ]
+                users = list(set(self.users + users_from_column))
+            else:
+                logger.warning('automation rule: %s notify action user column: %s invalid', self.auto_rule.rule_id, self.users_column_key)
         for user in users:
             if not self.is_valid_username(user):
                 continue
