@@ -846,20 +846,20 @@ def parse_formula_number(cell_data, src_format):
     number_format = '0'
     if src_format == 'number':
         number_format = gen_decimal_format(cell_data)
-    elif src_format == 'percent':
+    elif src_format == 'percent' and isinstance(cell_data, str):
         value = cell_data[:-1]
         try:
             value = float(value) / 100
         except Exception as e:
             pass
         number_format = gen_decimal_format(value) + '%'
-    elif src_format == 'euro':
+    elif src_format == 'euro' and isinstance(cell_data, str):
         value = cell_data[1:]
         number_format = '"€"#,##' + gen_decimal_format(value)+'_-'
-    elif src_format == 'dollar':
+    elif src_format == 'dollar' and isinstance(cell_data, str):
         value = cell_data[1:]
         number_format = '"$"#,##' + gen_decimal_format(value)+'_-'
-    elif src_format == 'yuan':
+    elif src_format == 'yuan' and isinstance(cell_data, str):
         value = cell_data[1:]
         number_format = '"¥"#,##' + gen_decimal_format(value)+'_-'
     try:
