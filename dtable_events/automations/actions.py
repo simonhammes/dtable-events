@@ -11,6 +11,7 @@ import jwt
 import requests
 
 from dtable_events.automations.models import BoundThirdPartyAccounts
+from dtable_events.cache import redis_cache
 from dtable_events.dtable_io import send_wechat_msg, send_email_msg
 from dtable_events.notification_rules.notification_rules_utils import _fill_msg_blanks as fill_msg_blanks, \
     send_notification
@@ -55,6 +56,9 @@ CONDITION_PERIODICALLY = 'run_periodically'
 CONDITION_PERIODICALLY_BY_CONDITION = 'run_periodically_by_condition'
 
 MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
+
+AUTO_RULE_TRIGGER_LIMIT_PER_MINUTE = 10
+AUTO_RULE_TRIGGER_TIMES_PER_MINUTE_TIMEOUT = 60
 
 def get_third_party_account(session, account_id):
     account_query = session.query(BoundThirdPartyAccounts).filter(
@@ -992,6 +996,8 @@ class AutomationRule:
         self.can_run_python = None
         self.scripts_running_limit = None
 
+        self.cache_key = 'AUTOMATION_RULE:%s' % self.rule_id
+
         self.done_actions = False
         self._load_trigger_and_actions(raw_trigger, raw_actions)
 
@@ -1104,6 +1110,13 @@ class AutomationRule:
                 return False
 
         if self.run_condition == PER_UPDATE:
+            # automation rule triggered by human or code, perhaps triggered quite quickly
+            trigger_times = redis_cache.get(self.cache_key)
+            if not trigger_times:
+                return True
+            trigger_times = trigger_times.split(',')
+            if len(trigger_times) >= AUTO_RULE_TRIGGER_LIMIT_PER_MINUTE and time.time() - int(trigger_times[0]) < 60:
+                return False
             return True
 
         elif self.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
@@ -1233,7 +1246,7 @@ class AutomationRule:
             trigger_date = date(year=cur_year, month=cur_month, day=1)
             self.db_session.execute(sql, {
                 'rule_id': self.rule_id,
-                'trigger_time': datetime.utcnow(),
+                'trigger_time': datetime.now(),
                 'trigger_date': trigger_date,
                 'trigger_count': self.trigger_count + 1,
                 'username': self.creator,
@@ -1242,6 +1255,16 @@ class AutomationRule:
             self.db_session.commit()
         except Exception as e:
             logger.error('set rule: %s invalid error: %s', self.rule_id, e)
+
+        if self.run_condition == PER_UPDATE:
+            trigger_times = redis_cache.get(self.cache_key)
+            if not trigger_times:
+                redis_cache.set(self.cache_key, int(time.time()), timeout=AUTO_RULE_TRIGGER_TIMES_PER_MINUTE_TIMEOUT)
+            else:
+                trigger_times = trigger_times.split(',')
+                trigger_times.append(str(int(time.time())))
+                trigger_times = trigger_times[-AUTO_RULE_TRIGGER_LIMIT_PER_MINUTE:]
+                redis_cache.set(self.cache_key, ','.join([t for t in trigger_times]), timeout=AUTO_RULE_TRIGGER_TIMES_PER_MINUTE_TIMEOUT)
 
     def set_invalid(self):
         try:
