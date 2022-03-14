@@ -64,10 +64,12 @@ def get_third_party_account(session, account_id):
     account_query = session.query(BoundThirdPartyAccounts).filter(
         BoundThirdPartyAccounts.id == account_id
     )
-    if account_query:
-        account = account_query.first()
+    account = account_query.first()
+    if account:
         return account.to_dict()
-    return None
+    else:
+        logger.warning("Third party account %s does not exists." % account_id)
+        return None
 
 def email2list(email_str, split_pattern='[,，]'):
     email_list = [value.strip() for value in re.split(split_pattern, email_str) if value.strip()]
@@ -534,6 +536,7 @@ class SendWechatAction(BaseAction):
         self.webhook_url = ''
         self.column_blanks = []
         self.col_name_dict = {}
+        self.account_exist = False
 
         self._init_notify(msg)
 
@@ -545,6 +548,7 @@ class SendWechatAction(BaseAction):
         account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
         if account_dict:
             self.webhook_url = account_dict.get('detail', {}).get('webhook_url', '')
+            self.account_exist = True
 
 
     def _fill_msg_blanks(self, row):
@@ -558,13 +562,13 @@ class SendWechatAction(BaseAction):
         if self.column_blanks:
             msg = self._fill_msg_blanks(row)
         try:
-            send_wechat_msg(self.webhook_url, msg, self.msg_type)
+            self.account_exist and send_wechat_msg(self.webhook_url, msg, self.msg_type)
         except Exception as e:
             logger.error('send wechat error: %s', e)
 
     def cron_notify(self):
         try:
-            send_wechat_msg(self.webhook_url, self.msg, self.msg_type)
+            self.account_exist and send_wechat_msg(self.webhook_url, self.msg, self.msg_type)
         except Exception as e:
             logger.error('send wechat error: %s', e)
 
@@ -595,6 +599,7 @@ class SendEmailAction(BaseAction):
         super().__init__(auto_rule, data)
         self.action_type = 'send_email'
         self.account_id = account_id
+        self.account_exist = False
 
         # send info
         self.send_info = send_info
@@ -640,6 +645,7 @@ class SendEmailAction(BaseAction):
         self._init_notify_copy_to()
         account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
         if account_dict:
+            self.account_exist = True
             account_detail = account_dict.get('detail', {})
 
             email_host = account_detail.get('email_host', '')
@@ -676,7 +682,7 @@ class SendEmailAction(BaseAction):
             'copy_to': [copy_to for copy_to in copy_to_list if self.is_valid_email(copy_to)],
         })
         try:
-            send_email_msg(
+            self.account_exist and send_email_msg(
                 auth_info=self.auth_info,
                 send_info=self.send_info,
                 username='automation-rules',  # username send by automation rules,
@@ -687,7 +693,7 @@ class SendEmailAction(BaseAction):
 
     def cron_notify(self):
         try:
-            send_email_msg(
+            self.account_exist and send_email_msg(
                 auth_info=self.auth_info,
                 send_info=self.send_info,
                 username='automation-rules',  # username send by automation rules,
