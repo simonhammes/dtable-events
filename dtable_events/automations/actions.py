@@ -64,10 +64,12 @@ def get_third_party_account(session, account_id):
     account_query = session.query(BoundThirdPartyAccounts).filter(
         BoundThirdPartyAccounts.id == account_id
     )
-    if account_query:
-        account = account_query.first()
+    account = account_query.first()
+    if account:
         return account.to_dict()
-    return None
+    else:
+        logger.warning("Third party account %s does not exists." % account_id)
+        return None
 
 def email2list(email_str, split_pattern='[,，]'):
     email_list = [value.strip() for value in re.split(split_pattern, email_str) if value.strip()]
@@ -539,13 +541,14 @@ class SendWechatAction(BaseAction):
 
 
     def _init_notify(self, msg):
+        account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
+        if not account_dict:
+            self.auto_rule.set_invalid()
+            return
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
-        account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
-        if account_dict:
-            self.webhook_url = account_dict.get('detail', {}).get('webhook_url', '')
-
+        self.webhook_url = account_dict.get('detail', {}).get('webhook_url', '')
 
     def _fill_msg_blanks(self, row):
         msg, column_blanks, col_name_dict = self.msg, self.column_blanks, self.col_name_dict
@@ -569,6 +572,8 @@ class SendWechatAction(BaseAction):
             logger.error('send wechat error: %s', e)
 
     def do_action(self):
+        if not self.auto_rule.current_valid:
+            return
         if self.auto_rule.run_condition == PER_UPDATE:
             self.per_update_notify()
             self.auto_rule.set_done_actions()
@@ -634,24 +639,28 @@ class SendEmailAction(BaseAction):
         self.column_blanks_copy_to = [blank for blank in blanks if blank in self.col_name_dict]
 
     def _init_notify(self):
+        account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
+        if not account_dict:
+            self.auto_rule.set_invalid()
+            return
+
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.view_columns}
         self._init_notify_msg()
         self._init_notify_send_to()
         self._init_notify_copy_to()
-        account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
-        if account_dict:
-            account_detail = account_dict.get('detail', {})
 
-            email_host = account_detail.get('email_host', '')
-            email_port = account_detail.get('email_port', 0)
-            host_user = account_detail.get('host_user', '')
-            password = account_detail.get('password', '')
-            self.auth_info = {
-                'email_host': email_host,
-                'email_port': int(email_port),
-                'host_user': host_user,
-                'password' : password
-            }
+        account_detail = account_dict.get('detail', {})
+
+        email_host = account_detail.get('email_host', '')
+        email_port = account_detail.get('email_port', 0)
+        host_user = account_detail.get('host_user', '')
+        password = account_detail.get('password', '')
+        self.auth_info = {
+            'email_host': email_host,
+            'email_port': int(email_port),
+            'host_user': host_user,
+            'password' : password
+        }
 
     def _fill_msg_blanks(self, row, text, blanks):
 
@@ -697,6 +706,8 @@ class SendEmailAction(BaseAction):
             logger.error('send email error: %s', e)
 
     def do_action(self):
+        if not self.auto_rule.current_valid:
+            return
         if self.auto_rule.run_condition == PER_UPDATE:
             self.per_update_notify()
             self.auto_rule.set_done_actions()
@@ -1001,6 +1012,8 @@ class AutomationRule:
         self.done_actions = False
         self._load_trigger_and_actions(raw_trigger, raw_actions)
 
+        self.current_valid = True
+
     def _load_trigger_and_actions(self, raw_trigger, raw_actions):
         self.trigger = json.loads(raw_trigger)
 
@@ -1146,6 +1159,7 @@ class AutomationRule:
     def do_actions(self, with_test=False):
         if (not self.can_do_actions()) and (not with_test):
             return
+
         for action_info in self.action_infos:
             try:
                 if action_info.get('type') == 'update_record':
@@ -1268,6 +1282,7 @@ class AutomationRule:
 
     def set_invalid(self):
         try:
+            self.current_valid = False
             set_invalid_sql = '''
                 UPDATE dtable_automation_rules SET is_valid=0 WHERE id=:rule_id
             '''
