@@ -789,13 +789,13 @@ def parse_geolocation(cell_data):
     elif 'lng' in cell_data:
         return str(cell_data['lng']) + ', ' + str(cell_data['lat'])
     elif 'province' in cell_data:
-        value = cell_data['province']
+        value = str(cell_data['province'])
         if 'city' in cell_data:
-            value = value + ' ' + cell_data['city']
+            value = '%s %s' % (value, cell_data['city'])
         if 'district' in cell_data:
-            value = value + ' ' + cell_data['district']
+            value = '%s %s' % (value, cell_data['district'])
         if 'detail' in cell_data:
-            value = value + ' ' + cell_data['detail']
+            value = '%s %s' % (value, cell_data['detail'])
         return value
     else:
         return str(cell_data)
@@ -991,20 +991,26 @@ def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2
     row_num = 0
 
     # write table head
+    column_error_log_exists = False
     for col_num in range(len(head)):
         c = ws.cell(row = row_num + 1, column = col_num + 1)
         try:
             c.value = head[col_num][0]
         except Exception as e:
-            dtable_io_logger.error('Error column in exporting excel: {}'.format(e))
+            if not column_error_log_exists:
+                dtable_io_logger.error('Error column in exporting excel: {}'.format(e))
+                column_error_log_exists = True
             c.value = EXPORT2EXCEL_DEFAULT_STRING
 
     # write table data
+    row_error_log_exists = False
     for row in data_list:
         row_num += 1
         try:
             handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname)
         except Exception as e:
-            dtable_io_logger.error('Error row in exporting excel: {}'.format(e))
+            if not row_error_log_exists:
+                dtable_io_logger.error('Error row in exporting excel: {}'.format(e))
+                row_error_log_exists = True
             continue
     return wb
