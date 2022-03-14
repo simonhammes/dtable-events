@@ -1008,8 +1008,6 @@ class AutomationRule:
         self.done_actions = False
         self._load_trigger_and_actions(raw_trigger, raw_actions)
 
-        self.is_valid = True
-
     def _load_trigger_and_actions(self, raw_trigger, raw_actions):
         self.trigger = json.loads(raw_trigger)
 
@@ -1155,8 +1153,6 @@ class AutomationRule:
     def do_actions(self, with_test=False):
         if (not self.can_do_actions()) and (not with_test):
             return
-        if not self.is_valid:
-            return
         for action_info in self.action_infos:
             try:
                 if action_info.get('type') == 'update_record':
@@ -1279,7 +1275,6 @@ class AutomationRule:
 
     def set_invalid(self):
         try:
-            self.is_valid = False
             set_invalid_sql = '''
                 UPDATE dtable_automation_rules SET is_valid=0 WHERE id=:rule_id
             '''
