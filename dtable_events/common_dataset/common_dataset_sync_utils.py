@@ -89,6 +89,45 @@ def fix_column_data(column):
     return column
 
 
+def transfer_link_formula_array_column(column, array_type, array_data):
+    if not array_type:
+        column['type'] = ColumnTypes.TEXT
+        column['data'] = None
+    elif array_type in [
+        ColumnTypes.NUMBER,
+        ColumnTypes.DATE,
+        ColumnTypes.SINGLE_SELECT,
+        ColumnTypes.MULTIPLE_SELECT,
+        ColumnTypes.DURATION,
+        ColumnTypes.GEOLOCATION,
+        ColumnTypes.RATE,
+    ]:
+        column['type'] = array_type
+        column['data'] = array_data
+        if column['type'] not in [ColumnTypes.SINGLE_SELECT, ColumnTypes.MULTIPLE_SELECT] and array_data is not None:
+            column = fix_column_data(column)
+    elif array_type in [
+        ColumnTypes.TEXT,
+        ColumnTypes.LONG_TEXT,
+        ColumnTypes.COLLABORATOR,
+        ColumnTypes.IMAGE,
+        ColumnTypes.FILE,
+        ColumnTypes.EMAIL,
+        ColumnTypes.URL,
+        ColumnTypes.CHECKBOX,
+        ColumnTypes.CREATOR,
+        ColumnTypes.CTIME,
+        ColumnTypes.LAST_MODIFIER,
+        ColumnTypes.MTIME,
+    ]:
+        column['type'] = array_type
+        column['data'] = None
+    else:
+        column['type'] = ColumnTypes.TEXT
+        column['data'] = None
+    return column
+
+
 def transfer_column(src_column):
     """
     transfer origin column to new target column
@@ -138,10 +177,12 @@ def transfer_column(src_column):
             column['type'] = ColumnTypes.TEXT
             column['data'] = None
     elif src_column.get('type') == ColumnTypes.LINK:
-        column['type'] = ColumnTypes.TEXT
-        column['data'] = None
+        data = src_column.get('data') or {}
+        array_type = data.get('array_type')
+        array_data = data.get('array_data')
+        column = transfer_link_formula_array_column(column, array_type, array_data)
     elif src_column.get('type') == ColumnTypes.LINK_FORMULA:
-        data = src_column.get('data', {})
+        data = src_column.get('data') or {}
         result_type = data.get('result_type', 'string')
         if result_type == 'number':
             column['type'] = ColumnTypes.NUMBER
@@ -168,41 +209,7 @@ def transfer_column(src_column):
         elif result_type == 'array':
             array_type = data.get('array_type')
             array_data = data.get('array_data')
-            if not array_type:
-                column['type'] = ColumnTypes.TEXT
-                column['data'] = None
-            elif array_type in [
-                ColumnTypes.NUMBER,
-                ColumnTypes.DATE,
-                ColumnTypes.SINGLE_SELECT,
-                ColumnTypes.MULTIPLE_SELECT,
-                ColumnTypes.DURATION,
-                ColumnTypes.GEOLOCATION,
-                ColumnTypes.RATE,
-            ]:
-                column['type'] = array_type
-                column['data'] = array_data
-                if column['type'] not in [ColumnTypes.SINGLE_SELECT, ColumnTypes.MULTIPLE_SELECT] and array_data is not None:
-                    column = fix_column_data(column)
-            elif array_type in [
-                ColumnTypes.TEXT,
-                ColumnTypes.LONG_TEXT,
-                ColumnTypes.COLLABORATOR,
-                ColumnTypes.IMAGE,
-                ColumnTypes.FILE,
-                ColumnTypes.EMAIL,
-                ColumnTypes.URL,
-                ColumnTypes.CHECKBOX,
-                ColumnTypes.CREATOR,
-                ColumnTypes.CTIME,
-                ColumnTypes.LAST_MODIFIER,
-                ColumnTypes.MTIME,
-            ]:
-                column['type'] = array_type
-                column['data'] = None
-            else:
-                column['type'] = ColumnTypes.TEXT
-                column['data'] = None
+            column = transfer_link_formula_array_column(column, array_type, array_data)
         else:
             column['type'] = ColumnTypes.TEXT
             column['data'] = None
@@ -280,6 +287,70 @@ def generate_synced_rows(converted_rows, src_rows, src_columns, synced_columns, 
     return to_be_updated_rows, to_be_appended_rows, to_be_deleted_row_ids
 
 
+def get_link_formula_converted_cell_value(transfered_column, converted_cell_value, src_col_type):
+    transfered_type = transfered_column.get('type')
+    if not isinstance(converted_cell_value, list):
+        return
+    if src_col_type == ColumnTypes.LINK:
+        converted_cell_value = [v['display_value'] for v in converted_cell_value]
+    if transfered_type in [
+        ColumnTypes.TEXT,
+        ColumnTypes.RATE,
+        ColumnTypes.NUMBER,
+        ColumnTypes.DURATION,
+        ColumnTypes.EMAIL,
+        ColumnTypes.CHECKBOX,
+        ColumnTypes.AUTO_NUMBER,
+        ColumnTypes.CREATOR,
+        ColumnTypes.CTIME,
+        ColumnTypes.LAST_MODIFIER,
+        ColumnTypes.MTIME,
+        ColumnTypes.URL,
+        ColumnTypes.GEOLOCATION,
+        ColumnTypes.SINGLE_SELECT
+    ]:
+        if converted_cell_value:
+            return converted_cell_value[0]
+    elif transfered_type == ColumnTypes.COLLABORATOR:
+        if converted_cell_value:
+            if isinstance(converted_cell_value[0], list):
+                return list(set(converted_cell_value[0]))
+            else:
+                return list(set(converted_cell_value))
+    elif transfered_type in [
+        ColumnTypes.IMAGE,
+        ColumnTypes.FILE
+    ]:
+        if converted_cell_value:
+            if isinstance(converted_cell_value[0], list):
+                return converted_cell_value[0]
+            else:
+                return converted_cell_value
+    elif transfered_type == ColumnTypes.LONG_TEXT:
+        if converted_cell_value:
+            return converted_cell_value[0]
+    elif transfered_type == ColumnTypes.MULTIPLE_SELECT:
+        if converted_cell_value:
+            if isinstance(converted_cell_value[0], list):
+                return sorted(list(set(converted_cell_value[0])))
+            else:
+                return sorted(list(set(converted_cell_value)))
+    elif transfered_type == ColumnTypes.DATE:
+        if converted_cell_value:
+            try:
+                value = parser.isoparse(converted_cell_value[0])
+            except:
+                pass
+            else:
+                data_format = transfered_column.get('data', {}).get('format')
+                if data_format == 'YYYY-MM-DD':
+                    return value.strftime('%Y-%m-%d')
+                elif data_format == 'YYYY-MM-DD HH:mm':
+                    return value.strftime('%Y-%m-%d %H:%M')
+                else:
+                    return value.strftime('%Y-%m-%d')
+
+
 def get_converted_cell_value(converted_cell_value, src_row, transfered_column, col):
     col_key = col.get('key')
     col_type = col.get('type')
@@ -316,10 +387,7 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
         return converted_cell_value
 
     elif col_type == ColumnTypes.LINK:
-        if not isinstance(converted_cell_value, list):
-            return
-        return ', '.join([str(v.get('display_value', '')) for v in converted_cell_value])
-
+        return get_link_formula_converted_cell_value(transfered_column, converted_cell_value, col_type)
     elif col_type == ColumnTypes.FORMULA:
         result_type = col.get('data', {}).get('result_type')
         if result_type == 'number':
@@ -385,65 +453,7 @@ def get_converted_cell_value(converted_cell_value, src_row, transfered_column, c
                 return converted_cell_value
             return str(converted_cell_value).upper() == 'TRUE'
         elif result_type == 'array':
-            transfered_type = transfered_column.get('type')
-            if not isinstance(converted_cell_value, list):
-                return
-            if transfered_type in [
-                ColumnTypes.TEXT,
-                ColumnTypes.RATE,
-                ColumnTypes.NUMBER,
-                ColumnTypes.DURATION,
-                ColumnTypes.EMAIL,
-                ColumnTypes.CHECKBOX,
-                ColumnTypes.AUTO_NUMBER,
-                ColumnTypes.CREATOR,
-                ColumnTypes.CTIME,
-                ColumnTypes.LAST_MODIFIER,
-                ColumnTypes.MTIME,
-                ColumnTypes.URL,
-                ColumnTypes.GEOLOCATION,
-                ColumnTypes.SINGLE_SELECT
-            ]:
-                if converted_cell_value:
-                    return converted_cell_value[0]
-            elif transfered_type == ColumnTypes.COLLABORATOR:
-                if converted_cell_value:
-                    if isinstance(converted_cell_value[0], list):
-                        return list(set(converted_cell_value[0]))
-                    else:
-                        return list(set(converted_cell_value))
-            elif transfered_type in [
-                ColumnTypes.IMAGE,
-                ColumnTypes.FILE
-            ]:
-                if converted_cell_value:
-                    if isinstance(converted_cell_value[0], list):
-                        return converted_cell_value[0]
-                    else:
-                        return converted_cell_value
-            elif transfered_type == ColumnTypes.LONG_TEXT:
-                if converted_cell_value:
-                    return converted_cell_value[0]
-            elif transfered_type == ColumnTypes.MULTIPLE_SELECT:
-                if converted_cell_value:
-                    if isinstance(converted_cell_value[0], list):
-                        return sorted(list(set(converted_cell_value[0])))
-                    else:
-                        return sorted(list(set(converted_cell_value)))
-            elif transfered_type == ColumnTypes.DATE:
-                if converted_cell_value:
-                    try:
-                        value = parser.isoparse(converted_cell_value[0])
-                    except:
-                        pass
-                    else:
-                        data_format = transfered_column.get('data', {}).get('format')
-                        if data_format == 'YYYY-MM-DD':
-                            return value.strftime('%Y-%m-%d')
-                        elif data_format == 'YYYY-MM-DD HH:mm':
-                            return value.strftime('%Y-%m-%d %H:%M')
-                        else:
-                            return value.strftime('%Y-%m-%d')
+            return get_link_formula_converted_cell_value(transfered_column, converted_cell_value, col_type)
         elif result_type == 'string':
             if converted_cell_value:
                 return str(converted_cell_value)
