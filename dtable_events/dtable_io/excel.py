@@ -271,10 +271,10 @@ def parse_excel_to_json(repo_id, dtable_name, custom=False):
     tables = []
     wb = load_workbook(excel_file, read_only=True)
     for sheet in wb:
-        dtable_io_logger.info(
-            'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
         if sheet.max_row is None or sheet.max_column is None:
             continue
+        dtable_io_logger.info(
+            'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
         try:
             sheet_rows = list(sheet.rows)
         except Exception as e:
