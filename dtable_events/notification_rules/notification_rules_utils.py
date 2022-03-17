@@ -262,7 +262,7 @@ def _get_geolocation_infos(cell_value_dict):
     if lat:
         info_list.append("lat: %s" % lat)
 
-    return " ".join(info_list)
+    return info_list and " ".join(info_list) or ''
 
 def _fill_msg_blanks(dtable_uuid, msg, column_blanks, col_name_dict, row, db_session, dtable_metadata=None):
     for blank in column_blanks:
