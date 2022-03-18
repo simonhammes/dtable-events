@@ -843,7 +843,7 @@ def get_related_nicknames_from_dtable(dtable_uuid, username, permission):
     return res.json().get('user_list')
 
 
-def get_nicknames_from_dtable(dtable_uuid, username, permission, user_id_list):
+def get_nicknames_from_dtable(username, permission, user_id_list):
     DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
     url = task_manager.conf['dtable_web_service_url'].strip('/') + '/api/v2.1/users-common-info/'
 
@@ -861,6 +861,6 @@ def get_nicknames_from_dtable(dtable_uuid, username, permission, user_id_list):
     res = requests.post(url, headers=headers, json=json_data)
 
     if res.status_code != 200:
-        raise ConnectionError('failed to get users %s %s' % (dtable_uuid, res.text))
+        raise ConnectionError('failed to get users %s' % res.text)
 
     return res.json().get('user_list')

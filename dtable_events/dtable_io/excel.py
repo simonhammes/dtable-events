@@ -913,19 +913,19 @@ def check_and_replace_sheet_name(sheet_name):
     return sheet_name
 
 
-def add_nickname_to_cell(dtable_uuid, username, permission, email_set, cell_list):
+def add_nickname_to_cell(username, permission, unknown_user_set, unknown_cell_list):
     from dtable_events.dtable_io.utils import get_nicknames_from_dtable
 
-    user_id_list = list(email_set)
+    unknown_user_id_list = list(unknown_user_set)
     step = 1000
     start = 0
     user_list = []
-    for i in range(0, len(user_id_list), step):
-        user_list += get_nicknames_from_dtable(dtable_uuid, username, permission, user_id_list[start: start+step])
+    for i in range(0, len(unknown_user_id_list), step):
+        user_list += get_nicknames_from_dtable(username, permission, unknown_user_id_list[start: start+step])
         start += step
 
     email2nickname = {nickname['email']: nickname['name'] for nickname in user_list}
-    for c in cell_list:
+    for c in unknown_cell_list:
         if c[2] == ColumnTypes.COLLABORATOR:
             nickname_list, collaborator_email_list = c[1]
             for email in collaborator_email_list:
@@ -935,7 +935,7 @@ def add_nickname_to_cell(dtable_uuid, username, permission, email_set, cell_list
             c[0].value = email2nickname.get(c[1], '')
 
 
-def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname, email_set, cell_list):
+def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname, unknown_user_set, unknown_cell_list):
     for col_num in range(len(row)):
         c = ws.cell(row = row_num + 1, column = col_num + 1)
         if row_num in grouped_row_num_map:
@@ -979,22 +979,22 @@ def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname, emai
             collaborator_email_list = []
             for user in row[col_num]:
                 if not email2nickname.get(user, ''):
-                    email_set.add(user)
+                    unknown_user_set.add(user)
                     collaborator_email_list.append(user)
                 else:
                     nickname_list.append(email2nickname.get(user, ''))
             if collaborator_email_list:
-                cell_list.append((c, (nickname_list, collaborator_email_list), head[col_num][1]))
+                unknown_cell_list.append((c, (nickname_list, collaborator_email_list), head[col_num][1]))
             c.value = ', '.join(nickname_list)
         elif head[col_num][1] == ColumnTypes.CREATOR:
             if not email2nickname.get(cell_data2str(row[col_num]), ''):
-                email_set.add(cell_data2str(row[col_num]))
-                cell_list.append((c, cell_data2str(row[col_num]), head[col_num][1]))
+                unknown_user_set.add(cell_data2str(row[col_num]))
+                unknown_cell_list.append((c, cell_data2str(row[col_num]), head[col_num][1]))
             c.value = email2nickname.get(cell_data2str(row[col_num]), '')
         elif head[col_num][1] == ColumnTypes.LAST_MODIFIER:
             if not email2nickname.get(cell_data2str(row[col_num]), ''):
-                email_set.add(cell_data2str(row[col_num]))
-                cell_list.append((c, cell_data2str(row[col_num]), head[col_num][1]))
+                unknown_user_set.add(cell_data2str(row[col_num]))
+                unknown_cell_list.append((c, cell_data2str(row[col_num]), head[col_num][1]))
             c.value = email2nickname.get(cell_data2str(row[col_num]), '')
         elif head[col_num][1] == ColumnTypes.LINK_FORMULA:
             c.value = parse_link_formula(row[col_num], email2nickname)
@@ -1007,10 +1007,10 @@ def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname, emai
         else:
             c.value = cell_data2str(row[col_num])
 
-    return email_set, cell_list
+    return unknown_user_set, unknown_cell_list
 
 
-def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2nickname, dtable_uuid, username, permission):
+def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2nickname, username, permission):
     """ write listed data into excel
         head is a list of tuples,
         e.g. head = [(col_name, col_type, col_date), (...), ...]
@@ -1041,20 +1041,20 @@ def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2
 
     # write table data
     row_error_log_exists = False
-    email_set = set()
-    cell_list = []
+    unknown_user_set = set()
+    unknown_cell_list = []
     for row in data_list:
         row_num += 1
         try:
-            email_set, cell_list = handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname, email_set, cell_list)
+            handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname, unknown_user_set, unknown_cell_list)
         except Exception as e:
             if not row_error_log_exists:
                 dtable_io_logger.error('Error row in exporting excel: {}'.format(e))
                 row_error_log_exists = True
             continue
-    if cell_list:
+    if unknown_cell_list:
         try:
-            add_nickname_to_cell(dtable_uuid, username, permission, email_set, cell_list)
+            add_nickname_to_cell(username, permission, unknown_user_set, unknown_cell_list)
         except Exception as e:
             dtable_io_logger.error('add nickname to cell error: {}'.format(e))
 

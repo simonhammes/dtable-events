@@ -596,7 +596,7 @@ def convert_view_to_execl(dtable_uuid, table_id, view_id, username, id_in_org, p
 
     try:
         wb = write_xls_with_type(table_name + ('_' + view_name if view_name else ''), head_list, data_list,
-                                 grouped_row_num_map, email2nickname, dtable_uuid, username, permission)
+                                 grouped_row_num_map, email2nickname, username, permission)
     except Exception as e:
         dtable_io_logger.error('head_list = {}\n{}'.format(head_list, e))
         return
