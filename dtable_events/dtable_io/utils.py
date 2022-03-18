@@ -845,11 +845,10 @@ def get_related_nicknames_from_dtable(dtable_uuid, username, permission):
 
 def get_nicknames_from_dtable(dtable_uuid, username, permission, user_id_list):
     DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
-    url = task_manager.conf['dtable_web_service_url'].strip('/') + '/api/v2.1/dtables/%s/users-common-info/' % dtable_uuid
+    url = task_manager.conf['dtable_web_service_url'].strip('/') + '/api/v2.1/users-common-info/'
 
     payload = {
         'exp': int(time.time()) + 60,
-        'dtable_uuid': dtable_uuid,
         'username': username,
         'permission': permission,
     }
