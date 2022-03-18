@@ -913,7 +913,7 @@ def check_and_replace_sheet_name(sheet_name):
     return sheet_name
 
 
-def add_nickname_to_cell(dtable_uuid, email_set, cell_list):
+def add_nickname_to_cell(dtable_uuid, username, permission, email_set, cell_list):
     from dtable_events.dtable_io.utils import get_nicknames_from_dtable
 
     user_id_list = list(email_set)
@@ -921,7 +921,7 @@ def add_nickname_to_cell(dtable_uuid, email_set, cell_list):
     start = 0
     user_list = []
     for i in range(0, len(user_id_list), step):
-        user_list += get_nicknames_from_dtable(dtable_uuid, user_id_list[start: start+step])
+        user_list += get_nicknames_from_dtable(dtable_uuid, username, permission, user_id_list[start: start+step])
         start += step
 
     email2nickname = {nickname['email']: nickname['name'] for nickname in user_list}
@@ -1054,7 +1054,7 @@ def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2
             continue
     if cell_list:
         try:
-            add_nickname_to_cell(dtable_uuid, email_set, cell_list)
+            add_nickname_to_cell(dtable_uuid, username, permission, email_set, cell_list)
         except Exception as e:
             dtable_io_logger.error('add nickname to cell error: {}'.format(e))
 
