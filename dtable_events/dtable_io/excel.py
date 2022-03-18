@@ -1007,8 +1007,6 @@ def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname, unkn
         else:
             c.value = cell_data2str(row[col_num])
 
-    return unknown_user_set, unknown_cell_list
-
 
 def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2nickname, username, permission):
     """ write listed data into excel
