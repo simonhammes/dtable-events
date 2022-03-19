@@ -843,14 +843,12 @@ def get_related_nicknames_from_dtable(dtable_uuid, username, permission):
     return res.json().get('user_list')
 
 
-def get_nicknames_from_dtable(username, permission, user_id_list):
+def get_nicknames_from_dtable(user_id_list):
     DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
     url = task_manager.conf['dtable_web_service_url'].strip('/') + '/api/v2.1/users-common-info/'
 
     payload = {
-        'exp': int(time.time()) + 60,
-        'username': username,
-        'permission': permission,
+        'exp': int(time.time()) + 60
     }
     access_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256')
     headers = {'Authorization': 'Token ' + access_token}

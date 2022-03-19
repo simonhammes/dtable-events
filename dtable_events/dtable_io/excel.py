@@ -913,7 +913,7 @@ def check_and_replace_sheet_name(sheet_name):
     return sheet_name
 
 
-def add_nickname_to_cell(username, permission, unknown_user_set, unknown_cell_list):
+def add_nickname_to_cell(unknown_user_set, unknown_cell_list):
     from dtable_events.dtable_io.utils import get_nicknames_from_dtable
 
     unknown_user_id_list = list(unknown_user_set)
@@ -921,7 +921,7 @@ def add_nickname_to_cell(username, permission, unknown_user_set, unknown_cell_li
     start = 0
     user_list = []
     for i in range(0, len(unknown_user_id_list), step):
-        user_list += get_nicknames_from_dtable(username, permission, unknown_user_id_list[start: start+step])
+        user_list += get_nicknames_from_dtable(unknown_user_id_list[start: start+step])
         start += step
 
     email2nickname = {nickname['email']: nickname['name'] for nickname in user_list}
@@ -1008,7 +1008,7 @@ def handle_row(row, row_num, head, ws, grouped_row_num_map, email2nickname, unkn
             c.value = cell_data2str(row[col_num])
 
 
-def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2nickname, username, permission):
+def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2nickname):
     """ write listed data into excel
         head is a list of tuples,
         e.g. head = [(col_name, col_type, col_date), (...), ...]
@@ -1052,7 +1052,7 @@ def write_xls_with_type(sheet_name, head, data_list, grouped_row_num_map, email2
             continue
     if unknown_cell_list:
         try:
-            add_nickname_to_cell(username, permission, unknown_user_set, unknown_cell_list)
+            add_nickname_to_cell(unknown_user_set, unknown_cell_list)
         except Exception as e:
             dtable_io_logger.error('add nickname to cell error: {}'.format(e))
 
