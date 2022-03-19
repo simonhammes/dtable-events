@@ -823,7 +823,7 @@ def convert_db_rows(metadata, results):
     return converted_results
 
 
-def get_nicknames_from_dtable(dtable_uuid, username, permission):
+def get_related_nicknames_from_dtable(dtable_uuid, username, permission):
     DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
     url = task_manager.conf['dtable_web_service_url'].strip('/') + '/api/v2.1/dtables/%s/related-users/' % dtable_uuid
 
@@ -840,4 +840,25 @@ def get_nicknames_from_dtable(dtable_uuid, username, permission):
 
     if res.status_code != 200:
         raise ConnectionError('failed to get related users %s %s' % (dtable_uuid, res.text))
+    return res.json().get('user_list')
+
+
+def get_nicknames_from_dtable(user_id_list):
+    DTABLE_PRIVATE_KEY = str(task_manager.conf['dtable_private_key'])
+    url = task_manager.conf['dtable_web_service_url'].strip('/') + '/api/v2.1/users-common-info/'
+
+    payload = {
+        'exp': int(time.time()) + 60
+    }
+    access_token = jwt.encode(payload, DTABLE_PRIVATE_KEY, algorithm='HS256')
+    headers = {'Authorization': 'Token ' + access_token}
+
+    json_data = {
+                'user_id_list': user_id_list,
+            }
+    res = requests.post(url, headers=headers, json=json_data)
+
+    if res.status_code != 200:
+        raise ConnectionError('failed to get users %s' % res.text)
+
     return res.json().get('user_list')
