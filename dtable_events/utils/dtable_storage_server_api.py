@@ -1,6 +1,12 @@
 import uuid
 import requests
 
+try:
+    from seahub.settings import DTABLE_STORAGE_SERVER_URL
+except ImportError as err:
+    DTABLE_STORAGE_SERVER_URL = ''
+
+
 TIMEOUT = 60
 
 
@@ -29,11 +35,11 @@ class DTableStorageServerAPI(object):
     """DTable Storage Server API
     """
 
-    def __init__(self, dtable_storage_server_url):
+    def __init__(self):
         """
         :param server_url: str
         """
-        self.server_url = dtable_storage_server_url.rstrip('/')
+        self.server_url = DTABLE_STORAGE_SERVER_URL.rstrip('/')
 
     def __str__(self):
         return '<DTable Storage Server API [ %s ]>' % self.server_url
@@ -73,3 +79,6 @@ class DTableStorageServerAPI(object):
             if e.args[0] == 404:
                 return None
         return data
+
+
+storage_api = DTableStorageServerAPI()

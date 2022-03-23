@@ -278,7 +278,7 @@ def convert_dtable_import_file_url(dtable_content, workspace_id, dtable_uuid):
     return dtable_content
 
 
-def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_name):
+def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, in_storage):
     """
     used to import dtable
     prepare dtable json file and post it at file server
@@ -289,13 +289,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     :param dtable_file_name:    xxx.dtable, the name of zip we imported
     :return:
     """
-    ENABLE_DTABLE_STORAGE_SERVER = task_manager.conf['enable_dtable_storage_server']
-    DTABLE_STORAGE_SERVER_URL = task_manager.conf['dtable_storage_server_url']
-    if ENABLE_DTABLE_STORAGE_SERVER:
-        from dtable_events.utils.dtable_storage_server_api import DTableStorageServerAPI
-        storage_api = DTableStorageServerAPI(DTABLE_STORAGE_SERVER_URL)
-    else:
-        storage_api = None
+    from dtable_events.utils.storage_backend import storage_backend
 
     # change url in content json, then save it at file server
     content_json_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/', 'content.json')
@@ -308,10 +302,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
         content = ''
     if not content:
         try:
-            if ENABLE_DTABLE_STORAGE_SERVER:
-                storage_api.create_empty_dtable(dtable_uuid)
-            else:
-                seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
+            storage_backend.create_empty_dtable(dtable_uuid, username, in_storage, repo_id, dtable_file_name)
         except Exception as e:
             raise e
         return
@@ -321,10 +312,7 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
         f.write(json.dumps(content_json))
 
     try:
-        if ENABLE_DTABLE_STORAGE_SERVER:
-            storage_api.save_dtable(dtable_uuid, json.dumps(content_json))
-        else:
-            seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
+        storage_backend.save_dtable(dtable_uuid, json.dumps(content_json), username, in_storage, repo_id, content_json_file_path, dtable_file_name)
     except Exception as e:
         raise e
     
