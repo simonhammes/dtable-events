@@ -59,6 +59,7 @@ def add_export_task():
 
 @app.route('/add-import-task', methods=['GET'])
 def add_import_task():
+    from dtable_events.utils import parse_bool
     is_valid, error = check_auth_token(request)
     if not is_valid:
         return make_response((error, 403))
@@ -75,7 +76,7 @@ def add_import_task():
     workspace_id = request.args.get('workspace_id')
     dtable_uuid = request.args.get('dtable_uuid')
     dtable_file_name = request.args.get('dtable_file_name')
-    in_storage = request.args.get('in_storage')
+    in_storage = parse_bool(request.args.get('in_storage'))
 
     try:
         task_id = task_manager.add_import_task(

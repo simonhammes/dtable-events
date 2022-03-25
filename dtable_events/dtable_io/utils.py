@@ -308,11 +308,9 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
         return
 
     content_json = convert_dtable_import_file_url(content, workspace_id, dtable_uuid)
-    with open(content_json_file_path, 'w') as f:
-        f.write(json.dumps(content_json))
 
     try:
-        storage_backend.save_dtable(dtable_uuid, json.dumps(content_json), username, in_storage, repo_id, content_json_file_path, dtable_file_name)
+        storage_backend.save_dtable(dtable_uuid, json.dumps(content_json), username, in_storage, repo_id, dtable_file_name)
     except Exception as e:
         raise e
     

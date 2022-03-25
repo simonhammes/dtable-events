@@ -7,7 +7,7 @@ except ImportError as err:
     DTABLE_STORAGE_SERVER_URL = ''
 
 
-TIMEOUT = 60
+TIMEOUT = 30
 
 
 class StorageAPIError(Exception):
