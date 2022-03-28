@@ -120,36 +120,6 @@ def convert_dtable_export_file_and_image_url(dtable_content):
     return dtable_content
 
 
-def prepare_dtable_json(repo_id, dtable_uuid, table_name, dtable_file_dir_id):
-    """
-    used in export dtable
-    create dtable json file at /tmp/dtable-io/<dtable_uuid>/dtable_asset/content.json,
-    so that we can zip /tmp/dtable-io/<dtable_uuid>/dtable_asset
-
-    :param repo_id:            repo of this dtable
-    :param table_name:         name of dtable
-    :param dtable_file_dir_id: xxx.dtable's file dir id
-    :return:                   file stream
-    """
-    try:
-        token = seafile_api.get_fileserver_access_token(
-            repo_id, dtable_file_dir_id, 'download', '', use_onetime=False
-        )
-    except Exception as e:
-        raise e
-
-    json_url = gen_inner_file_get_url(token, table_name + '.dtable')
-    content_json = requests.get(json_url).content
-    if content_json:
-        dtable_content = convert_dtable_export_file_and_image_url(json.loads(content_json))
-    else:
-        dtable_content = ''
-    content_json = json.dumps(dtable_content).encode('utf-8')
-    path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_asset', 'content.json')
-
-    with open(path, 'wb') as f:
-       f.write(content_json)
-
 def prepare_dtable_json_from_memory(dtable_uuid, username):
     """
     Used in dtable file export in real-time from memory by request the api of dtable-server
@@ -308,7 +278,7 @@ def convert_dtable_import_file_url(dtable_content, workspace_id, dtable_uuid):
     return dtable_content
 
 
-def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_name):
+def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_name, in_storage):
     """
     used to import dtable
     prepare dtable json file and post it at file server
@@ -319,6 +289,8 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     :param dtable_file_name:    xxx.dtable, the name of zip we imported
     :return:
     """
+    from dtable_events.utils.storage_backend import storage_backend
+
     # change url in content json, then save it at file server
     content_json_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'dtable_zip_extracted/', 'content.json')
     with open(content_json_file_path, 'r') as f:
@@ -329,15 +301,16 @@ def post_dtable_json(username, repo_id, workspace_id, dtable_uuid, dtable_file_n
     except:
         content = ''
     if not content:
-        seafile_api.post_empty_file(repo_id, '/', dtable_file_name, username)
+        try:
+            storage_backend.create_empty_dtable(dtable_uuid, username, in_storage, repo_id, dtable_file_name)
+        except Exception as e:
+            raise e
         return
 
     content_json = convert_dtable_import_file_url(content, workspace_id, dtable_uuid)
-    with open(content_json_file_path, 'w') as f:
-        f.write(json.dumps(content_json))
 
     try:
-        seafile_api.post_file(repo_id, content_json_file_path, '/', dtable_file_name, username)
+        storage_backend.save_dtable(dtable_uuid, json.dumps(content_json), username, in_storage, repo_id, dtable_file_name)
     except Exception as e:
         raise e
     
