@@ -602,7 +602,7 @@ def get_csv_file(repo_id, file_name):
         repo_id, obj_id, 'download', '', use_onetime=True
     )
     url = gen_inner_file_get_url(token, file_name + '.csv')
-    content = requests.get(url).content.decode()
+    content = requests.get(url).content.decode('utf-8-sig')
 
     file_size = sys.getsizeof(content)
     dtable_io_logger.info('csv file size: %d KB' % (file_size >> 10))
