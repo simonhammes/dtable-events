@@ -21,10 +21,15 @@ from dateutil import parser
 from django.utils.http import urlquote
 from seaserv import seafile_api
 
+from dtable_events.dtable_io.external_app import APP_USERS_COUMNS_TYPE_MAP, match_user_info, update_app_sync, \
+    get_row_ids_for_delete, get_app_users
 from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.utils import get_inner_dtable_server_url
 
 # this two prefix used in exported zip file
+from dtable_events.utils.constants import ColumnTypes
+
+
 FILE_URL_PREFIX = 'file://dtable-bundle/asset/files/'
 IMG_URL_PREFIX = 'file://dtable-bundle/asset/images/'
 EXCEL_DIR_PATH = '/tmp/excel/'
@@ -859,3 +864,88 @@ def get_nicknames_from_dtable(user_id_list):
         raise ConnectionError('failed to get users %s' % res.text)
 
     return res.json().get('user_list')
+
+def sync_app_users_to_table(dtable_uuid, app_id, table_name, table_id, username, db_session):
+    from dtable_events.utils.dtable_server_api import DTableServerAPI
+    api_url = get_inner_dtable_server_url()
+    base = DTableServerAPI(username, dtable_uuid, api_url)
+    user_list = get_app_users(db_session, app_id)
+    # handle the sync logic
+    metadata = base.get_metadata()
+
+    # handle table
+    tables = metadata.get('tables', [])
+    table = None
+    for t in tables:
+        if t.get('_id') == table_id:
+            table = t
+            break
+        if t.get('name') == table_name:
+            table = t
+            break
+
+
+    if not table:
+        new_columns = [
+            {'column_name': k, 'column_type': v} for k, v in APP_USERS_COUMNS_TYPE_MAP.items()
+        ]
+        table = base.add_table(table_name, columns = new_columns)
+    else:
+        table_columns = table.get('columns', [])
+        column_names = [col.get('name') for col in table_columns]
+
+        column_for_create = set(APP_USERS_COUMNS_TYPE_MAP.keys()).difference(set(column_names))
+
+        for col in column_for_create:
+            try:
+                base.insert_column(table['name'], col, APP_USERS_COUMNS_TYPE_MAP.get(col))
+            except:
+                continue
+
+    rows = base.list_rows(table['name'])
+    rows_name_id_map = {}
+    for row in rows:
+        row_user = row.get('User') and row.get('User')[0] or None
+        if not row_user:
+            continue
+        rows_name_id_map[row_user] = row
+
+    row_data_for_create = []
+    row_data_for_update = []
+    row_ids_for_delete = get_row_ids_for_delete(rows_name_id_map, user_list)
+    for user_info in user_list:
+        username = user_info.get('email')
+        matched, op, row_id = match_user_info(rows_name_id_map, username, user_info)
+        row_data = {
+                "Name": user_info.get('name'),
+                "User": [username, ],
+                "Role": user_info.get('role_name'),
+                "IsActive": True if user_info.get('is_active') else None,
+                "JoinedAt": user_info.get('created_at')
+            }
+        if matched:
+            continue
+        if op == 'create':
+            row_data_for_create.append(row_data)
+        elif op == 'update':
+            row_data_for_update.append({
+                "row_id": row_id,
+                "row": row_data
+            })
+
+
+    step = 1000
+    if row_data_for_create:
+        for i in range(0, len(row_data_for_create), step):
+            base.batch_append_rows(table['name'], row_data_for_create[i: i+step])
+
+    if row_data_for_update:
+        for i in range(0, len(row_data_for_update), step):
+            base.batch_update_rows(table['name'], row_data_for_update[i: i+step])
+
+    if row_ids_for_delete:
+        for i in range(0, len(row_ids_for_delete), step):
+            base.batch_delete_rows(table['name'], row_ids_for_delete[i: i+step])
+
+    if row_data_for_create or row_data_for_update or row_ids_for_delete:
+        update_app_sync(db_session, app_id, table['_id'])
