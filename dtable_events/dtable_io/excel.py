@@ -60,6 +60,8 @@ CHECKBOX_TUPLE = (
     ('on', 'off'),
     ('是', '否'),
     ('完成', '未完成'),
+    ('True', 'False'),
+    ('true', 'false'),
 )
 CHECKBOX_STRING_LIST = [string for item in CHECKBOX_TUPLE for string in item]
 CHECKBOX_TRUE_LIST = [item[0] for item in CHECKBOX_TUPLE]
@@ -267,7 +269,7 @@ def parse_excel(repo_id, dtable_name, custom=False):
     # parse
     excel_file = get_excel_file(repo_id, dtable_name)
     tables = []
-    wb = load_workbook(excel_file, read_only=True)
+    wb = load_workbook(excel_file, read_only=True, data_only=True)
     for sheet in wb:
         if sheet.max_row is None or sheet.max_column is None:
             continue
@@ -505,7 +507,7 @@ def parse_append_excel_csv_upload_file_to_json(repo_id, file_name, username, dta
         tables = parse_csv_file(repo_id, file_name, username, dtable_uuid, table_name)
     else:
         excel_file = get_excel_file(repo_id, file_name)
-        wb = load_workbook(excel_file, read_only=True)
+        wb = load_workbook(excel_file, read_only=True, data_only=True)
         sheet = wb.get_sheet_by_name(wb.sheetnames[0])
         columns = get_columns_from_dtable_server(username, dtable_uuid, table_name)
 
@@ -627,10 +629,10 @@ def get_update_row_data(excel_row, dtable_row, excel_col_name_to_type):
         return {'row_id': dtable_row.get('_id'), 'row': update_excel_row}
 
 
-def get_dtable_row_data(dtable_rows, key_columns):
+def get_dtable_row_data(dtable_rows, key_columns, excel_col_name_to_type):
     dtable_row_data = {}
     for row in dtable_rows:
-        key = str(hash('-'.join([str(get_cell_value(row, col)) for col in key_columns])))
+        key = str(hash('-'.join([str(get_cell_value(row, col, excel_col_name_to_type)) for col in key_columns])))
         if dtable_row_data.get(key):
             # only deal first row
             continue
@@ -663,8 +665,14 @@ def update_parsed_file_by_dtable_server(username, repo_id, dtable_uuid, file_nam
     update_append_excel_json_to_dtable_server(username, dtable_uuid, insert_rows, table_name)
 
 
-def get_cell_value(row, col):
+def get_cell_value(row, col, excel_col_name_to_type):
     cell_value = row.get(col)
+    col_type = excel_col_name_to_type.get(col)
+    if col_type == 'number':
+        if isinstance(cell_value, float):
+            cell_value = str(cell_value).rstrip('0')
+            cell_value = int(cell_value.rstrip('.')) if cell_value.endswith('.') else float(cell_value)
+
     cell_value = '' if cell_value is None else cell_value
     return cell_value
 
@@ -677,11 +685,11 @@ def get_insert_update_rows(dtable_col_name_to_type, excel_rows, dtable_rows, key
     excel_col_name_to_type = {col_name: dtable_col_name_to_type.get(col_name) for col_name in excel_rows[0].keys()
                              if dtable_col_name_to_type.get(col_name) in UPDATE_TYPE_LIST}
 
-    dtable_row_data = get_dtable_row_data(dtable_rows, key_columns)
+    dtable_row_data = get_dtable_row_data(dtable_rows, key_columns, excel_col_name_to_type)
     keys_of_excel_rows = {}
     for excel_row in excel_rows:
         excel_row = {col_name: excel_row.get(col_name) for col_name in excel_row if excel_col_name_to_type.get(col_name)}
-        key = str(hash('-'.join([str(get_cell_value(excel_row, col)) for col in key_columns])))
+        key = str(hash('-'.join([str(get_cell_value(excel_row, col, excel_col_name_to_type)) for col in key_columns])))
         if keys_of_excel_rows.get(key):
             continue
         keys_of_excel_rows[key] = True
@@ -704,7 +712,7 @@ def parse_update_excel_file(repo_id, file_name, username, dtable_uuid, table_nam
     # parse
     excel_file = get_excel_file(repo_id, file_name)
     tables = []
-    wb = load_workbook(excel_file, read_only=True)
+    wb = load_workbook(excel_file, read_only=True, data_only=True)
     sheet = wb.get_sheet_by_name(wb.sheetnames[0])
     dtable_io_logger.info(
         'parse sheet: %s, rows: %d, columns: %d' % (sheet.title, sheet.max_row, sheet.max_column))
@@ -893,7 +901,7 @@ def parse_row(column_type, cell_value):
         return None
     elif column_type == 'image':
         return parse_image(cell_value)
-    elif column_type == 'single_select':
+    elif column_type == 'single-select':
         return str(cell_value)
     elif column_type == 'link':
         return None
@@ -901,8 +909,8 @@ def parse_row(column_type, cell_value):
         return None
     elif column_type == 'geolocation':
         return None
-    elif column_type in ('collaborator', 'creator', 'last_modifier', 'ctime', 'mtime', 'formula',
-                         'link_formula', 'auto_number'):
+    elif column_type in ('collaborator', 'creator', 'last-modifier', 'ctime', 'mtime', 'formula',
+                         'link-formula', 'auto-number'):
         return None
     else:
         return str(cell_value)
