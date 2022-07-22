@@ -7,7 +7,6 @@ import logging
 from logging import handlers
 import io
 import uuid
-import multiprocessing
 import datetime
 import random
 import string
@@ -17,6 +16,7 @@ import re
 from io import BytesIO
 from zipfile import ZipFile, is_zipfile
 from dateutil import parser
+from uuid import UUID
 
 from django.utils.http import urlquote
 from seaserv import seafile_api
@@ -93,40 +93,44 @@ def gen_dir_zip_download_url(token):
     return '%s/zip/%s' % (INNER_FILE_SERVER_ROOT, token)
 
 
-def convert_dtable_export_file_and_image_url(dtable_content):
+def convert_dtable_export_file_and_image_url(workspace_id, dtable_uuid, dtable_content):
     """ notice that this function receive a python dict and return a python dict
         json related operations are excluded
     """
+    from dtable_events.dtable_io import dtable_io_logger
 
     tables = dtable_content.get('tables', [])
+    old_file_part_path = '/workspace/%s/asset/%s/' % (workspace_id, str(UUID(dtable_uuid)))
+    dtable_io_logger.debug('old_file_part_path: %s', old_file_part_path)
     for table in tables:
         rows = table.get('rows', [])
-        long_text_cols = {col['key'] for col in table.get('columns', []) if col['type'] == 'long-text'}
+        dtable_io_logger.debug('table: %s rows: %s', table['_id'], len(rows))
+        cols_dict = {col['key']: col for col in table.get('columns', [])}
         for row in rows:
             for k, v in row.items():
-                if isinstance(v, list):
+                if k not in cols_dict:
+                    continue
+                col = cols_dict[k]
+                if col['type'] == ColumnTypes.IMAGE and isinstance(v, list) and v:
                     for idx, item in enumerate(v):
-                        # case1: image
-                        if isinstance(item, str) and 'http' in item and 'images' in item:
+                        if isinstance(item, str) and old_file_part_path in item:
                             img_name = '/'.join(item.split('/')[-2:])  # e.g. "2020-01/WeWork%20gg.png"
                             v[idx] = IMG_URL_PREFIX + img_name
-                        # case2: file
-                        if isinstance(item, dict):
-                            for k, v in item.items():
-                                if k == 'url':
-                                    file_name = '/'.join(v.split('/')[-2:]) # e.g. 2020-01/README.md
-                                    item[k] = FILE_URL_PREFIX + file_name
-                # long-text with images
-                if k in long_text_cols and isinstance(v, dict) and v.get('text') and v.get('images'):
+                elif col['type'] == ColumnTypes.FILE and isinstance(v, list) and v:
+                    for idx, item in enumerate(v):
+                        if isinstance(item, dict) and old_file_part_path in item.get('url', ''):
+                            file_name = '/'.join(item['url'].split('/')[-2:])
+                            item['url'] = FILE_URL_PREFIX + file_name
+                elif col['type'] == ColumnTypes.LONG_TEXT and isinstance(v, dict) and v.get('text') and v.get('images'):
                     for idx, item in enumerate(v['images']):
-                        if isinstance(item, str) and 'http' in item and 'images' in item:
+                        if old_file_part_path in item:
                             img_name = '/'.join(item.split('/')[-2:])
                             v['images'][idx] = IMG_URL_PREFIX + img_name
                             v['text'] = v['text'].replace(item, v['images'][idx])
     return dtable_content
 
 
-def prepare_dtable_json_from_memory(dtable_uuid, username):
+def prepare_dtable_json_from_memory(workspace_id, dtable_uuid, username):
     """
     Used in dtable file export in real-time from memory by request the api of dtable-server
     It is more effective than exporting dtable files from seafile-server which will take about 5 minutes
@@ -145,7 +149,7 @@ def prepare_dtable_json_from_memory(dtable_uuid, username):
             json_content = json.loads(content_json)
         except Exception as e:
             raise Exception('decode json error: %s' % content_json.decode()[0:200])
-        dtable_content = convert_dtable_export_file_and_image_url(json_content)
+        dtable_content = convert_dtable_export_file_and_image_url(workspace_id, dtable_uuid, json_content)
     else:
         dtable_content = ''
     content_json = json.dumps(dtable_content).encode('utf-8')
@@ -264,6 +268,8 @@ def convert_dtable_import_file_url(dtable_content, workspace_id, dtable_uuid):
     :param dtable_uuid:
     :return:  python dict
     """
+    from dtable_events.dtable_io import dtable_io_logger
+
     tables = dtable_content.get('tables', [])
 
     # handle different url in settings.py
@@ -271,33 +277,33 @@ def convert_dtable_import_file_url(dtable_content, workspace_id, dtable_uuid):
 
     for table in tables:
         rows = table.get('rows', [])
-        long_text_cols = {col['key'] for col in table.get('columns', []) if col['type'] == 'long-text'}
+        dtable_io_logger.debug('table: %s rows: %s', table['_id'], len(rows))
+        cols_dict = {col['key']: col for col in table.get('columns', [])}
         for idx, row in enumerate(rows):
             for k, v in row.items():
-                if isinstance(v, list):
+                if k not in cols_dict:
+                    continue
+                col = cols_dict[k]
+                if col['type'] == ColumnTypes.IMAGE and isinstance(v, list) and v:
                     for idx, item in enumerate(v):
-                        # case1: image
-                        if isinstance(item, str) and item.startswith(IMG_URL_PREFIX):
-                            img_name = '/'.join(item.split('/')[-2:])  # e.g. "2020-01/WeWork%20gg.png"
-                            new_url = '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
-                                               dtable_uuid, 'images', img_name])
-                            v[idx] = new_url
-                        # case2: file
-                        if isinstance(item, dict):
-                            for k, v in item.items():
-                                if k == 'url' and v.startswith(FILE_URL_PREFIX):
-                                    file_name = '/'.join(v.split('/')[-2:]) # e.g. 2020-01/README.md
-                                    new_url = '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
-                                                       dtable_uuid, 'files', file_name])
-
-                                    item[k] = new_url
-                # long-text with images
-                if k in long_text_cols and isinstance(v, dict) and v.get('text') and v.get('images'):
-                    for idx, item in enumerate(v['images']):
-                        if isinstance(item, str) and item.startswith(IMG_URL_PREFIX):
+                        if isinstance(item, str) and IMG_URL_PREFIX in item:
                             img_name = '/'.join(item.split('/')[-2:])
-                            new_url = '/'.join([dtable_web_service_url, 'workspace', workspace_id, 'asset',
-                                               dtable_uuid, 'images', img_name])
+                            new_url = '/'.join([dtable_web_service_url, 'workspace', str(workspace_id), 'asset',
+                                                str(UUID(dtable_uuid)), 'images', img_name])
+                            v[idx] = new_url
+                elif col['type'] == ColumnTypes.FILE and isinstance(v, list) and v:
+                    for idx, item in enumerate(v):
+                        if isinstance(item, dict) and FILE_URL_PREFIX in item.get('url', ''):
+                            file_name = '/'.join(item['url'].split('/')[-2:])
+                            new_url = '/'.join([dtable_web_service_url, 'workspace', str(workspace_id), 'asset',
+                                                str(UUID(dtable_uuid)), 'files', file_name])
+                            item['url'] = new_url
+                elif col['type'] == ColumnTypes.LONG_TEXT and isinstance(v, dict) and v.get('text') and v.get('images'):
+                    for idx, item in enumerate(v['images']):
+                        if IMG_URL_PREFIX in item:
+                            img_name = '/'.join(item.split('/')[-2:])
+                            new_url = '/'.join([dtable_web_service_url, 'workspace', str(workspace_id), 'asset',
+                                                str(UUID(dtable_uuid)), 'images', img_name])
                             v['images'][idx] = new_url
                             v['text'] = v['text'].replace(item, v['images'][idx])
     
