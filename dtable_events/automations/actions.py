@@ -19,7 +19,7 @@ from dtable_events.notification_rules.notification_rules_utils import _fill_msg_
     send_notification
 from dtable_events.utils import utc_to_tz, uuid_str_to_36_chars, is_valid_email, get_inner_dtable_server_url
 from dtable_events.utils.constants import ColumnTypes
-from dtable_events.utils.dtable_server_api import DTableServerAPI
+from dtable_events.utils.dtable_server_api import DTableServerAPI, WrongFilterException
 
 
 logger = logging.getLogger(__name__)
@@ -244,16 +244,20 @@ class LockRowAction(BaseAction):
         }
         try:
             response_data = self.auto_rule.dtable_server_api.internal_filter_rows(json_data)
-            rows_data = response_data.get('rows')
-            logger.debug('Number of locking dtable row by auto-rules: %s, dtable_uuid: %s, details: %s' % (
-                len(rows_data),
-                self.auto_rule.dtable_uuid,
-                json.dumps(json_data)
-            ))
-            return rows_data or []
+            rows_data = response_data.get('rows') or []
+        except WrongFilterException:
+            raise RuleInvalidException('wrong filter in filters in lock-row')
         except Exception as e:
-            logger.error('lock dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            logger.error('request filter rows error: %s', e)
             return []
+
+        logger.debug('Number of linking dtable rows by auto-rules: %s, dtable_uuid: %s, details: %s' % (
+            rows_data and len(rows_data) or 0,
+            self.auto_rule.dtable_uuid,
+            json.dumps(json_data)
+        ))
+
+        return rows_data or []
 
     def _init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
@@ -961,16 +965,20 @@ class LinkRecordsAction(BaseAction):
         }
         try:
             response_data = self.auto_rule.dtable_server_api.internal_filter_rows(json_data)
-            rows_data = response_data.get('rows')
-            logger.debug('Number of linking dtable rows by auto-rules: %s, dtable_uuid: %s, details: %s' % (
-                rows_data and len(rows_data) or 0,
-                self.auto_rule.dtable_uuid,
-                json.dumps(json_data)
-            ))
-            return rows_data or []
+            rows_data = response_data.get('rows') or []
+        except WrongFilterException:
+            raise RuleInvalidException('wrong filter in filters in link-records')
         except Exception as e:
-            logger.error('link dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            logger.error('request filter rows error: %s', e)
             return []
+
+        logger.debug('Number of linking dtable rows by auto-rules: %s, dtable_uuid: %s, details: %s' % (
+            rows_data and len(rows_data) or 0,
+            self.auto_rule.dtable_uuid,
+            json.dumps(json_data)
+        ))
+
+        return rows_data or []
 
     def _init_linked_row_ids(self):
         linked_rows_data = self._get_linked_table_rows()

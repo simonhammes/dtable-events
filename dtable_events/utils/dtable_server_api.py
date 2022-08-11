@@ -5,8 +5,20 @@ from dtable_events.dtable_io.utils import get_dtable_server_token
 
 logger = logging.getLogger(__name__)
 
+
+class WrongFilterException(Exception):
+    pass
+
+
 def parse_response(response):
     if response.status_code >= 400:
+        try:
+            response_json = response.json()
+        except:
+            pass
+        else:
+            if response_json.get('error_type') == 'wrong_filter_in_filters':
+                raise WrongFilterException()
         raise ConnectionError(response.status_code, response.text)
     else:
         try:
@@ -14,7 +26,7 @@ def parse_response(response):
             return data
         except:
             pass
-        
+
 
 class DTableServerAPI(object):
     # simple version of python sdk without authorization for base or table manipulation
