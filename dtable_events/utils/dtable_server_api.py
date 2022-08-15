@@ -1,9 +1,19 @@
 import json
 import logging
 import requests
+import io
+import os
+from urllib import parse
+from uuid import UUID
+from datetime import datetime
+from seaserv import seafile_api
 from dtable_events.dtable_io.utils import get_dtable_server_token
+from dtable_events.app.config import FILE_SERVER_ROOT
 
 logger = logging.getLogger(__name__)
+
+UPLOAD_IMG_RELATIVE_PATH = 'images'
+UPLOAD_FILE_RELATIVE_PATH = 'files'
 
 
 class WrongFilterException(Exception):
@@ -28,14 +38,33 @@ def parse_response(response):
             pass
 
 
+def get_fileserver_root():
+    """ Construct seafile fileserver address and port.
+
+    Returns:
+    	Constructed fileserver root.
+    """
+    return FILE_SERVER_ROOT.rstrip('/') if FILE_SERVER_ROOT else ''
+
+
+def gen_file_upload_url(token, op, replace=False):
+    url = '%s/%s/%s' % (get_fileserver_root(), op, token)
+    if replace is True:
+        url += '?replace=1'
+    return url
+
+
 class DTableServerAPI(object):
     # simple version of python sdk without authorization for base or table manipulation
 
-    def __init__(self, username, dtable_uuid, dtable_server_url):
+    def __init__(self, username, dtable_uuid, dtable_server_url, server_url=None, repo_id=None, workspace_id=None):
         self.username = username
         self.dtable_uuid = dtable_uuid
         self.headers = None
         self.dtable_server_url = dtable_server_url.rstrip('/')
+        self.server_url = server_url.rstrip('/') if server_url else None
+        self.repo_id = repo_id
+        self.workspace_id = workspace_id
         self._init()
 
     def _init(self):
@@ -47,7 +76,6 @@ class DTableServerAPI(object):
         response = requests.get(url, headers=self.headers)
         data = parse_response(response)
         return data.get('metadata')
-
 
     def add_table(self, table_name, lang='cn', columns=None):
         logger.debug('add table table_name: %s columns: %s', table_name, columns)
@@ -185,3 +213,94 @@ class DTableServerAPI(object):
         }
         response = requests.put(url, json=json_data, headers=self.headers)
         return parse_response(response)
+
+    def get_column_link_id(self, table_name, column_name, view_name=None):
+        columns = self.list_columns(table_name, view_name)
+        for column in columns:
+            if column.get('name') == column_name and column.get('type') == 'link':
+                return column.get('data', {}).get('link_id')
+        raise ValueError('link type column "%s" does not exist in current view' % column_name)
+
+    def batch_update_links(self, link_id, table_id, other_table_id, row_id_list, other_rows_ids_map):
+        """
+        :param link_id: str
+        :param table_id: str
+        :param other_table_id: str
+        :param row_id_list: []
+        :param other_rows_ids_map: dict
+        """
+        url = self.dtable_server_url + '/api/v1/dtables/' + self.dtable_uuid + '/batch-update-links/?from=dtable_events'
+        json_data = {
+            'link_id': link_id,
+            'table_id': table_id,
+            'other_table_id': other_table_id,
+            'row_id_list': row_id_list,
+            'other_rows_ids_map': other_rows_ids_map,
+        }
+
+        response = requests.put(url, json=json_data, headers=self.headers)
+        return parse_response(response)
+
+    def get_file_upload_link(self):
+        """
+        :return: dict
+        """
+        repo_id = self.repo_id
+        asset_dir_path = '/asset/' + self.dtable_uuid
+        asset_dir_id = seafile_api.get_dir_id_by_path(repo_id, asset_dir_path)
+        if not asset_dir_id:
+            seafile_api.mkdir_with_parents(repo_id, '/', asset_dir_path[1:], self.username)
+
+        # get token
+        obj_id = json.dumps({'parent_dir': asset_dir_path})
+        token = seafile_api.get_fileserver_access_token(repo_id, obj_id, 'upload', '', use_onetime=False)
+
+        upload_link = gen_file_upload_url(token, 'upload-api')
+
+        res = dict()
+        res['upload_link'] = upload_link
+        res['parent_path'] = asset_dir_path
+        res['img_relative_path'] = os.path.join(UPLOAD_IMG_RELATIVE_PATH, str(datetime.today())[:7])
+        res['file_relative_path'] = os.path.join(UPLOAD_FILE_RELATIVE_PATH, str(datetime.today())[:7])
+        return res
+
+    def upload_bytes_file(self, name, content: bytes, relative_path=None, file_type=None, replace=False):
+        """
+        relative_path: relative path for upload, if None, default {file_type}s/{date of this month} eg: files/2020-09
+        file_type: if relative is None, file type must in ['image', 'file'], default 'file'
+        return: info dict of uploaded file
+        """
+        upload_link_dict = self.get_file_upload_link()
+        parent_dir = upload_link_dict['parent_path']
+        upload_link = upload_link_dict['upload_link'] + '?ret-json=1'
+        if not relative_path:
+            if file_type and file_type not in ['image', 'file']:
+                raise Exception('relative or file_type invalid.')
+            if not file_type:
+                file_type = 'file'
+            relative_path = '%ss/%s' % (file_type, str(datetime.today())[:7])
+        else:
+            relative_path = relative_path.strip('/')
+        response = requests.post(upload_link, data={
+            'parent_dir': parent_dir,
+            'relative_path': relative_path,
+            'replace': 1 if replace else 0
+        }, files={
+            'file': (name, io.BytesIO(content))
+        }, timeout=120)
+
+        d = response.json()[0]
+        url = '%(server)s/workspace/%(workspace_id)s/asset/%(dtable_uuid)s/%(relative_path)s/%(filename)s' % {
+            'server': self.server_url.strip('/'),
+            'workspace_id': self.workspace_id,
+            'dtable_uuid': str(UUID(self.dtable_uuid)),
+            'file_type': file_type,
+            'relative_path': parse.quote(relative_path.strip('/')),
+            'filename': parse.quote(d.get('name', name))
+        }
+        return {
+            'type': file_type,
+            'size': d.get('size'),
+            'name': d.get('name'),
+            'url': url
+        }

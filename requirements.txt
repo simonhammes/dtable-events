@@ -6,3 +6,4 @@ selenium
 gevent
 Flask
 python-dateutil
+imapclient
