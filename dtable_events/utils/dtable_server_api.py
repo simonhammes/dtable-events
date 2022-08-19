@@ -20,8 +20,14 @@ class WrongFilterException(Exception):
     pass
 
 
+class NotFoundException(Exception):
+    pass
+
+
 def parse_response(response):
     if response.status_code >= 400:
+        if response.status_code == 404:
+            raise NotFoundException()
         try:
             response_json = response.json()
         except:
@@ -98,6 +104,21 @@ class DTableServerAPI(object):
         response = requests.get(url, params=params, headers=self.headers)
         data = parse_response(response)
         return data.get('rows')
+
+    def get_row(self, table_name, row_id, timeout=None):
+        """
+        :param table_name: str
+        :param row_id: str
+        :return: dict
+        """
+        logger.debug('get row table_name: %s row_id: %s', table_name, row_id)
+        url = self.dtable_server_url + '/api/v1/dtables/' + self.dtable_uuid + '/rows/' + row_id + '/?from=dtable_events'
+        params = {
+            'table_name': table_name,
+        }
+        response = requests.get(url, params=params, headers=self.headers, timeout=timeout)
+        data = parse_response(response)
+        return data
 
     def list_columns(self, table_name, view_name=None):
         logger.debug('list columns table_name: %s view_name: %s', table_name, view_name)
