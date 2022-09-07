@@ -24,7 +24,7 @@ def login_imap(host, user, password, port=None, timeout=None):
     imap.client()
     logger.debug('imap: %s client successfully!', host)
     imap.login()
-    logger.debug('imap_host: %s email_user: %s, password: %s login imap client successfully!', host, user, password)
+    logger.debug('imap_host: %s email_user: %s, login imap client successfully!', host, user)
     return imap
 
 
@@ -43,7 +43,7 @@ def check_imap_account(imap_server, email_user, email_password, port=None, retur
             return None, 'user or password invalid, email: %s user login error' % (email_user,)
     except Exception as e:
         logger.exception(e)
-        logger.error('imap_server: %s, email_user: %s, email_password: %s, login error: %s' % (imap_server, email_user, email_password, e))
+        logger.error('imap_server: %s, email_user: %s, login error: %s' % (imap_server, email_user, e))
         if not return_imap:
             return 'email: %s login error: %s' % (email_user, e)
         else:
@@ -410,11 +410,16 @@ def run_sync_emails(context):
         logger.error('third party account invalid.')
         return
 
-    imap, error_msg = check_imap_account(imap_host, email_user, email_password, port=imap_port, return_imap=True)
-
-    if error_msg:
+    # check imap account
+    try:
+        imap = login_imap(imap_host, email_user, email_password, port=imap_port)
+    except LoginError:
+        logger.error('user or password invalid, email: %s user login error', email_user)
         set_data_sync_invalid(data_sync_id, db_session)
-        logger.error(error_msg)
+        return
+    except Exception as e:
+        logger.exception(e)
+        logger.error('imap_server: %s, email_user: %s, login error: %s', imap_host, email_user, e)
         return
 
     dtable_server_api = DTableServerAPI(username, dtable_uuid, api_url,
@@ -458,4 +463,5 @@ def run_sync_emails(context):
     except Exception as e:
         logger.exception(e)
         logger.error('email: %s sync and update link error: %s', email_user, e)
-        update_sync_time(data_sync_id, db_session)
+        return
+    update_sync_time(data_sync_id, db_session)
