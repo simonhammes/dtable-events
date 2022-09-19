@@ -43,6 +43,10 @@ MESSAGE_TYPE_AUTOMATION_RULE = 'automation_rule'
 
 MINUTE_TIMEOUT = 60
 
+CONDITION_ROWS_LIMIT = 50
+WECHAT_CONDITION_ROWS_LIMIT = 20
+DINGTALK_CONDITION_ROWS_LIMIT = 20
+
 
 def email2list(email_str, split_pattern='[,，]'):
     email_list = [value.strip() for value in re.split(split_pattern, email_str) if value.strip()]
@@ -226,7 +230,7 @@ class LockRowAction(BaseAction):
             self.update_data['row_ids'].append(row_id)
 
         if self.auto_rule.run_condition in (PER_DAY, PER_WEEK, PER_MONTH):
-            rows_data = self.auto_rule.get_trigger_conditions_rows()[:50]
+            rows_data = self.auto_rule.get_trigger_conditions_rows()[:CONDITION_ROWS_LIMIT]
             for row in rows_data:
                 self.update_data['row_ids'].append(row.get('_id'))
 
@@ -469,7 +473,7 @@ class NotifyAction(BaseAction):
         table_id, view_id = self.auto_rule.table_id, self.auto_rule.view_id
         dtable_uuid = self.auto_rule.dtable_uuid
 
-        rows_data = self.auto_rule.get_trigger_conditions_rows()[:50]
+        rows_data = self.auto_rule.get_trigger_conditions_rows()[:CONDITION_ROWS_LIMIT]
         col_key_dict = {col.get('key'): col for col in self.auto_rule.view_columns}
 
         user_msg_list = []
@@ -576,7 +580,7 @@ class SendWechatAction(BaseAction):
             logger.error('send wechat error: %s', e)
 
     def condition_cron_notify(self):
-        rows_data = self.auto_rule.get_trigger_conditions_rows()[:20]
+        rows_data = self.auto_rule.get_trigger_conditions_rows()[:WECHAT_CONDITION_ROWS_LIMIT]
         col_key_dict = {col.get('key'): col for col in self.auto_rule.view_columns}
 
         for row in rows_data:
@@ -654,7 +658,7 @@ class SendDingtalkAction(BaseAction):
             logger.error('send dingtalk error: %s', e)
 
     def condition_cron_notify(self):
-        rows_data = self.auto_rule.get_trigger_conditions_rows()[:20]
+        rows_data = self.auto_rule.get_trigger_conditions_rows()[:DINGTALK_CONDITION_ROWS_LIMIT]
         col_key_dict = {col.get('key'): col for col in self.auto_rule.view_columns}
 
         for row in rows_data:
@@ -804,7 +808,7 @@ class SendEmailAction(BaseAction):
             logger.error('send email error: %s', e)
 
     def condition_cron_notify(self):
-        rows_data = self.auto_rule.get_trigger_conditions_rows()[:50]
+        rows_data = self.auto_rule.get_trigger_conditions_rows()[:CONDITION_ROWS_LIMIT]
         col_key_dict = {col.get('key'): col for col in self.auto_rule.view_columns}
         send_info_list = []
         for row in rows_data:
@@ -1382,6 +1386,8 @@ class AutomationRule:
 
         self.per_minute_trigger_limit = per_minute_trigger_limit or 10
 
+        self.warnings = []
+
     def _load_trigger_and_actions(self, raw_trigger, raw_actions):
         self.trigger = json.loads(raw_trigger)
 
@@ -1534,7 +1540,15 @@ class AutomationRule:
             json.dumps(json_data)
         ))
         self._trigger_conditions_rows = rows_data
+        if len(self._trigger_conditions_rows) > 50:
+            self.append_warning({
+                'type': 'condition_rows_exceed',
+                'condition_rows_limit': CONDITION_ROWS_LIMIT
+            })
         return self._trigger_conditions_rows
+
+    def append_warning(self, warning_detail):
+        self.warnings.append(warning_detail)
 
     def can_do_actions(self):
         if self.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_PERIODICALLY, CONDITION_ROWS_ADDED, CONDITION_PERIODICALLY_BY_CONDITION):
@@ -1685,8 +1699,8 @@ class AutomationRule:
             return
         try:
             set_task_log_sql = """
-                INSERT INTO auto_rules_task_log (trigger_time, success, rule_id, run_condition, dtable_uuid, org_id, owner) VALUES
-                (:trigger_time, :success, :rule_id, :run_condition, :dtable_uuid, :org_id, :owner)
+                INSERT INTO auto_rules_task_log (trigger_time, success, rule_id, run_condition, dtable_uuid, org_id, owner, warnings) VALUES
+                (:trigger_time, :success, :rule_id, :run_condition, :dtable_uuid, :org_id, :owner, :warnings)
             """
             if self.run_condition in (PER_DAY, PER_WEEK, PER_MONTH, PER_UPDATE):
                 self.db_session.execute(set_task_log_sql, {
@@ -1697,6 +1711,7 @@ class AutomationRule:
                     'dtable_uuid': self.dtable_uuid,
                     'org_id': self.org_id,
                     'owner': self.creator,
+                    'warnings': json.dumps(self.warnings) if self.warnings else None
                 })
                 self.db_session.commit()
         except Exception as e:
