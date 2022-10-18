@@ -9,6 +9,10 @@ from dtable_events.utils import uuid_str_to_36_chars
 
 logger = logging.getLogger(__name__)
 
+TIMEOUT = 90
+
+class RowInsertedError(Exception):
+    pass
 
 def parse_response(response):
     if response.status_code >= 400:
@@ -123,7 +127,7 @@ class DTableDBAPI(object):
     def get_dtable_db_token(self):
         token = jwt.encode(
             payload={
-                'exp': int(time.time()) + 300,
+                'exp': int(time.time()) + 3600 * 12 * 24,
                 'dtable_uuid': self.dtable_uuid,
                 'username': self.username,
                 'permission': 'rw',
@@ -178,3 +182,18 @@ class DTableDBAPI(object):
             return converted_results, metadata
         else:
             return results, metadata
+
+    def insert_rows(self, table_name, rows):
+        api_url = "%s/api/v1/insert-rows/%s/?from=dtable_events" % (
+            self.dtable_db_url.rstrip('/'),
+            self.dtable_uuid
+        )
+
+        params = {
+            "table_name": table_name,
+            "rows": rows
+        }
+        resp = requests.post(api_url, json=params, headers=self.headers, timeout=TIMEOUT)
+        if not resp.status_code == 200:
+           raise RowInsertedError
+        return resp.json()

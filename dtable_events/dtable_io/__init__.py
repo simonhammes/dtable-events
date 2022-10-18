@@ -16,6 +16,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from datetime import datetime
 
 from dtable_events.app.config import DTABLE_WEB_SERVICE_URL, SESSION_COOKIE_NAME, INNER_DTABLE_DB_URL
+from dtable_events.dtable_io.big_data import import_excel_to_db
 from dtable_events.dtable_io.utils import setup_logger, \
     prepare_asset_file_folder, post_dtable_json, post_asset_files, \
     download_files_to_path, create_forms_from_src_dtable, copy_src_forms_to_json, \
@@ -40,6 +41,7 @@ dtable_io_logger = setup_logger('dtable_events_io.log')
 dtable_message_logger = setup_logger('dtable_events_message.log')
 dtable_data_sync_logger = setup_logger('dtable_events_data_sync.log')
 dtable_plugin_email_logger = setup_logger('dtable_events_plugin_email.log')
+
 
 def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     # delete tmp files/dirs
@@ -1054,3 +1056,16 @@ def plugin_email_send_email(context, config=None):
     dtable_server_api.update_link(email_link_id, email_table_id, link_table_id, email_row_id, other_rows_ids)
 
     dtable_server_api.update_row(thread_table_name, thread_row_id, {'Last Updated': send_time})
+
+def import_big_excel(username, dtable_uuid, table_name, file_path, task_id, tasks_status_map):
+    """
+    upload excel json file to dtable-db
+    """
+
+    dtable_io_logger.info('Start import big excel: {}.'.format(dtable_uuid))
+    try:
+        import_excel_to_db(username, dtable_uuid, table_name, file_path, task_id, tasks_status_map)
+    except Exception as e:
+        dtable_io_logger.error('import big excel failed. ERROR: {}'.format(e))
+    else:
+        dtable_io_logger.info('import big excel %s.xlsx success!' % table_name)
