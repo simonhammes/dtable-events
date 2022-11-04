@@ -19,6 +19,9 @@ from dtable_events.utils.dtable_server_api import DTableServerAPI
 logger = logging.getLogger(__name__)
 
 
+REQUIRED_EMAIL_COLUMNS = ['From', 'Message ID', 'To', 'Subject', 'cc', 'Date', 'Reply to Message ID', 'Thread ID']
+REQUIRED_THREAD_COLUMNS = ['Subject', 'Last Updated', 'Thread ID']
+
 def login_imap(host, user, password, port=None, timeout=None):
     imap = ImapMail(host, user, password, port=port, ssl_context=ssl.SSLContext(ssl.PROTOCOL_TLSv1_2), timeout=timeout)
     imap.client()
@@ -377,7 +380,7 @@ def run_sync_emails(context):
 
     if not all([account_id, email_table_id, link_table_id]):
         set_data_sync_invalid(data_sync_id, db_session)
-        logger.error('account settings invalid.')
+        logger.warning('account settings invalid.')
         return
 
     if not send_date:
@@ -397,7 +400,7 @@ def run_sync_emails(context):
     account_detail = account.get('detail')
     if not account or account_type != 'email' or not account_detail:
         set_data_sync_invalid(data_sync_id, db_session)
-        logger.error('third party account not found.')
+        logger.warning('third party account not found.')
         return
 
     imap_host = account_detail.get('imap_host')
@@ -406,14 +409,14 @@ def run_sync_emails(context):
     email_password = account_detail.get('password')
     if not all([imap_host, imap_port, email_user, email_password]):
         set_data_sync_invalid(data_sync_id, db_session)
-        logger.error('third party account invalid.')
+        logger.warning('third party account invalid.')
         return
 
     # check imap account
     try:
         imap = login_imap(imap_host, email_user, email_password, port=imap_port)
     except LoginError:
-        logger.error('user or password invalid, email: %s user login error', email_user)
+        logger.warning('user or password invalid, email: %s user login error', email_user)
         set_data_sync_invalid(data_sync_id, db_session)
         return
     except Exception as e:
@@ -433,20 +436,40 @@ def run_sync_emails(context):
 
     email_table_name = ''
     link_table_name = ''
+    email_columns = []
+    link_columns = []
 
     tables = metadata.get('tables', [])
     for table in tables:
         if not email_table_name and table.get('_id') == email_table_id:
             email_table_name = table.get('name')
+            email_columns = table.get('columns')
         if not link_table_name and table.get('_id') == link_table_id:
             link_table_name = table.get('name')
+            link_columns = table.get('columns')
         if email_table_name and link_table_name:
             break
 
     if not email_table_name or not link_table_name:
         set_data_sync_invalid(data_sync_id, db_session)
-        logger.error('email table or link table invalid.')
+        logger.warning('email table or link table invalid.')
         return
+
+    # check required columns
+    email_columns_dict = {column.get('name'): True for column in email_columns}
+    link_columns_dict = {column.get('name'): True for column in link_columns}
+
+    for col_name in REQUIRED_EMAIL_COLUMNS:
+        if not email_columns_dict.get(col_name):
+            set_data_sync_invalid(data_sync_id, db_session)
+            logger.warning('email table no such column: %s', col_name)
+            return
+
+    for col_name in REQUIRED_THREAD_COLUMNS:
+        if not link_columns_dict.get(col_name):
+            set_data_sync_invalid(data_sync_id, db_session)
+            logger.warning('thread table no such column: %s', col_name)
+            return
 
     try:
         email_list = sorted(imap.search_emails_by_send_date(send_date, 'SINCE'), key=lambda x: str_2_datetime(x['Date']))
