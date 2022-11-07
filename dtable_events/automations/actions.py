@@ -147,6 +147,8 @@ class UpdateAction(BaseAction):
         return fill_msg_blanks_with_converted_row(text, blanks, col_name_dict, row, db_session, dtable_metadata)
 
     def _init_updates(self):
+        if self.auto_rule.run_condition != PER_UPDATE:
+            return
         src_row = self.data['converted_row']
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
 
@@ -1329,8 +1331,6 @@ class TriggerWorkflowAction(BaseAction):
             'row': {}
         }
         self.token = token
-        if self.auto_rule.trigger.get('condition') != CONDITION_PERIODICALLY:
-            return
         self._init_updates()
 
     def format_time_by_offset(self, offset, format_length):
@@ -1341,7 +1341,24 @@ class TriggerWorkflowAction(BaseAction):
         if format_length == 1:
             return cur_datetime_offset.strftime("%Y-%m-%d")
 
+    def is_workflow_valid(self):
+        sql = 'SELECT workflow_config FROM dtable_workflows WHERE token=:token AND dtable_uuid=:dtable_uuid'
+        try:
+            result = self.auto_rule.db_session.execute(sql, {'token': self.token, 'dtable_uuid': self.auto_rule.dtable_uuid.replace('-', '')}).fetchone()
+            if not result:
+                return False
+            workflow_config = json.loads(result[0])
+        except Exception as e:
+            logger.warning('checkout workflow: %s of dtable: %s error: %s', self.token, self.auto_rule.dtable_uuid)
+            return False
+        workflow_table_id = workflow_config.get('table_id')
+        return workflow_table_id == self.auto_rule.table_id
+
     def _init_updates(self):
+        if self.auto_rule.trigger.get('condition') != CONDITION_PERIODICALLY:
+            return
+        if not self.is_workflow_valid():
+            return
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         filtered_updates = {}
         for col in self.auto_rule.view_columns:
@@ -1397,6 +1414,7 @@ class TriggerWorkflowAction(BaseAction):
             resp = requests.post(internal_submit_workflow_url, data=data, headers={'Authorization': header_token})
             if resp.status_code != 200:
                 logger.error('rule: %s row_id: %s new workflow: %s task error status code: %s content: %s', self.auto_rule.rule_id, row_id, self.token, resp.status_code, resp.content)
+            self.auto_rule.set_done_actions()
         except Exception as e:
             logger.error('submit workflow: %s row_id: %s error: %s', self.token, row_id, e)
 
