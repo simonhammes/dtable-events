@@ -48,6 +48,8 @@ class Operator(object):
         self.filter_term_modifier = self.filter_item.get('filter_term_modifier', '')
 
     def op_is(self):
+        if not self.filter_term:
+            return ""
         return "`%s` %s '%s'" % (
             self.column_name,
             '=',
@@ -55,6 +57,8 @@ class Operator(object):
         )
 
     def op_is_not(self):
+        if not self.filter_term:
+            return ""
         return "`%s` %s '%s'" % (
             self.column_name,
             '<>',
@@ -62,6 +66,8 @@ class Operator(object):
         )
 
     def op_contains(self):
+        if not self.filter_term:
+            return ""
         return "`%s` %s '%%%s%%'" % (
             self.column_name,
             'like',
@@ -69,6 +75,8 @@ class Operator(object):
         )
 
     def op_does_not_contain(self):
+        if not self.filter_term:
+            return ''
         return "`%s` %s '%%%s%%'" % (
             self.column_name,
             'not like',
@@ -76,36 +84,48 @@ class Operator(object):
         )
 
     def op_equal(self):
+        if self.filter_term is None:
+            return ''
         return "`%(column_name)s` = %(value)s" % ({
             'column_name': self.column_name,
             'value': self.filter_term
         })
 
     def op_not_equal(self):
+        if self.filter_term is None:
+            return ''
         return "`%(column_name)s` <> %(value)s" % ({
             'column_name': self.column_name,
             'value': self.filter_term
         })
 
     def op_less(self):
+        if self.filter_term is None:
+            return ''
         return "`%(column_name)s` < %(value)s" % ({
             'column_name': self.column_name,
             'value': self.filter_term
         })
 
     def op_less_or_equal(self):
+        if self.filter_term is None:
+            return ''
         return "`%(column_name)s` <= %(value)s" % ({
             'column_name': self.column_name,
             'value': self.filter_term
         })
 
     def op_greater(self):
+        if self.filter_term is None:
+            return ''
         return "`%(column_name)s` > %(value)s" % ({
             'column_name': self.column_name,
             'value': self.filter_term
         })
 
     def op_greater_or_equal(self):
+        if self.filter_term is None:
+            return ''
         return "`%(column_name)s` >= %(value)s" % ({
             'column_name': self.column_name,
             'value': self.filter_term
@@ -240,6 +260,8 @@ class SingleSelectOperator(Operator):
 
     def op_is(self):
         filter_term = self._get_option_name_by_id(self.filter_term)
+        if not filter_term:
+            return ''
         return "`%s` %s '%s'" % (
             self.column_name,
             '=',
@@ -248,6 +270,8 @@ class SingleSelectOperator(Operator):
 
     def op_is_not(self):
         filter_term = self._get_option_name_by_id(self.filter_term)
+        if not filter_term:
+            return ''
         return "`%s` %s '%s'" % (
             self.column_name,
             '<>',
@@ -260,6 +284,8 @@ class SingleSelectOperator(Operator):
             filter_term = [filter_term, ]
         filter_term = [self._get_option_name_by_id(f) for f in filter_term]
         option_names = ["'%s'" % (op_name) for op_name in filter_term]
+        if not option_names:
+            return ""
         return "`%(column_name)s` in (%(option_names)s)" % ({
             "column_name": self.column_name,
             "option_names": ", ".join(option_names)
@@ -267,10 +293,14 @@ class SingleSelectOperator(Operator):
 
     def op_is_none_of(self):
         filter_term = self.filter_term
+        if not filter_term:
+            return ''
         if not isinstance(filter_term, list):
             filter_term = [filter_term, ]
         filter_term = [self._get_option_name_by_id(f) for f in filter_term]
         option_names = ["'%s'" % (op_name) for op_name in filter_term]
+        if not option_names:
+            return ""
         return "`%(column_name)s` not in (%(option_names)s)" % ({
             "column_name": self.column_name,
             "option_names": ", ".join(option_names)
@@ -300,6 +330,8 @@ class MultipleSelectOperator(Operator):
         return option_id
 
     def op_has_any_of(self):
+        if not self.filter_term:
+            return ""
         filter_term = [self._get_option_name_by_id(f) for f in self.filter_term]
         option_names = ["'%s'" % op_name for op_name in filter_term]
         option_names_str = ', '.join(option_names)
@@ -309,6 +341,8 @@ class MultipleSelectOperator(Operator):
         })
 
     def op_has_none_of(self):
+        if not self.filter_term:
+            return ""
         filter_term = [self._get_option_name_by_id(f) for f in self.filter_term]
         option_names = ["'%s'" % op_name for op_name in filter_term]
         option_names_str = ', '.join(option_names)
@@ -318,6 +352,8 @@ class MultipleSelectOperator(Operator):
         })
 
     def op_has_all_of(self):
+        if not self.filter_term:
+            return ""
         filter_term = [self._get_option_name_by_id(f) for f in self.filter_term]
         option_names = ["'%s'" % op_name for op_name in filter_term]
         option_names_str = ', '.join(option_names)
@@ -327,6 +363,8 @@ class MultipleSelectOperator(Operator):
         })
 
     def op_is_exactly(self):
+        if not self.filter_term:
+            return ""
         filter_term = [self._get_option_name_by_id(f) for f in self.filter_term]
         option_names = ["'%s'" % op_name for op_name in filter_term]
         option_names_str = ', '.join(option_names)
@@ -517,6 +555,8 @@ class DateOperator(Operator):
 
     def op_is_within(self):
         start_date, end_date = self._other_date()
+        if not (start_date, end_date):
+            return ""
         return "`%(column_name)s` >= '%(start_date)s' and `%(column_name)s` < '%(end_date)s'" % ({
             "column_name": self.column_name,
             "start_date": self._format_date(start_date),
@@ -525,6 +565,8 @@ class DateOperator(Operator):
 
     def op_is_before(self):
         target_date, _ = self._other_date()
+        if not target_date:
+            return ""
         return "`%(column_name)s` < '%(target_date)s' and `%(column_name)s` is not null" % ({
             "column_name": self.column_name,
             "target_date": self._format_date(target_date)
@@ -532,6 +574,8 @@ class DateOperator(Operator):
 
     def op_is_after(self):
         target_date, _ = self._other_date()
+        if not target_date:
+            return ""
         return "`%(column_name)s` > '%(target_date)s'" % ({
             "column_name": self.column_name,
             "target_date": self._format_date(target_date)
@@ -539,6 +583,8 @@ class DateOperator(Operator):
 
     def op_is_on_or_before(self):
         target_date, _ = self._other_date()
+        if not target_date:
+            return ""
         return "`%(column_name)s` <= '%(target_date)s' and `%(column_name)s` is not null" % ({
             "column_name": self.column_name,
             "target_date": self._format_date(target_date)
@@ -546,6 +592,8 @@ class DateOperator(Operator):
 
     def op_is_on_or_after(self):
         target_date, _ = self._other_date()
+        if not target_date:
+            return ""
         return "`%(column_name)s` >= '%(target_date)s' and `%(column_name)s` is not null" % ({
             "column_name": self.column_name,
             "target_date": self._format_date(target_date)
@@ -553,6 +601,8 @@ class DateOperator(Operator):
 
     def op_is_not(self):
         target_date, _ = self._other_date()
+        if not target_date:
+            return ""
         start_date = target_date - timedelta(days=1)
         end_date = target_date + timedelta(days=1)
         return "(`%(column_name)s` >= '%(end_date)s' or `%(column_name)s` <= '%(start_date)s') and `%(column_name)s` is not null" % (
@@ -592,6 +642,8 @@ class CollaboratorOperator(Operator):
 
     def op_has_any_of(self):
         select_collaborators = self.filter_term
+        if not select_collaborators:
+            return ""
         if not isinstance(select_collaborators, list):
             select_collaborators = [select_collaborators, ]
         collaborator_list = ["'%s'" % collaborator for collaborator in select_collaborators]
@@ -603,6 +655,8 @@ class CollaboratorOperator(Operator):
 
     def op_has_all_of(self):
         select_collaborators = self.filter_term
+        if not select_collaborators:
+            return ""
         if not isinstance(select_collaborators, list):
             select_collaborators = [select_collaborators, ]
         collaborator_list = ["'%s'" % collaborator for collaborator in select_collaborators]
@@ -614,6 +668,8 @@ class CollaboratorOperator(Operator):
 
     def op_has_none_of(self):
         select_collaborators = self.filter_term
+        if not select_collaborators:
+            return ""
         if not isinstance(select_collaborators, list):
             select_collaborators = [select_collaborators, ]
         collaborator_list = ["'%s'" % collaborator for collaborator in select_collaborators]
@@ -625,6 +681,8 @@ class CollaboratorOperator(Operator):
 
     def op_is_exactly(self):
         select_collaborators = self.filter_term
+        if not select_collaborators:
+            return ""
         if not isinstance(select_collaborators, list):
             select_collaborators = [select_collaborators, ]
         collaborator_list = ["'%s'" % collaborator for collaborator in select_collaborators]
@@ -648,6 +706,8 @@ class CreatorOperator(Operator):
 
     def op_contains(self):
         select_collaborators = self.filter_term
+        if not select_collaborators:
+            return ''
         if not isinstance(select_collaborators, list):
             select_collaborators = [select_collaborators, ]
         creator_list = ["'%s'" % collaborator for collaborator in select_collaborators]
@@ -659,6 +719,8 @@ class CreatorOperator(Operator):
 
     def op_does_not_contain(self):
         select_collaborators = self.filter_term
+        if not select_collaborators:
+            return ''
         if not isinstance(select_collaborators, list):
             select_collaborators = [select_collaborators, ]
         creator_list = ["'%s'" % collaborator for collaborator in select_collaborators]
@@ -669,6 +731,8 @@ class CreatorOperator(Operator):
 
     def op_include_me(self):
         select_collaborators = self.filter_term
+        if not select_collaborators:
+            return ''
         if not isinstance(select_collaborators, list):
             select_collaborators = [select_collaborators, ]
         creator = select_collaborators[0] if select_collaborators else ''
@@ -1293,12 +1357,16 @@ class BaseSQLGenerator(object):
             for filter_item in filters:
                 column_key = filter_item.get('column_key')
                 column_name = filter_item.get('column_name')
+                if not (column_key or column_name):
+                    continue
                 column = column_key and self._get_column_by_key(column_key)
                 if not column:
                     column = column_name and self._get_column_by_name(column_name)
                 column_type = column.get('type')
                 operator = _get_operator_by_type(column_type)(column, filter_item)
                 sql_condition = _filter2sqlslice(operator)
+                if not sql_condition:
+                    continue
                 filter_string_list.append(sql_condition)
             if filter_string_list:
                 filter_content = "(%s)" % (
@@ -1325,12 +1393,17 @@ class BaseSQLGenerator(object):
         for filter_item in filters:
             column_key = filter_item.get('column_key')
             column_name = filter_item.get('column_name')
+            # skip when the column key or name is missing
+            if not (column_key or column_name):
+                continue
             column = column_key and self._get_column_by_key(column_key)
             if not column:
                 column = column_name and self._get_column_by_name(column_name)
             column_type = column.get('type')
             operator = _get_operator_by_type(column_type)(column, filter_item)
             sql_condition = _filter2sqlslice(operator)
+            if not sql_condition:
+                continue
             filter_string_list.append(sql_condition)
         if filter_string_list:
             filter_content = "%s" % (
@@ -1384,6 +1457,7 @@ def filter2sql(table_name, columns, filter_conditions, by_group=False):
     else:
         sql_generator = BaseSQLGenerator(table_name, columns, filter_conditions=filter_conditions)
     return sql_generator.to_sql(by_group=by_group)
+
 
 def db_query(dtable_uuid, sql):
     dtable_uuid = uuid_str_to_36_chars(dtable_uuid)
