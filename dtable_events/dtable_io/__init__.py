@@ -242,7 +242,7 @@ def get_dtable_export_asset_files(username, repo_id, dtable_uuid, files, task_id
     export asset files from dtable
     """
     files = [f.strip().strip('/') for f in files]
-    tmp_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'asset-files', 
+    tmp_file_path = os.path.join('/tmp/dtable-io', dtable_uuid, 'asset-files',
                                  str(task_id))           # used to store files
     tmp_zip_path  = os.path.join('/tmp/dtable-io', dtable_uuid, 'asset-files',
                                  str(task_id)) + '.zip'  # zip those files
@@ -508,6 +508,7 @@ def send_email_msg(auth_info, send_info, username, config=None, db_session=None)
     file_download_urls = send_info.get('file_download_urls', None)
     message_id = send_info.get('message_id', '')
     in_reply_to = send_info.get('in_reply_to', '')
+    image_cid_url_map = send_info.get('image_cid_url_map', {})
 
     send_to = [formataddr(parseaddr(to)) for to in send_to]
     copy_to = [formataddr(parseaddr(to)) for to in copy_to]
@@ -539,6 +540,14 @@ def send_email_msg(auth_info, send_info, username, config=None, db_session=None)
     if html_msg:
         html_content_body = MIMEText(html_msg, 'html')
         msg_obj.attach(html_content_body)
+
+    if html_msg and image_cid_url_map:
+        for cid, image_url in image_cid_url_map.items():
+            response = requests.get(image_url)
+            from email.mime.image import MIMEImage
+            msg_image = MIMEImage(response.content)
+            msg_image.add_header('Content-ID', '<%s>' % cid)
+            msg_obj.attach(msg_image)
 
     if file_download_urls:
         for file_name, file_url in file_download_urls.items():
@@ -757,7 +766,7 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, session_id):
             'printBackground': True,
             'preferCSSPageSize': True,
         }
-        
+
         resource = "/session/%s/chromium/send_command_and_get_result" % driver.session_id
         url = driver.command_executor._url + resource
         body = json.dumps({'cmd': 'Page.printToPDF', 'params': calculated_print_options})
