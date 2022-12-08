@@ -124,14 +124,14 @@ class UpdateAction(BaseAction):
         """
         super().__init__(auto_rule, data)
         self.action_type = 'update'
-        self.updates = updates
+        self.updates = updates or {}
         self.update_data = {
             'row': {},
             'table_name': self.auto_rule.table_info['name'],
             'row_id': ''
         }
         self.col_name_dict = {}
-        self._init_updates()
+        self.init_updates()
 
     def format_time_by_offset(self, offset, format_length):
         cur_datetime = datetime.now()
@@ -141,69 +141,66 @@ class UpdateAction(BaseAction):
         if format_length == 1:
             return cur_datetime_offset.strftime("%Y-%m-%d")
 
-    def _fill_msg_blanks(self, row, text, blanks):
+    def fill_msg_blanks(self, row, text, blanks):
         col_name_dict = self.col_name_dict
         db_session, dtable_metadata = self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks_with_converted_row(text, blanks, col_name_dict, row, db_session, dtable_metadata)
 
-    def _init_updates(self):
-        if self.auto_rule.run_condition != PER_UPDATE:
-            return
+    def init_updates(self):
         src_row = self.data['converted_row']
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
 
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         filtered_updates = {}
-        if self.auto_rule.run_condition == PER_UPDATE:
-            for col in self.auto_rule.table_info['columns']:
-                if 'key' in col and col.get('type') in self.VALID_COLUMN_TYPES:
-                    col_name = col.get('name')
-                    col_key = col.get('key')
-                    col_type = col.get('type')
-                    if col_key in self.updates.keys():
-                        if col_type == ColumnTypes.DATE:
-                            time_format = col.get('data', {}).get('format', '')
-                            format_length = len(time_format.split(" "))
-                            try:
-                                time_dict = self.updates.get(col_key)
-                                set_type = time_dict.get('set_type')
-                                if set_type == 'specific_value':
-                                    time_value = time_dict.get('value')
-                                    filtered_updates[col_name] = time_value
-                                elif set_type == 'relative_date':
-                                    offset = time_dict.get('offset')
-                                    filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
-                            except Exception as e:
-                                logger.error(e)
-                                filtered_updates[col_name] = self.updates.get(col_key)
-                        else:
-                            cell_value = self.updates.get(col_key)
-                            if isinstance(cell_value, str):
-                                blanks = set(re.findall(r'\{([^{]*?)\}', cell_value))
-                                column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
-                                cell_value = self._fill_msg_blanks(src_row, cell_value, column_blanks)
-                            filtered_updates[col_name] = self.parse_column_value(col, cell_value)
-            row_id = self.data['row']['_id']
-            self.update_data['row'] = filtered_updates
-            self.update_data['row_id'] = row_id
 
-    def _can_do_action(self):
+        for col in self.auto_rule.table_info['columns']:
+            if col.get('type') not in self.VALID_COLUMN_TYPES:
+                continue
+            col_name = col.get('name')
+            col_key = col.get('key')
+            col_type = col.get('type')
+            if col_key in self.updates.keys():
+                if col_type == ColumnTypes.DATE:
+                    time_format = col.get('data', {}).get('format', '')
+                    format_length = len(time_format.split(" "))
+                    try:
+                        time_dict = self.updates.get(col_key)
+                        set_type = time_dict.get('set_type')
+                        if set_type == 'specific_value':
+                            time_value = time_dict.get('value')
+                            filtered_updates[col_name] = time_value
+                        elif set_type == 'relative_date':
+                            offset = time_dict.get('offset')
+                            filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.updates.get(col_key)
+                else:
+                    cell_value = self.updates.get(col_key)
+                    if isinstance(cell_value, str):
+                        blanks = set(re.findall(r'\{([^{]*?)\}', cell_value))
+                        column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
+                        cell_value = self.fill_msg_blanks(src_row, cell_value, column_blanks)
+                    filtered_updates[col_name] = self.parse_column_value(col, cell_value)
+        row_id = self.data['row']['_id']
+        self.update_data['row'] = filtered_updates
+        self.update_data['row_id'] = row_id
+
+    def can_do_action(self):
         if not self.update_data.get('row') or not self.update_data.get('row_id'):
             return False
-        if self.auto_rule.run_condition == PER_UPDATE:
-            # if columns in self.updates was updated, forbidden action!!!
-            updated_column_keys = self.data.get('updated_column_keys', [])
-            to_update_keys = [col['key'] for col in self.auto_rule.table_info['columns'] if col['name'] in self.updates]
-            for key in updated_column_keys:
-                if key in to_update_keys:
-                    return False
-        if self.auto_rule.run_condition in CRON_CONDITIONS:
-            return False
+
+        # if columns in self.updates was updated, forbidden action!!!
+        updated_column_keys = self.data.get('updated_column_keys', [])
+        to_update_keys = [col['key'] for col in self.auto_rule.table_info['columns'] if col['name'] in self.updates]
+        for key in updated_column_keys:
+            if key in to_update_keys:
+                return False
 
         return True
 
     def do_action(self):
-        if not self._can_do_action():
+        if not self.can_do_action():
             return
         table_name = self.auto_rule.table_info['name']
         try:
@@ -230,9 +227,9 @@ class LockRowAction(BaseAction):
             'row_ids':[],
         }
         self.trigger = trigger
-        self._init_updates()
+        self.init_updates()
 
-    def _init_updates(self):
+    def init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         if self.auto_rule.run_condition == PER_UPDATE:
             row_id = self.data['row']['_id']
@@ -243,14 +240,14 @@ class LockRowAction(BaseAction):
             for row in rows_data:
                 self.update_data['row_ids'].append(row.get('_id'))
 
-    def _can_do_action(self):
+    def can_do_action(self):
         if not self.update_data.get('row_ids'):
             return False
 
         return True
 
     def do_action(self):
-        if not self._can_do_action():
+        if not self.can_do_action():
             return
         table_name = self.auto_rule.table_info['name']
         try:
@@ -286,12 +283,12 @@ class AddRowAction(BaseAction):
         """
         super().__init__(auto_rule)
         self.action_type = 'add'
-        self.row = row
+        self.row = row or {}
         self.row_data = {
             'row': {},
             'table_name': self.auto_rule.table_info['name']
         }
-        self._init_updates()
+        self.init_updates()
 
     def format_time_by_offset(self, offset, format_length):
         cur_datetime = datetime.now()
@@ -301,44 +298,45 @@ class AddRowAction(BaseAction):
         if format_length == 1:
             return cur_datetime_offset.strftime("%Y-%m-%d")
 
-    def _init_updates(self):
+    def init_updates(self):
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         filtered_updates = {}
         for col in self.auto_rule.table_info['columns']:
-            if 'key' in col and col.get('type') in self.VALID_COLUMN_TYPES:
-                col_name = col.get('name')
-                col_type = col.get('type')
-                col_key = col.get('key')
-                if col_key in self.row.keys():
-                    if col_type == ColumnTypes.DATE:
-                        time_format = col.get('data', {}).get('format', '')
-                        format_length = len(time_format.split(" "))
-                        try:
-                            time_dict = self.row.get(col_key)
-                            if not time_dict:
-                                continue
-                            set_type = time_dict.get('set_type')
-                            if set_type == 'specific_value':
-                                time_value = time_dict.get('value')
-                                filtered_updates[col_name] = time_value
-                            elif set_type == 'relative_date':
-                                offset = time_dict.get('offset')
-                                filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
-                        except Exception as e:
-                            logger.error(e)
-                            filtered_updates[col_name] = self.row.get(col_key)
-                    else:
-                        filtered_updates[col_name] = self.parse_column_value(col, self.row.get(col_key))
+            if col.get('type') not in self.VALID_COLUMN_TYPES:
+                continue
+            col_name = col.get('name')
+            col_type = col.get('type')
+            col_key = col.get('key')
+            if col_key in self.row.keys():
+                if col_type == ColumnTypes.DATE:
+                    time_format = col.get('data', {}).get('format', '')
+                    format_length = len(time_format.split(" "))
+                    try:
+                        time_dict = self.row.get(col_key)
+                        if not time_dict:
+                            continue
+                        set_type = time_dict.get('set_type')
+                        if set_type == 'specific_value':
+                            time_value = time_dict.get('value')
+                            filtered_updates[col_name] = time_value
+                        elif set_type == 'relative_date':
+                            offset = time_dict.get('offset')
+                            filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.row.get(col_key)
+                else:
+                    filtered_updates[col_name] = self.parse_column_value(col, self.row.get(col_key))
         self.row_data['row'] = filtered_updates
 
-    def _can_do_action(self):
+    def can_do_action(self):
         if not self.row_data.get('row'):
             return False
 
         return True
 
     def do_action(self):
-        if not self._can_do_action():
+        if not self.can_do_action():
             return
         table_name = self.auto_rule.table_info['name']
         try:
@@ -360,21 +358,21 @@ class NotifyAction(BaseAction):
         """
         super().__init__(auto_rule, data)
         self.action_type = 'notify'
-        self.msg = msg
+        self.msg = msg or ''
         temp_users = []
-        for user in users:
+        for user in users or []:
             if user and user not in self.auto_rule.related_users_dict:
                 error_msg = 'rule: %s notify action has invalid user: %s' % (self.auto_rule.rule_id, user)
                 raise RuleInvalidException(error_msg)
             if user:
                 temp_users.append(user)
         self.users = temp_users
-        self.users_column_key = users_column_key
+        self.users_column_key = users_column_key or ''
 
         self.column_blanks = []
         self.col_name_dict = {}
 
-        self._init_notify(msg)
+        self.init_notify(msg)
 
     def is_valid_username(self, user):
         if not user:
@@ -399,12 +397,12 @@ class NotifyAction(BaseAction):
 
         return None
 
-    def _init_notify(self, msg):
+    def init_notify(self, msg):
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
 
-    def _fill_msg_blanks(self, row):
+    def fill_msg_blanks(self, row):
         msg, column_blanks, col_name_dict = self.msg, self.column_blanks, self.col_name_dict
         db_session, dtable_metadata = self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks_with_converted_row(msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
@@ -415,7 +413,7 @@ class NotifyAction(BaseAction):
 
         msg = self.msg
         if self.column_blanks:
-            msg = self._fill_msg_blanks(row)
+            msg = self.fill_msg_blanks(row)
 
         detail = {
             'table_id': table_id,
@@ -492,7 +490,7 @@ class NotifyAction(BaseAction):
                              for key in row}
             msg = self.msg
             if self.column_blanks:
-                msg = self._fill_msg_blanks(converted_row)
+                msg = self.fill_msg_blanks(converted_row)
 
             detail = {
                 'table_id': table_id,
@@ -547,27 +545,26 @@ class SendWechatAction(BaseAction):
 
         super().__init__(auto_rule, data)
         self.action_type = 'send_wechat'
-        self.msg = msg
-        self.msg_type = msg_type
-        self.account_id = account_id
+        self.msg = msg or ''
+        self.msg_type = msg_type or 'text'
+        self.account_id = account_id or ''
 
         self.webhook_url = ''
         self.column_blanks = []
         self.col_name_dict = {}
 
-        self._init_notify(msg)
+        self.init_notify(msg)
 
-    def _init_notify(self, msg):
+    def init_notify(self, msg):
         account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
         if not account_dict:
-            self.auto_rule.set_invalid()
-            return
+            raise RuleInvalidException('Send wechat no account')
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
         self.webhook_url = account_dict.get('detail', {}).get('webhook_url', '')
 
-    def _fill_msg_blanks(self, row):
+    def fill_msg_blanks(self, row):
         msg, column_blanks, col_name_dict = self.msg, self.column_blanks, self.col_name_dict
         db_session, dtable_metadata = self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks_with_converted_row(msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
@@ -576,7 +573,7 @@ class SendWechatAction(BaseAction):
         row = self.data['converted_row']
         msg = self.msg
         if self.column_blanks:
-            msg = self._fill_msg_blanks(row)
+            msg = self.fill_msg_blanks(row)
         try:
             send_wechat_msg(self.webhook_url, msg, self.msg_type)
         except Exception as e:
@@ -598,7 +595,7 @@ class SendWechatAction(BaseAction):
                              for key in row}
             msg = self.msg
             if self.column_blanks:
-                msg = self._fill_msg_blanks(converted_row)
+                msg = self.fill_msg_blanks(converted_row)
             try:
                 send_wechat_msg(self.webhook_url, msg, self.msg_type)
                 time.sleep(0.01)
@@ -624,28 +621,27 @@ class SendDingtalkAction(BaseAction):
 
         super().__init__(auto_rule, data)
         self.action_type = 'send_dingtalk'
-        self.msg = msg
-        self.msg_type = msg_type
-        self.account_id = account_id
-        self.msg_title = msg_title
+        self.msg = msg or ''
+        self.msg_type = msg_type or 'text'
+        self.account_id = account_id or ''
+        self.msg_title = msg_title or ''
 
         self.webhook_url = ''
         self.column_blanks = []
         self.col_name_dict = {}
 
-        self._init_notify(msg)
+        self.init_notify(msg)
 
-    def _init_notify(self, msg):
+    def init_notify(self, msg):
         account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
         if not account_dict:
-            self.auto_rule.set_invalid()
-            return
+            raise RuleInvalidException('Send dingtalk no account')
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
         self.webhook_url = account_dict.get('detail', {}).get('webhook_url', '')
 
-    def _fill_msg_blanks(self, row):
+    def fill_msg_blanks(self, row):
         msg, column_blanks, col_name_dict = self.msg, self.column_blanks, self.col_name_dict
         db_session, dtable_metadata = self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks_with_converted_row(msg, column_blanks, col_name_dict, row, db_session, dtable_metadata)
@@ -654,7 +650,7 @@ class SendDingtalkAction(BaseAction):
         row = self.data['converted_row']
         msg = self.msg
         if self.column_blanks:
-            msg = self._fill_msg_blanks(row)
+            msg = self.fill_msg_blanks(row)
         try:
             send_dingtalk_msg(self.webhook_url, msg, self.msg_type, self.msg_title)
         except Exception as e:
@@ -676,7 +672,7 @@ class SendDingtalkAction(BaseAction):
                              for key in row}
             msg = self.msg
             if self.column_blanks:
-                msg = self._fill_msg_blanks(converted_row)
+                msg = self.fill_msg_blanks(converted_row)
             try:
                 send_dingtalk_msg(self.webhook_url, msg, self.msg_type, self.msg_title)
                 time.sleep(0.01)
@@ -722,14 +718,14 @@ class SendEmailAction(BaseAction):
         self.col_name_dict = {}
         self.repo_id = repo_id
 
-        self._init_notify()
+        self.init_notify()
 
-    def _init_notify_msg(self):
+    def init_notify_msg(self):
         msg = self.send_info.get('message')
         blanks = set(re.findall(r'\{([^{]*?)\}', msg))
         self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
 
-    def _init_notify_send_to(self):
+    def init_notify_send_to(self):
         send_to_list = self.send_info.get('send_to')
         blanks = []
         for send_to in send_to_list:
@@ -738,7 +734,7 @@ class SendEmailAction(BaseAction):
                 blanks.extend(res)
         self.column_blanks_send_to = [blank for blank in blanks if blank in self.col_name_dict]
 
-    def _init_notify_copy_to(self):
+    def init_notify_copy_to(self):
         copy_to_list = self.send_info.get('copy_to')
         blanks = []
         for copy_to in copy_to_list:
@@ -747,28 +743,26 @@ class SendEmailAction(BaseAction):
                 blanks.extend(res)
         self.column_blanks_copy_to = [blank for blank in blanks if blank in self.col_name_dict]
 
-    def _init_notify_subject(self):
+    def init_notify_subject(self):
         subject = self.send_info.get('subject')
         blanks = set(re.findall(r'\{([^{]*?)\}', subject))
         self.column_blanks_subject = [blank for blank in blanks if blank in self.col_name_dict]
 
-    def _init_notify(self):
+    def init_notify(self):
         account_dict = get_third_party_account(self.auto_rule.db_session, self.account_id)
         if not account_dict:
-            self.auto_rule.set_invalid()
-            return
-
+            raise RuleInvalidException('Send email no account')
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
-        self._init_notify_msg()
-        self._init_notify_send_to()
-        self._init_notify_copy_to()
-        self._init_notify_subject()
+        self.init_notify_msg()
+        self.init_notify_send_to()
+        self.init_notify_copy_to()
+        self.init_notify_subject()
 
         account_detail = account_dict.get('detail', {})
 
         self.auth_info = account_detail
 
-    def _fill_msg_blanks(self, row, text, blanks):
+    def fill_msg_blanks(self, row, text, blanks):
         col_name_dict = self.col_name_dict
         db_session, dtable_metadata = self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks_with_converted_row(text, blanks, col_name_dict, row, db_session, dtable_metadata)
@@ -816,16 +810,16 @@ class SendEmailAction(BaseAction):
         attachment_list = self.send_info.get('attachment_list', [])
 
         if self.column_blanks:
-            msg = self._fill_msg_blanks(row, msg, self.column_blanks)
+            msg = self.fill_msg_blanks(row, msg, self.column_blanks)
         if self.column_blanks_send_to:
-            send_to_list = [self._fill_msg_blanks(row, send_to, self.column_blanks_send_to) for send_to in send_to_list]
+            send_to_list = [self.fill_msg_blanks(row, send_to, self.column_blanks_send_to) for send_to in send_to_list]
         if self.column_blanks_copy_to:
-            copy_to_list = [self._fill_msg_blanks(row, copy_to, self.column_blanks_copy_to) for copy_to in copy_to_list]
+            copy_to_list = [self.fill_msg_blanks(row, copy_to, self.column_blanks_copy_to) for copy_to in copy_to_list]
 
         file_download_urls = self.get_file_download_urls(attachment_list, self.data['row'])
 
         if self.column_blanks_subject:
-            subject = self._fill_msg_blanks(row, subject, self.column_blanks_subject)
+            subject = self.fill_msg_blanks(row, subject, self.column_blanks_subject)
 
         self.send_info.update({
             'subject': subject,
@@ -870,16 +864,16 @@ class SendEmailAction(BaseAction):
             copy_to_list = send_info.get('copy_to', [])
             attachment_list = send_info.get('attachment_list', [])
             if self.column_blanks:
-                msg = self._fill_msg_blanks(converted_row, msg, self.column_blanks)
+                msg = self.fill_msg_blanks(converted_row, msg, self.column_blanks)
             if self.column_blanks_send_to:
-                send_to_list = [self._fill_msg_blanks(converted_row, send_to, self.column_blanks_send_to) for send_to in send_to_list]
+                send_to_list = [self.fill_msg_blanks(converted_row, send_to, self.column_blanks_send_to) for send_to in send_to_list]
             if self.column_blanks_copy_to:
-                copy_to_list = [self._fill_msg_blanks(converted_row, copy_to, self.column_blanks_copy_to) for copy_to in copy_to_list]
+                copy_to_list = [self.fill_msg_blanks(converted_row, copy_to, self.column_blanks_copy_to) for copy_to in copy_to_list]
 
             file_download_urls = self.get_file_download_urls(attachment_list, row)
 
             if self.column_blanks_subject:
-                subject = self._fill_msg_blanks(converted_row, subject, self.column_blanks_subject)
+                subject = self.fill_msg_blanks(converted_row, subject, self.column_blanks_subject)
 
             send_info.update({
                 'subject': subject,
@@ -927,7 +921,7 @@ class RunPythonScriptAction(BaseAction):
         self.org_id = org_id
         self.repo_id = repo_id
 
-    def _can_do_action(self):
+    def can_do_action(self):
         if not SEATABLE_FAAS_URL:
             return False
         if self.auto_rule.can_run_python is not None:
@@ -964,7 +958,7 @@ class RunPythonScriptAction(BaseAction):
         self.auto_rule.can_run_python = can_run_python
         return can_run_python
 
-    def _get_scripts_running_limit(self):
+    def get_scripts_running_limit(self):
         if self.auto_rule.scripts_running_limit is not None:
             return self.auto_rule.scripts_running_limit
         if self.org_id != -1:
@@ -988,13 +982,13 @@ class RunPythonScriptAction(BaseAction):
         return scripts_running_limit
 
     def do_action(self):
-        if not self._can_do_action():
+        if not self.can_do_action():
             return
 
         context_data = {'table': self.auto_rule.table_info['name']}
         if self.auto_rule.run_condition == PER_UPDATE:
             context_data['row'] = self.data['converted_row']
-        scripts_running_limit = self._get_scripts_running_limit()
+        scripts_running_limit = self.get_scripts_running_limit()
 
         # request faas url
         headers = {'Authorization': 'Token ' + SEATABLE_FAAS_AUTH_TOKEN}
@@ -1043,9 +1037,9 @@ class LinkRecordsAction(BaseAction):
         self.action_type = 'link_record'
         self.linked_table_id = linked_table_id
         self.link_id = link_id
-        self.match_conditions = match_conditions
+        self.match_conditions = match_conditions or []
         self.linked_row_ids = []
-        self._init_linked_row_ids()
+        self.init_linked_row_ids()
 
     def parse_column_value(self, column, value):
         if column.get('type') == ColumnTypes.SINGLE_SELECT:
@@ -1068,7 +1062,7 @@ class LinkRecordsAction(BaseAction):
         else:
             return value
 
-    def _format_filter_groups(self):
+    def format_filter_groups(self):
         filters = []
         for match_condition in self.match_conditions:
             column_key = match_condition.get("column_key")
@@ -1108,8 +1102,8 @@ class LinkRecordsAction(BaseAction):
                 return table.get('columns', [])
         return []
 
-    def _get_linked_table_rows(self):
-        filter_groups = self._format_filter_groups()
+    def get_linked_table_rows(self):
+        filter_groups = self.format_filter_groups()
         if not filter_groups:
             return []
         json_data = {
@@ -1139,11 +1133,11 @@ class LinkRecordsAction(BaseAction):
 
         return rows_data or []
 
-    def _init_linked_row_ids(self):
-        linked_rows_data = self._get_linked_table_rows()
+    def init_linked_row_ids(self):
+        linked_rows_data = self.get_linked_table_rows()
         self.linked_row_ids = linked_rows_data and [row.get('_id') for row in linked_rows_data] or []
 
-    def _can_do_action(self):
+    def can_do_action(self):
         table_columns = self.get_columns(self.auto_rule.table_id)
         link_col_name = ''
         for col in table_columns:
@@ -1160,7 +1154,7 @@ class LinkRecordsAction(BaseAction):
         return True
 
     def do_action(self):
-        if not self._can_do_action():
+        if not self.can_do_action():
             return
 
         try:
@@ -1198,7 +1192,7 @@ class AddRecordToOtherTableAction(BaseAction):
         """
         super().__init__(auto_rule, data)
         self.action_type = 'add_record_to_other_table'
-        self.row = row
+        self.row = row or {}
         self.col_name_dict = {}
         self.dst_table_id = dst_table_id
         self.row_data = {
@@ -1220,7 +1214,7 @@ class AddRecordToOtherTableAction(BaseAction):
                 return table.get('columns', [])
         return []
 
-    def _fill_msg_blanks(self, row, text, blanks):
+    def fill_msg_blanks(self, row, text, blanks):
         col_name_dict = self.col_name_dict
         db_session, dtable_metadata = self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks_with_converted_row(text, blanks, col_name_dict, row, db_session, dtable_metadata)
@@ -1233,7 +1227,7 @@ class AddRecordToOtherTableAction(BaseAction):
         if format_length == 1:
             return cur_datetime_offset.strftime("%Y-%m-%d")
 
-    def _init_append_rows(self):
+    def init_append_rows(self):
         src_row = self.data['converted_row']
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
 
@@ -1244,48 +1238,54 @@ class AddRecordToOtherTableAction(BaseAction):
                 continue
             blanks = set(re.findall(r'\{([^{]*?)\}', cell_value))
             self.column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
-            self.row[row_id] = self._fill_msg_blanks(src_row, cell_value, self.column_blanks)
+            self.row[row_id] = self.fill_msg_blanks(src_row, cell_value, self.column_blanks)
 
         dst_columns = self.get_columns(self.dst_table_id)
 
         filtered_updates = {}
         for col in dst_columns:
-            if 'key' in col and col.get('type') in self.VALID_COLUMN_TYPES:
-                col_name = col.get('name')
-                col_type = col.get('type')
-                col_key = col.get('key')
-                if col_key in self.row.keys():
-                    if col_type == ColumnTypes.DATE:
-                        time_format = col.get('data', {}).get('format', '')
-                        format_length = len(time_format.split(" "))
-                        try:
-                            time_dict = self.row.get(col_key)
-                            if not time_dict:
-                                continue
-                            set_type = time_dict.get('set_type')
-                            if set_type == 'specific_value':
-                                time_value = time_dict.get('value')
-                                filtered_updates[col_name] = time_value
-                            elif set_type == 'relative_date':
-                                offset = time_dict.get('offset')
-                                filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
-                        except Exception as e:
-                            logger.error(e)
-                            filtered_updates[col_name] = self.row.get(col_key)
-                    else:
-                        filtered_updates[col_name] = self.parse_column_value(col, self.row.get(col_key))
+            if col.get('type') not in self.VALID_COLUMN_TYPES:
+                continue
+            col_name = col.get('name')
+            col_type = col.get('type')
+            col_key = col.get('key')
+            if col_key in self.row.keys():
+                if col_type == ColumnTypes.DATE:
+                    time_format = col.get('data', {}).get('format', '')
+                    format_length = len(time_format.split(" "))
+                    try:
+                        time_dict = self.row.get(col_key)
+                        if not time_dict:
+                            continue
+                        set_type = time_dict.get('set_type')
+                        if set_type == 'specific_value':
+                            time_value = time_dict.get('value')
+                            filtered_updates[col_name] = time_value
+                        elif set_type == 'relative_date':
+                            offset = time_dict.get('offset')
+                            filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.row.get(col_key)
+                else:
+                    filtered_updates[col_name] = self.parse_column_value(col, self.row.get(col_key))
 
         self.row_data['row'] = filtered_updates
 
-    def _can_do_action(self):
-        if not self.data or not self.auto_rule.trigger.get('condition') in (CONDITION_ROWS_MODIFIED, CONDITION_ROWS_ADDED):
+    def can_do_action(self):
+        if not self.data or self.auto_rule.trigger.get('condition') not in (CONDITION_ROWS_MODIFIED, CONDITION_ROWS_ADDED):
             return False
 
         return True
 
     def do_action(self):
+        self.init_append_rows()
+
+        if not self.row_data.get('row'):
+            return False
+
         table_name = self.get_table_name(self.dst_table_id)
-        if not self._can_do_action() or not table_name:
+        if not self.can_do_action() or not table_name:
             return
 
         self._init_append_rows()
@@ -1320,12 +1320,12 @@ class TriggerWorkflowAction(BaseAction):
 
     def __init__(self, auto_rule, row, token):
         super().__init__(auto_rule, None)
-        self.row = row
+        self.row = row or {}
         self.row_data = {
             'row': {}
         }
         self.token = token
-        self._init_updates()
+        self.init_updates()
 
     def format_time_by_offset(self, offset, format_length):
         cur_datetime = datetime.now()
@@ -1348,44 +1348,40 @@ class TriggerWorkflowAction(BaseAction):
         workflow_table_id = workflow_config.get('table_id')
         return workflow_table_id == self.auto_rule.table_id
 
-    def _init_updates(self):
-        if self.auto_rule.trigger.get('condition') != CONDITION_PERIODICALLY:
-            return
+    def init_updates(self):
         if not self.is_workflow_valid():
             return
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         filtered_updates = {}
         for col in self.auto_rule.view_columns:
-            if 'key' in col and col.get('type') in self.VALID_COLUMN_TYPES:
-                col_name = col.get('name')
-                col_type = col.get('type')
-                col_key = col.get('key')
-                if col_key in self.row.keys():
-                    if col_type == ColumnTypes.DATE:
-                        time_format = col.get('data', {}).get('format', '')
-                        format_length = len(time_format.split(" "))
-                        try:
-                            time_dict = self.row.get(col_key)
-                            if not time_dict:
-                                continue
-                            set_type = time_dict.get('set_type')
-                            if set_type == 'specific_value':
-                                time_value = time_dict.get('value')
-                                filtered_updates[col_name] = time_value
-                            elif set_type == 'relative_date':
-                                offset = time_dict.get('offset')
-                                filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
-                        except Exception as e:
-                            logger.error(e)
-                            filtered_updates[col_name] = self.row.get(col_key)
-                    else:
-                        filtered_updates[col_name] = self.parse_column_value(col, self.row.get(col_key))
+            if col.get('type') not in self.VALID_COLUMN_TYPES:
+                continue
+            col_name = col.get('name')
+            col_type = col.get('type')
+            col_key = col.get('key')
+            if col_key in self.row.keys():
+                if col_type == ColumnTypes.DATE:
+                    time_format = col.get('data', {}).get('format', '')
+                    format_length = len(time_format.split(" "))
+                    try:
+                        time_dict = self.row.get(col_key)
+                        if not time_dict:
+                            continue
+                        set_type = time_dict.get('set_type')
+                        if set_type == 'specific_value':
+                            time_value = time_dict.get('value')
+                            filtered_updates[col_name] = time_value
+                        elif set_type == 'relative_date':
+                            offset = time_dict.get('offset')
+                            filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.row.get(col_key)
+                else:
+                    filtered_updates[col_name] = self.parse_column_value(col, self.row.get(col_key))
         self.row_data['row'] = filtered_updates
 
     def do_action(self):
-        if not self.row_data['row']:
-            return
-
         try:
             logger.debug('rule: %s new workflow: %s task row data: %s', self.auto_rule.rule_id, self.token, self.row_data)
             resp_data = self.auto_rule.dtable_server_api.append_row(self.auto_rule.table_info['name'], self.row_data['row'])
@@ -1454,10 +1450,10 @@ class AutomationRule:
         self._trigger_conditions_rows = None
 
         self.cache_key = 'AUTOMATION_RULE:%s' % self.rule_id
-        self.task_run_seccess = True
+        self.task_run_success = True
 
         self.done_actions = False
-        self._load_trigger_and_actions(raw_trigger, raw_actions)
+        self.load_trigger_and_actions(raw_trigger, raw_actions)
 
         self.current_valid = True
 
@@ -1465,7 +1461,7 @@ class AutomationRule:
 
         self.warnings = []
 
-    def _load_trigger_and_actions(self, raw_trigger, raw_actions):
+    def load_trigger_and_actions(self, raw_trigger, raw_actions):
         self.trigger = json.loads(raw_trigger)
 
         self.table_id = self.trigger.get('table_id')
@@ -1675,12 +1671,64 @@ class AutomationRule:
         return False
 
 
+    def can_condition_trigger_action(self, action):
+        action_type = action.get('type')
+        run_condition = self.run_condition
+        trigger_condition = self.trigger.get('condition')
+        if action_type == 'notify':
+            return True
+        elif action_type == 'update_record':
+            if run_condition == PER_UPDATE:
+                return True
+            return False
+        elif action_type == 'add_record':
+            if run_condition == PER_UPDATE:
+                return True
+            if run_condition in CRON_CONDITIONS and trigger_condition == CONDITION_PERIODICALLY:
+                return True
+            return False
+        elif action_type == 'lock_record':
+            if run_condition == PER_UPDATE:
+                return True
+            if run_condition in CRON_CONDITIONS and trigger_condition == CONDITION_PERIODICALLY_BY_CONDITION:
+                return True
+            return False
+        elif action_type == 'send_wechat':
+            return True
+        elif action_type == 'send_dingtalk':
+            return True
+        elif action_type == 'send_email':
+            return True
+        elif action_type == 'run_python_script':
+            if run_condition == PER_UPDATE:
+                return True
+            if run_condition in CRON_CONDITIONS and trigger_condition == CONDITION_PERIODICALLY:
+                return True
+            return False
+        elif action_type == 'link_records':
+            if run_condition == PER_UPDATE:
+                return True
+            return False
+        elif action_type == 'add_record_to_other_table':
+            if run_condition == PER_UPDATE:
+                return True
+            return False
+        elif action_type == 'trigger_workflow':
+            if run_condition in CRON_CONDITIONS and trigger_condition == CONDITION_PERIODICALLY:
+                return True
+            return False
+        return False
+
+
     def do_actions(self, with_test=False):
         if (not self.can_do_actions()) and (not with_test):
             return
 
         for action_info in self.action_infos:
-            logger.debug('start action: %s type: %s', action_info.get('_id'), action_info['type'])
+            logger.debug('rule: %s start action: %s type: %s', self.rule_id, action_info.get('_id'), action_info['type'])
+            if not self.can_condition_trigger_action(action_info):
+                logger.debug('rule: %s forbidden trigger action: %s type: %s when run_condition: %s trigger_condition: %s', self.rule_id, action_info.get('_id'), action_info['type'], self.run_condition, self.trigger.get('condition'))
+                continue
             try:
                 if action_info.get('type') == 'update_record':
                     updates = action_info.get('updates')
@@ -1742,8 +1790,7 @@ class AutomationRule:
                     linked_table_id = action_info.get('linked_table_id')
                     link_id = action_info.get('link_id')
                     match_conditions = action_info.get('match_conditions')
-                    if self.run_condition == PER_UPDATE:
-                        LinkRecordsAction(self, self.data, linked_table_id, link_id, match_conditions).do_action()
+                    LinkRecordsAction(self, self.data, linked_table_id, link_id, match_conditions).do_action()
 
                 elif action_info.get('type') == 'add_record_to_other_table':
                     row = action_info.get('row')
@@ -1757,12 +1804,12 @@ class AutomationRule:
 
             except RuleInvalidException as e:
                 logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
-                self.task_run_seccess = False
+                self.task_run_success = False
                 self.set_invalid()
                 break
             except Exception as e:
                 logger.exception(e)
-                self.task_run_seccess = False
+                self.task_run_success = False
                 logger.error('rule: %s, do action: %s error: %s', self.rule_id, action_info, e)
 
         if self.done_actions and not with_test:
@@ -1785,7 +1832,7 @@ class AutomationRule:
             if self.run_condition in ALL_CONDITIONS:
                 self.db_session.execute(set_task_log_sql, {
                     'trigger_time': datetime.utcnow(),
-                    'success': self.task_run_seccess,
+                    'success': self.task_run_success,
                     'rule_id': self.rule_id,
                     'run_condition': self.run_condition,
                     'dtable_uuid': self.dtable_uuid,
