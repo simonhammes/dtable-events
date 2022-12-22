@@ -142,7 +142,16 @@ class Operator(object):
         })
 
     def op_is_current_user_id(self):
-        return self.op_is()
+        if not self.filter_term:
+            return "(`%s`IS NULL AND `%s` IS NOT NULL)" % (
+                self.column_name,
+                self.column_name
+            )
+        return "`%s` %s '%s'" % (
+            self.column_name,
+            '=',
+            self.filter_term
+        )
 
 
 class TextOperator(Operator):
@@ -987,7 +996,8 @@ class StatisticSQLGenerator(object):
                 column_type = column.get('type')
                 operator = _get_operator_by_type(column_type)(column, filter_item)
                 sql_condition = _filter2sqlslice(operator)
-                filter_string_list.append(sql_condition)
+                if sql_condition:
+                    filter_string_list.append(sql_condition)
         if filter_string_list:
             filter_sql = filter_conjunction.join(filter_string_list)
         return filter_sql
