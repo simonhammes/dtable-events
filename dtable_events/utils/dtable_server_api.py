@@ -93,12 +93,15 @@ class DTableServerAPI(object):
         response = requests.post(url, json=json_data, headers=self.headers, timeout=self.timeout)
         return parse_response(response)
 
-    def list_rows(self, table_name):
+    def list_rows(self, table_name, start=None, limit=None):
         logger.debug('list rows table_name: %s', table_name)
         url = self.dtable_server_url + '/api/v1/dtables/' + self.dtable_uuid + '/rows/?from=dtable_events'
         params = {
             'table_name': table_name,
         }
+        if start is not None and limit is not None:
+            params['start'] = start
+            params['limit'] = limit
         response = requests.get(url, params=params, headers=self.headers, timeout=self.timeout)
         data = parse_response(response)
         return data.get('rows')
@@ -128,6 +131,18 @@ class DTableServerAPI(object):
         response = requests.get(url, params=params, headers=self.headers, timeout=self.timeout)
         data = parse_response(response)
         return data.get('columns')
+
+    def view_rows(self, table_name, view_name, has_hidden_columns):
+        url = self.dtable_server_url + '/api/v1/internal/dtables/' + self.dtable_uuid + '/view-rows/?from=dtable_events'
+        params = {
+            'table_name': table_name,
+            'view_name': view_name,
+            'convert_link_id': True,
+            'has_hidden_columns': has_hidden_columns,
+        }
+        response = requests.get(url, params=params, headers=self.headers, timeout=self.timeout)
+        data = parse_response(response)
+        return data.get('rows')
 
     def insert_column(self, table_name, column_name, column_type, column_data=None):
         logger.debug('insert column table_name: %s, column_name: %s, column_type: %s, column_data: %s', table_name, column_name, column_type, column_data)

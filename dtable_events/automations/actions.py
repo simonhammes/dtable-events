@@ -16,7 +16,7 @@ from seaserv import seafile_api
 from dtable_events.automations.models import get_third_party_account
 from dtable_events.app.event_redis import redis_cache
 from dtable_events.app.config import DTABLE_WEB_SERVICE_URL, DTABLE_PRIVATE_KEY, \
-    SEATABLE_FAAS_AUTH_TOKEN, SEATABLE_FAAS_URL
+    SEATABLE_FAAS_AUTH_TOKEN, SEATABLE_FAAS_URL, INNER_DTABLE_DB_URL
 from dtable_events.dtable_io import send_wechat_msg, send_email_msg, send_dingtalk_msg, batch_send_email_msg
 from dtable_events.notification_rules.notification_rules_utils import fill_msg_blanks_with_converted_row, \
     send_notification
@@ -25,6 +25,8 @@ from dtable_events.utils import uuid_str_to_36_chars, is_valid_email, get_inner_
 from dtable_events.utils.constants import ColumnTypes
 from dtable_events.utils.dtable_server_api import DTableServerAPI, WrongFilterException
 from dtable_events.utils.dtable_web_api import DTableWebAPI
+from dtable_events.utils.dtable_db_api import DTableDBAPI
+from dtable_events.notification_rules.utils import get_nickname_by_usernames
 
 
 logger = logging.getLogger(__name__)
@@ -51,10 +53,96 @@ CONDITION_ROWS_LIMIT = 50
 WECHAT_CONDITION_ROWS_LIMIT = 20
 DINGTALK_CONDITION_ROWS_LIMIT = 20
 
+AUTO_RULE_CALCULATE_TYPES = ['calculate_accumulated_value', 'calculate_delta', 'calculate_rank', 'calculate_percentage']
+
 
 def email2list(email_str, split_pattern='[,，]'):
     email_list = [value.strip() for value in re.split(split_pattern, email_str) if value.strip()]
     return email_list
+
+
+def is_number_format(column):
+    calculate_col_type = column.get('type')
+    if calculate_col_type in [ColumnTypes.NUMBER, ColumnTypes.DURATION, ColumnTypes.RATE]:
+        return True
+    elif calculate_col_type == ColumnTypes.FORMULA and column.get('data').get('result_type') == 'number':
+        return True
+    elif calculate_col_type == ColumnTypes.LINK_FORMULA:
+        if column.get('data').get('result_type') == 'array' and column.get('data').get('array_type') == 'number':
+            return True
+        elif column.get('data').get('result_type') == 'number':
+            return True
+    return False
+
+
+def get_date_format(date_format):
+    if date_format == 'YYYY-MM-DD HH:mm':
+        return '%Y-%m-%d %H:%M', '2022-01-01 00:00'
+    else:
+        return '%Y-%m-%d', '2022-01-01'
+
+
+def is_int_str(num):
+    return '.' not in str(num)
+
+
+def convert_formula_number(value, column_data):
+    decimal = column_data.get('decimal')
+    thousands = column_data.get('thousands')
+    precision = column_data.get('precision')
+    if decimal == 'comma':
+        # decimal maybe dot or comma
+        value = value.replace(',', '.')
+    if thousands == 'space':
+        # thousands maybe space, dot, comma or no
+        value = value.replace(' ', '')
+    elif thousands == 'dot':
+        value = value.replace('.', '')
+        if precision > 0 or decimal == 'dot':
+            value = value[:-precision] + '.' + value[-precision:]
+    elif thousands == 'comma':
+        value = value.replace(',', '')
+
+    return value
+
+
+def parse_formula_number(cell_data, column_data):
+    """
+    parse formula number to regular format
+    :param cell_data: value of cell (e.g. 1.25, ￥12.0, $10.20, €10.2, 0:02 or 10%, etc)
+    :param column_data: info of formula column
+    """
+    src_format = column_data.get('format')
+    value = str(cell_data)
+    if src_format in ['euro', 'dollar', 'yuan']:
+        value = value[1:]
+    elif src_format == 'percent':
+        value = value[:-1]
+    value = convert_formula_number(value, column_data)
+
+    if src_format == 'percent' and isinstance(value, str):
+        try:
+            value = float(value) / 100
+        except Exception as e:
+            return 0
+    try:
+        if is_int_str(value):
+            value = int(value)
+        else:
+            value = float(value)
+    except Exception as e:
+        return 0
+    return value
+
+
+def cell_data2str(cell_data):
+    if isinstance(cell_data, list):
+        cell_data.sort()
+        return ' '.join(cell_data2str(item) for item in cell_data)
+    elif cell_data is None:
+        return ''
+    else:
+        return str(cell_data)
 
 
 class BaseAction:
@@ -1137,10 +1225,8 @@ class LinkRecordsAction(BaseAction):
 
     def can_do_action(self):
         linked_table_name = self.get_table_name(self.linked_table_id)
-        if not linked_table_name or not self.data \
-                or self.auto_rule.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_ROWS_ADDED):
-            self.auto_rule.set_invalid()
-            return False
+        if not linked_table_name:
+            raise RuleInvalidException('link-records link_table_id table not found')
 
         self.init_linked_row_ids()
 
@@ -1278,18 +1364,11 @@ class AddRecordToOtherTableAction(BaseAction):
 
         self.row_data['row'] = filtered_updates
 
-    def can_do_action(self):
-        if not self.data or self.auto_rule.trigger.get('condition') not in (CONDITION_FILTERS_SATISFY, CONDITION_ROWS_ADDED):
-            return False
-
-        return True
-
     def do_action(self):
 
         table_name = self.get_table_name(self.dst_table_id)
-        if not self.can_do_action() or not table_name:
-            self.auto_rule.set_invalid()
-            return
+        if not table_name:
+            raise RuleInvalidException('add-record dst_table_id table not found')
 
         self.init_append_rows()
         if not self.row_data.get('row'):
@@ -1412,6 +1491,494 @@ class TriggerWorkflowAction(BaseAction):
             logger.error('submit workflow: %s row_id: %s error: %s', self.token, row_id, e)
 
 
+class CalculateAction(BaseAction):
+    VALID_CALCULATE_COLUMN_TYPES = [
+        ColumnTypes.NUMBER,
+        ColumnTypes.DURATION,
+        ColumnTypes.FORMULA,
+        ColumnTypes.LINK_FORMULA
+    ]
+    VALID_RANK_COLUMN_TYPES = [
+        ColumnTypes.NUMBER,
+        ColumnTypes.DURATION,
+        ColumnTypes.DATE,
+        ColumnTypes.RATE,
+        ColumnTypes.FORMULA,
+        ColumnTypes.LINK_FORMULA
+    ]
+    VALID_RESULT_COLUMN_TYPES = [ColumnTypes.NUMBER]
+
+    def __init__(self, auto_rule, data, calculate_column_key, result_column_key, action_type):
+        super().__init__(auto_rule, data)
+        # this action contains calculate_accumulated_value, calculate_delta, calculate_rank and calculate_percentage
+        self.action_type = action_type
+        self.calculate_column_key = calculate_column_key
+        self.result_column_key = result_column_key
+        self.column_key_dict = {col.get('key'): col for col in self.auto_rule.view_columns}
+        self.update_rows = []
+        self.rank_rows = []
+
+    def parse_group_rows(self, view_rows):
+        for group in view_rows:
+            group_subgroups = group.get('subgroups')
+            group_rows = group.get('rows')
+            if group_rows is None and group_subgroups:
+                self.parse_group_rows(group.get('subgroups'))
+            else:
+                self.parse_rows(group_rows)
+
+    def get_row_value(self, row, column):
+        col_name = column.get('name')
+        value = row.get(col_name, 0)
+        if column.get('type') in [ColumnTypes.FORMULA, ColumnTypes.LINK_FORMULA]:
+            value = parse_formula_number(value, column.get('data'))
+        return value
+
+    def parse_rows(self, rows):
+        calculate_col = self.column_key_dict.get(self.calculate_column_key, {})
+        result_col = self.column_key_dict.get(self.result_column_key, {})
+        result_col_name = result_col.get('name')
+        result_value = 0
+
+        if self.action_type == 'calculate_accumulated_value':
+            for index in range(len(rows)):
+                row_id = rows[index].get('_id')
+                result_value += self.get_row_value(rows[index], calculate_col)
+                result_row = {result_col_name: result_value}
+                self.update_rows.append({'row_id': row_id, 'row': result_row})
+
+        elif self.action_type == 'calculate_delta':
+            for index in range(len(rows)):
+                row_id = rows[index].get('_id')
+                if index > 0:
+                    pre_value = self.get_row_value(rows[index], calculate_col)
+                    next_value = self.get_row_value(rows[index-1], calculate_col)
+                    result_value = pre_value - next_value
+                    result_row = {result_col_name: result_value}
+                    self.update_rows.append({'row_id': row_id, 'row': result_row})
+
+        elif self.action_type == 'calculate_percentage':
+            sum_calculate = sum([float(self.get_row_value(row, calculate_col)) for row in rows])
+            for row in rows:
+                row_id = row.get('_id')
+                try:
+                    result_value = float(self.get_row_value(row, calculate_col)) / sum_calculate
+                except ZeroDivisionError:
+                    result_value = None
+                self.update_rows.append({'row_id': row_id, 'row': {result_col_name: result_value}})
+
+        elif self.action_type == 'calculate_rank':
+            self.rank_rows.extend(rows)
+
+    def init_updates(self):
+        calculate_col = self.column_key_dict.get(self.calculate_column_key, {})
+        result_col = self.column_key_dict.get(self.result_column_key, {})
+        if not calculate_col or not result_col or result_col.get('type') not in self.VALID_RESULT_COLUMN_TYPES:
+            raise RuleInvalidException('calculate_col not found, result_col not found or result_col type invalid')
+        if self.action_type == 'calculate_rank':
+            if calculate_col.get('type') not in self.VALID_RANK_COLUMN_TYPES:
+                raise RuleInvalidException('calculate_rank calculate_col type invalid')
+        else:
+            if calculate_col.get('type') not in self.VALID_CALCULATE_COLUMN_TYPES:
+                raise RuleInvalidException('calculate_col type invalid')
+
+        calculate_col_name = calculate_col.get('name')
+        result_col_name = result_col.get('name')
+        table_name = self.auto_rule.table_info['name']
+        view_name = self.auto_rule.view_info['name']
+        view_rows = self.auto_rule.dtable_server_api.view_rows(table_name, view_name, True)
+
+        if view_rows and ('rows' in view_rows[0] or 'subgroups' in view_rows[0]):
+            self.parse_group_rows(view_rows)
+        else:
+            self.parse_rows(view_rows)
+
+        if self.action_type == 'calculate_rank':
+            calculate_col_type = calculate_col.get('type')
+            if is_number_format(calculate_col):
+                self.rank_rows = sorted(self.rank_rows, key=lambda x: float(self.get_row_value(x, calculate_col)), reverse=True)
+
+            elif calculate_col_type == ColumnTypes.DATE or \
+                    calculate_col_type == ColumnTypes.FORMULA and calculate_col.get('data').get('result_type') == 'date':
+                # default_date is for formatting date
+                date_format, default_date = get_date_format(calculate_col.get('data').get('format'))
+                self.rank_rows = sorted(self.rank_rows,
+                                        key=lambda x: datetime.strptime(x.get(calculate_col_name, default_date), date_format),
+                                        reverse=True)
+            elif calculate_col_type == ColumnTypes.LINK_FORMULA and calculate_col.get('data').get('array_type') == 'date':
+                date_format, default_date = get_date_format(calculate_col.get('data').get('array_data').get('format'))
+                self.rank_rows = sorted(self.rank_rows,
+                                        key=lambda x: datetime.strptime(x.get(calculate_col_name, default_date), date_format),
+                                        reverse=True)
+            rank = 0
+            real_rank = 0
+            pre_value = None
+            for row in self.rank_rows:
+                cal_value = row.get(calculate_col_name)
+                row_id = row.get('_id')
+                if cal_value is None:
+                    result_row = {result_col_name: None}
+                else:
+                    real_rank += 1
+                    if rank == 0 or cal_value != pre_value:
+                        rank = real_rank
+                        pre_value = cal_value
+                    result_row = {result_col_name: rank}
+
+                self.update_rows.append({'row_id': row_id, 'row': result_row})
+
+    def can_do_action(self):
+        if not self.auto_rule.current_valid:
+            return False
+        if not self.calculate_column_key or not self.result_column_key:
+            return False
+        return True
+
+    def do_action(self):
+        if not self.can_do_action():
+            return
+
+        self.init_updates()
+
+        table_name = self.auto_rule.table_info.get('name')
+        step = 1000
+        for i in range(0, len(self.update_rows), step):
+            try:
+                self.auto_rule.dtable_server_api.batch_update_rows(table_name, self.update_rows[i: i+step])
+            except Exception as e:
+                logger.error('batch update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+                return
+        self.auto_rule.set_done_actions()
+
+
+class LookupAndCopyAction(BaseAction):
+    VALID_COLUMN_TYPES = [
+        ColumnTypes.TEXT,
+        ColumnTypes.NUMBER,
+        ColumnTypes.CHECKBOX,
+        ColumnTypes.DATE,
+        ColumnTypes.LONG_TEXT,
+        ColumnTypes.COLLABORATOR,
+        ColumnTypes.GEOLOCATION,
+        ColumnTypes.URL,
+        ColumnTypes.DURATION,
+        ColumnTypes.EMAIL,
+        ColumnTypes.RATE,
+    ]
+
+    def __init__(self, auto_rule, data, table_condition, equal_column_conditions, fill_column_conditions):
+        super().__init__(auto_rule, data=data)
+        self.action_type = 'lookup_and_copy'
+
+        self.table_condition = table_condition
+        self.equal_column_conditions = equal_column_conditions
+        self.fill_column_conditions = fill_column_conditions
+        self.from_table_name = ''
+        self.copy_to_table_name = ''
+
+        self.update_rows = []
+
+    def get_table_names_dict(self):
+        dtable_metadata = self.auto_rule.dtable_metadata
+        tables = dtable_metadata.get('tables', [])
+        return {table.get('_id'): table.get('name') for table in tables}
+
+    def get_columns_dict(self, table_id):
+        dtable_metadata = self.auto_rule.dtable_metadata
+        column_dict = {}
+        for table in dtable_metadata.get('tables', []):
+            if table.get('_id') == table_id:
+                for col in table.get('columns'):
+                    column_dict[col.get('key')] = col
+        return column_dict
+
+    def query_table_rows(self, table_name, column_names):
+        sql_columns = ', '.join(column_names)
+        limit = 0
+        step = 10000
+        result_rows = []
+        while True:
+            # sql = f"select `_id`, {sql_columns} from `{table_name}` limit {limit},{step}"
+            sql = f"select * from `{table_name}`"
+            try:
+                results = self.auto_rule.dtable_db_api.query(sql)
+            except Exception as e:
+                logger.exception(e)
+                logger.error('query dtable: %s, table name: %s, error: %s', self.auto_rule.dtable_uuid, table_name, e)
+                return []
+            result_rows += results
+            limit += step
+            if len(results) < step:
+                break
+        return result_rows
+
+    def init_updates(self):
+        from_table_id = self.table_condition.get('from_table_id')
+        copy_to_table_id = self.table_condition.get('copy_to_table_id')
+
+        from_column_dict = self.get_columns_dict(from_table_id)
+        copy_to_column_dict = self.get_columns_dict(copy_to_table_id)
+        table_name_dict = self.get_table_names_dict()
+
+        self.from_table_name = table_name_dict.get(from_table_id)
+        self.copy_to_table_name = table_name_dict.get(copy_to_table_id)
+
+        if not self.from_table_name or not self.copy_to_table_name:
+            raise RuleInvalidException('from_table_name or copy_to_table_name not found')
+
+        equal_from_columns = []
+        equal_copy_to_columns = []
+        fill_from_columns = []
+        fill_copy_to_columns = []
+        # check column valid
+        try:
+            for col in self.equal_column_conditions:
+                from_column = from_column_dict[col['from_column_key']]
+                copy_to_column = copy_to_column_dict[col['copy_to_column_key']]
+                if from_column.get('type') not in self.VALID_COLUMN_TYPES or copy_to_column.get('type') not in self.VALID_COLUMN_TYPES:
+                    raise RuleInvalidException('from_column or copy_to_column type invalid')
+                equal_from_columns.append(from_column.get('name'))
+                equal_copy_to_columns.append(copy_to_column.get('name'))
+
+            for col in self.fill_column_conditions:
+                from_column = from_column_dict[col['from_column_key']]
+                copy_to_column = copy_to_column_dict[col['copy_to_column_key']]
+                if from_column.get('type') not in self.VALID_COLUMN_TYPES or copy_to_column.get('type') not in self.VALID_COLUMN_TYPES:
+                    raise RuleInvalidException('from_column or copy_to_column type invalid')
+                fill_from_columns.append(from_column.get('name'))
+                fill_copy_to_columns.append(copy_to_column.get('name'))
+        except KeyError as e:
+            logger.error('dtable: %s, from_table: %s or copy_to_table:%s column key error: %s', self.auto_rule.dtable_uuid, self.from_table_name, self.copy_to_table_name, e)
+            raise RuleInvalidException('from_column or copy_to_column not found')
+
+        from_columns = equal_from_columns + fill_from_columns
+        copy_to_columns = equal_copy_to_columns + fill_copy_to_columns
+        from_table_rows = self.query_table_rows(self.from_table_name, from_columns)
+        copy_to_table_rows = self.query_table_rows(self.copy_to_table_name, copy_to_columns)
+
+        from_table_rows_dict = {}
+        for from_row in from_table_rows:
+            from_key = '-'
+            for equal_condition in self.equal_column_conditions:
+                from_column_key = equal_condition['from_column_key']
+                from_column = from_column_dict[from_column_key]
+                from_column_name = from_column.get('name')
+                from_value = from_row.get(from_column_name)
+                from_value = cell_data2str(from_value)
+                from_key += from_value + from_column_key + '-'
+            from_key = str(hash(from_key))
+            from_table_rows_dict[from_key] = from_row
+
+        for copy_to_row in copy_to_table_rows:
+            copy_to_key = '-'
+            for equal_condition in self.equal_column_conditions:
+                from_column_key = equal_condition['from_column_key']
+                copy_to_column_key = equal_condition['copy_to_column_key']
+                copy_to_column = copy_to_column_dict[copy_to_column_key]
+                copy_to_column_name = copy_to_column.get('name')
+                copy_to_value = copy_to_row.get(copy_to_column_name)
+                copy_to_value = cell_data2str(copy_to_value)
+                copy_to_key += copy_to_value + from_column_key + '-'
+            copy_to_key = str(hash(copy_to_key))
+            from_row = from_table_rows_dict.get(copy_to_key)
+            if not from_table_rows_dict.get(copy_to_key):
+                continue
+            row = {}
+            for fill_condition in self.fill_column_conditions:
+                from_column_key = fill_condition.get('from_column_key')
+                from_column = from_column_dict[from_column_key]
+                from_column_name = from_column.get('name')
+                copy_to_column_key = fill_condition.get('copy_to_column_key')
+                copy_to_column = copy_to_column_dict[copy_to_column_key]
+                copy_to_column_name = copy_to_column.get('name')
+                from_value = from_row.get(from_column_name, '')
+                copy_to_value = copy_to_row.get(copy_to_column_name, '')
+
+                # do not need convert value to str because column type may be different
+                if from_value == copy_to_value:
+                    continue
+
+                copy_to_column_name = copy_to_column_dict[copy_to_column_key].get('name')
+                copy_to_column_type = copy_to_column_dict[copy_to_column_key].get('type')
+
+                if copy_to_column_type == ColumnTypes.CHECKBOX:
+                    from_value = True if from_value else False
+                elif copy_to_column_type == ColumnTypes.DATE:
+                    if isinstance(from_value, str) and 'T' in from_value:
+                        d = from_value.split('T')
+                        from_value = d[0] + ' ' + d[1].split('+')[0]
+                row[copy_to_column_name] = from_value
+
+            self.update_rows.append({'row_id': copy_to_row['_id'], 'row': row})
+
+    def can_do_action(self):
+        if not self.auto_rule.current_valid:
+            return False
+        if not self.table_condition or not self.equal_column_conditions or not self.fill_column_conditions:
+            return False
+        return True
+
+    def do_action(self):
+        if not self.can_do_action():
+            return
+        self.init_updates()
+
+        step = 1000
+        for i in range(0, len(self.update_rows), step):
+            try:
+                self.auto_rule.dtable_server_api.batch_update_rows(self.copy_to_table_name, self.update_rows[i: i + step])
+            except Exception as e:
+                logger.error('batch update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+                return
+        self.auto_rule.set_done_actions()
+
+
+class ExtractUserNameAction(BaseAction):
+    VALID_EXTRACT_COLUMN_TYPES = [
+        ColumnTypes.CREATOR,
+        ColumnTypes.LAST_MODIFIER,
+        ColumnTypes.COLLABORATOR
+    ]
+    VALID_RESULT_COLUMN_TYPES = [
+        ColumnTypes.TEXT
+    ]
+
+    def __init__(self, auto_rule, data, extract_column_key, result_column_key):
+        super().__init__(auto_rule, data)
+        self.action_type = 'extract_user_name'
+        self.extract_column_key = extract_column_key
+        self.result_column_key = result_column_key
+
+        self.column_key_dict = {col.get('key'): col for col in self.auto_rule.view_columns}
+        self.update_rows = []
+
+    def query_user_rows(self, table_name, extract_column_name, result_column_name):
+        limit = 0
+        step = 10000
+        result_rows = []
+        while True:
+            sql = f"select `_id`, `{extract_column_name}`, `{result_column_name}` from `{table_name}` limit {limit},{step}"
+            try:
+                results = self.auto_rule.dtable_db_api.query(sql)
+            except Exception as e:
+                logger.error('query dtable: %s, table name: %s, error: %s', self.auto_rule.dtable_uuid, table_name, e)
+                return []
+            result_rows += results
+            limit += step
+            if len(results) < step:
+                break
+        return result_rows
+
+    def init_updates(self):
+        extract_column = self.column_key_dict.get(self.extract_column_key, {})
+        result_column = self.column_key_dict.get(self.result_column_key, {})
+        result_column_type = result_column.get('type')
+        extract_column_type = extract_column.get('type')
+        if not extract_column or not result_column or result_column_type not in self.VALID_RESULT_COLUMN_TYPES \
+                or extract_column_type not in self.VALID_EXTRACT_COLUMN_TYPES:
+            raise RuleInvalidException('extract_column not found, result_column not found, result_column_type invalid or extract_column_type invalid')
+
+        extract_column_name = extract_column.get('name')
+        result_column_name = result_column.get('name')
+        table_name = self.auto_rule.table_info.get('name')
+        user_rows = self.query_user_rows(table_name, extract_column_name, result_column_name)
+        unknown_user_id_set = set()
+        unknown_user_rows = []
+        related_users_dict = self.auto_rule.related_users_dict
+        for row in user_rows:
+            result_col_value = row.get(result_column_name)
+            if extract_column_type == ColumnTypes.COLLABORATOR:
+                user_ids = row.get(extract_column_name, [])
+                if not user_ids:
+                    if result_col_value:
+                        self.update_rows.append({'row_id': row.get('_id'), 'row': {result_column_name: ''}})
+                    continue
+                is_all_related_user = True
+                nicknames = []
+                for user_id in user_ids:
+                    related_user = related_users_dict.get(user_id)
+                    if not related_user:
+                        unknown_user_id_set.add(user_id)
+                        if is_all_related_user:
+                            unknown_user_rows.append(row)
+                        is_all_related_user = False
+                    else:
+                        nickname = related_user.get('name')
+                        nicknames.append(nickname)
+
+                nicknames_str = ','.join(nicknames)
+                if is_all_related_user and result_col_value != nicknames_str:
+                    self.update_rows.append({'row_id': row.get('_id'), 'row': {result_column_name: nicknames_str}})
+            else:
+                user_id = row.get(extract_column_name)
+                if not user_id:
+                    if result_col_value:
+                        self.update_rows.append({'row_id': row.get('_id'), 'row': {result_column_name: ''}})
+                    continue
+
+                related_user = related_users_dict.get(user_id, '')
+                if related_user:
+                    nickname = related_user.get('name')
+                    if nickname != result_col_value:
+                        self.update_rows.append({'row_id': row.get('_id'), 'row': {result_column_name: nickname}})
+                else:
+                    unknown_user_id_set.add(user_id)
+                    unknown_user_rows.append(row)
+
+        email2nickname = {}
+        if unknown_user_rows:
+            unknown_user_id_list = list(unknown_user_id_set)
+            step = 1000
+            start = 0
+            for i in range(0, len(unknown_user_id_list), step):
+                users_dict = get_nickname_by_usernames(unknown_user_id_list[start: start + step], self.auto_rule.db_session)
+                email2nickname.update(users_dict)
+                start += step
+
+        for user_row in unknown_user_rows:
+            result_col_value = user_row.get(result_column_name)
+            if extract_column_type == ColumnTypes.COLLABORATOR:
+                user_ids = user_row.get(extract_column_name)
+                nickname_list = []
+                for user_id in user_ids:
+                    related_user = related_users_dict.get(user_id)
+                    if not related_user:
+                        nickname = email2nickname.get(user_id)
+                    else:
+                        nickname = related_user.get('name')
+                    nickname_list.append(nickname)
+                update_result_value = ','.join(nickname_list)
+            else:
+                user_id = user_row.get(extract_column_name)
+                nickname = email2nickname.get(user_id)
+                update_result_value = nickname
+            if result_col_value != update_result_value:
+                self.update_rows.append({'row_id': user_row.get('_id'), 'row': {result_column_name: update_result_value}})
+
+    def can_do_action(self):
+        if not self.auto_rule.current_valid:
+            return False
+        if not self.extract_column_key or not self.result_column_key:
+            return False
+        return True
+
+    def do_action(self):
+        if not self.can_do_action():
+            return
+
+        self.init_updates()
+
+        table_name = self.auto_rule.table_info.get('name')
+        step = 1000
+        for i in range(0, len(self.update_rows), step):
+            try:
+                self.auto_rule.dtable_server_api.batch_update_rows(table_name, self.update_rows[i: i+step])
+            except Exception as e:
+                logger.error('batch update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+                return
+        self.auto_rule.set_done_actions()
+
+
 class RuleInvalidException(Exception):
     """
     Exception which indicates rule need to be set is_valid=Fasle
@@ -1436,6 +2003,7 @@ class AutomationRule:
         self.db_session = db_session
 
         self.dtable_server_api = DTableServerAPI('Automation Rule', str(UUID(self.dtable_uuid)), get_inner_dtable_server_url())
+        self.dtable_db_api = DTableDBAPI('Automation Rule', str(UUID(self.dtable_uuid)), INNER_DTABLE_DB_URL)
         self.dtable_web_api = DTableWebAPI(DTABLE_WEB_SERVICE_URL)
 
         self.table_id = None
@@ -1720,8 +2288,15 @@ class AutomationRule:
             if run_condition in CRON_CONDITIONS and trigger_condition == CONDITION_PERIODICALLY:
                 return True
             return False
+        elif action_type in AUTO_RULE_CALCULATE_TYPES:
+            if run_condition in CRON_CONDITIONS and trigger_condition == CONDITION_PERIODICALLY:
+                return True
+            return False
+        elif action_type in ['lookup_and_copy', 'extract_user_name']:
+            if run_condition in CRON_CONDITIONS and trigger_condition == CONDITION_PERIODICALLY:
+                return True
+            return False
         return False
-
 
     def do_actions(self, with_test=False):
         if (not self.can_do_actions()) and (not with_test):
@@ -1732,6 +2307,8 @@ class AutomationRule:
             if not self.can_condition_trigger_action(action_info):
                 logger.debug('rule: %s forbidden trigger action: %s type: %s when run_condition: %s trigger_condition: %s', self.rule_id, action_info.get('_id'), action_info['type'], self.run_condition, self.trigger.get('condition'))
                 continue
+            if not self.current_valid:
+                break
             try:
                 if action_info.get('type') == 'update_record':
                     updates = action_info.get('updates')
@@ -1804,6 +2381,22 @@ class AutomationRule:
                     token = action_info.get('token')
                     row = action_info.get('row')
                     TriggerWorkflowAction(self, row, token).do_action()
+
+                elif action_info.get('type') in AUTO_RULE_CALCULATE_TYPES:
+                    calculate_column_key = action_info.get('calculate_column')
+                    result_column_key = action_info.get('result_column')
+                    CalculateAction(self, self.data, calculate_column_key, result_column_key, action_info.get('type')).do_action()
+
+                elif action_info.get('type') == 'lookup_and_copy':
+                    table_condition = action_info.get('table_condition')
+                    equal_column_conditions = action_info.get('equal_column_conditions')
+                    fill_column_conditions = action_info.get('fill_column_conditions')
+                    LookupAndCopyAction(self, self.data, table_condition, equal_column_conditions, fill_column_conditions).do_action()
+
+                elif action_info.get('type') == 'extract_user_name':
+                    extract_column_key = action_info.get('extract_column_key')
+                    result_column_key = action_info.get('result_column_key')
+                    ExtractUserNameAction(self, self.data, extract_column_key, result_column_key).do_action()
 
             except RuleInvalidException as e:
                 logger.error('auto rule: %s, invalid error: %s', self.rule_id, e)
