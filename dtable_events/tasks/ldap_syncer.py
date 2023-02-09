@@ -3,7 +3,7 @@ import logging
 from threading import Thread, Event
 
 from dtable_events.utils import get_opt_from_conf_or_env, \
-    get_python_executable, run, parse_bool, parse_interval
+     get_python_executable, run_and_wait, parse_bool, parse_interval
 from dtable_events.app.config import dtable_web_dir
 
 
@@ -81,7 +81,7 @@ class LDAPSyncerTimer(Thread):
                         'ldap_group_sync'
                     ]
                     with open(self._logfile, 'a') as fp:
-                        run(cmd, cwd=dtable_web_dir, output=fp)
+                        run_and_wait(cmd, cwd=dtable_web_dir, output=fp)
                 except Exception as e:
                     logging.exception('error when sync ldap group: %s', e)
 
