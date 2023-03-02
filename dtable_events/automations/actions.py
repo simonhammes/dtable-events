@@ -23,10 +23,11 @@ from dtable_events.notification_rules.notification_rules_utils import fill_msg_b
 from dtable_events.utils import uuid_str_to_36_chars, is_valid_email, get_inner_dtable_server_url, \
     normalize_file_path, gen_file_get_url
 from dtable_events.utils.constants import ColumnTypes
-from dtable_events.utils.dtable_server_api import DTableServerAPI, WrongFilterException
+from dtable_events.utils.dtable_server_api import DTableServerAPI
 from dtable_events.utils.dtable_web_api import DTableWebAPI
-from dtable_events.utils.dtable_db_api import DTableDBAPI
+from dtable_events.utils.dtable_db_api import DTableDBAPI, RowsQueryError
 from dtable_events.notification_rules.utils import get_nickname_by_usernames
+from dtable_events.utils.sql_generator import filter2sql
 from dtable_events.utils.sql_generator import BaseSQLGenerator
 
 
@@ -74,13 +75,6 @@ def is_number_format(column):
         elif column.get('data').get('result_type') == 'number':
             return True
     return False
-
-
-def get_date_format(date_format):
-    if date_format == 'YYYY-MM-DD HH:mm':
-        return '%Y-%m-%d %H:%M', '2022-01-01 00:00'
-    else:
-        return '%Y-%m-%d', '2022-01-01'
 
 
 def is_int_str(num):
@@ -1225,21 +1219,24 @@ class LinkRecordsAction(BaseAction):
         filter_groups = self.format_filter_groups()
         if not filter_groups:
             return []
-        json_data = {
-            'table_id': self.linked_table_id,
-            'filter_conditions': {
-                'filter_groups': filter_groups,
-                'group_conjunction': 'And'
-            },
+
+        filter_conditions = {
+            'filter_groups': filter_groups,
+            'group_conjunction': 'And',
+            'start': 0,
             'limit': 500,
-            'server_only': True
         }
+        table_name = self.get_table_name(self.linked_table_id)
+        columns = self.get_columns(self.linked_table_id)
+
+        sql = filter2sql(table_name, columns, filter_conditions, by_group=True)
+
         try:
-            response_data = self.auto_rule.dtable_server_api.internal_filter_rows(json_data)
-            rows_data = response_data.get('rows') or []
-        except WrongFilterException:
+            rows_data, _ = self.auto_rule.dtable_db_api.query(sql, convert=False)
+        except RowsQueryError:
             raise RuleInvalidException('wrong filter in filters in link-records')
         except Exception as e:
+            logger.exception(e)
             logger.error('request filter rows error: %s', e)
             return []
 
@@ -1247,7 +1244,7 @@ class LinkRecordsAction(BaseAction):
             self.auto_rule.rule_id,
             rows_data and len(rows_data) or 0,
             self.auto_rule.dtable_uuid,
-            json.dumps(json_data)
+            json.dumps(filter_conditions)
         ))
 
         return rows_data or []
@@ -1308,7 +1305,7 @@ class LinkRecordsAction(BaseAction):
         while True:
             sql = f"select * from `{table_name}` {filter_clause} limit {start}, {step}"
             try:
-                results = self.auto_rule.dtable_db_api.query(sql)
+                results, _ = self.auto_rule.dtable_db_api.query(sql)
             except Exception as e:
                 logger.exception(e)
                 logger.error('query dtable: %s, sql: %s, filters: %s, error: %s', self.auto_rule.dtable_uuid, sql, filter_conditions, e)
@@ -1686,6 +1683,7 @@ class CalculateAction(BaseAction):
         self.column_key_dict = {col.get('key'): col for col in self.auto_rule.view_columns}
         self.update_rows = []
         self.rank_rows = []
+        self.is_group_view = False
 
     def parse_group_rows(self, view_rows):
         for group in view_rows:
@@ -1698,10 +1696,13 @@ class CalculateAction(BaseAction):
 
     def get_row_value(self, row, column):
         col_name = column.get('name')
-        value = row.get(col_name, 0)
-        if column.get('type') in [ColumnTypes.FORMULA, ColumnTypes.LINK_FORMULA]:
+        value = row.get(col_name)
+        if self.is_group_view and column.get('type') in [ColumnTypes.FORMULA, ColumnTypes.LINK_FORMULA]:
             value = parse_formula_number(value, column.get('data'))
         return value
+
+    def get_date_value(self, row, col_name):
+        return parser.parse(row.get(col_name))
 
     def parse_rows(self, rows):
         calculate_col = self.column_key_dict.get(self.calculate_column_key, {})
@@ -1739,6 +1740,33 @@ class CalculateAction(BaseAction):
         elif self.action_type == 'calculate_rank':
             self.rank_rows.extend(rows)
 
+    def query_table_rows(self, table_name, columns, filter_conditions):
+        offset = 10000
+        start = 0
+        rows = []
+        while True:
+            filter_conditions['start'] = start
+            filter_conditions['limit'] = offset
+
+            sql = filter2sql(table_name, columns, filter_conditions, by_group=False)
+            response_rows, _ = self.auto_rule.dtable_db_api.query(sql)
+            rows.extend(response_rows)
+
+            start += offset
+            if len(response_rows) < offset:
+                break
+        return rows
+
+    def can_rank_date(self, column):
+        column_type = column.get('type')
+        if column_type == ColumnTypes.DATE:
+            return True
+        elif column_type == ColumnTypes.FORMULA and column.get('data').get('result_type') == 'date':
+            return True
+        elif column_type == ColumnTypes.LINK_FORMULA and column.get('data').get('result_type') == 'date':
+            return True
+        return False
+
     def init_updates(self):
         calculate_col = self.column_key_dict.get(self.calculate_column_key, {})
         result_col = self.column_key_dict.get(self.result_column_key, {})
@@ -1755,7 +1783,18 @@ class CalculateAction(BaseAction):
         result_col_name = result_col.get('name')
         table_name = self.auto_rule.table_info['name']
         view_name = self.auto_rule.view_info['name']
-        view_rows = self.auto_rule.dtable_server_api.view_rows(table_name, view_name, True)
+
+        self.is_group_view = True if self.auto_rule.view_info.get('groupbys') else False
+
+        if self.is_group_view:
+            view_rows = self.auto_rule.dtable_server_api.view_rows(table_name, view_name, True)
+        else:
+            filter_conditions = {
+                'sorts': self.auto_rule.view_info.get('sorts'),
+                'filters': self.auto_rule.view_info.get('filters'),
+                'filter_conjunction': self.auto_rule.view_info.get('filter_conjunction'),
+            }
+            view_rows = self.query_table_rows(table_name, self.auto_rule.view_columns, filter_conditions)
 
         if view_rows and ('rows' in view_rows[0] or 'subgroups' in view_rows[0]):
             self.parse_group_rows(view_rows)
@@ -1763,37 +1802,30 @@ class CalculateAction(BaseAction):
             self.parse_rows(view_rows)
 
         if self.action_type == 'calculate_rank':
-            calculate_col_type = calculate_col.get('type')
-            if is_number_format(calculate_col):
-                self.rank_rows = sorted(self.rank_rows, key=lambda x: float(self.get_row_value(x, calculate_col)), reverse=True)
+            to_be_sorted_rows = []
+            for row in self.rank_rows:
+                if row.get(calculate_col_name):
+                    to_be_sorted_rows.append(row)
+                    continue
+                self.update_rows.append({'row_id': row.get('_id'), 'row': {result_col_name: None}})
 
-            elif calculate_col_type == ColumnTypes.DATE or \
-                    calculate_col_type == ColumnTypes.FORMULA and calculate_col.get('data').get('result_type') == 'date':
-                # default_date is for formatting date
-                date_format, default_date = get_date_format(calculate_col.get('data').get('format'))
-                self.rank_rows = sorted(self.rank_rows,
-                                        key=lambda x: datetime.strptime(x.get(calculate_col_name, default_date), date_format),
-                                        reverse=True)
-            elif calculate_col_type == ColumnTypes.LINK_FORMULA and calculate_col.get('data').get('array_type') == 'date':
-                date_format, default_date = get_date_format(calculate_col.get('data').get('array_data').get('format'))
-                self.rank_rows = sorted(self.rank_rows,
-                                        key=lambda x: datetime.strptime(x.get(calculate_col_name, default_date), date_format),
-                                        reverse=True)
+            if is_number_format(calculate_col):
+                to_be_sorted_rows = sorted(to_be_sorted_rows, key=lambda x: float(self.get_row_value(x, calculate_col)), reverse=True)
+
+            elif self.can_rank_date(calculate_col):
+                to_be_sorted_rows = sorted(to_be_sorted_rows, key=lambda x: self.get_date_value(x, calculate_col_name), reverse=True)
+
             rank = 0
             real_rank = 0
             pre_value = None
-            for row in self.rank_rows:
+            for row in to_be_sorted_rows:
                 cal_value = row.get(calculate_col_name)
                 row_id = row.get('_id')
-                if cal_value is None:
-                    result_row = {result_col_name: None}
-                else:
-                    real_rank += 1
-                    if rank == 0 or cal_value != pre_value:
-                        rank = real_rank
-                        pre_value = cal_value
-                    result_row = {result_col_name: rank}
-
+                real_rank += 1
+                if rank == 0 or cal_value != pre_value:
+                    rank = real_rank
+                    pre_value = cal_value
+                result_row = {result_col_name: rank}
                 self.update_rows.append({'row_id': row_id, 'row': result_row})
 
     def can_do_action(self):
@@ -1868,7 +1900,7 @@ class LookupAndCopyAction(BaseAction):
         while True:
             sql = f"select * from `{table_name}` limit {start}, {step}"
             try:
-                results = self.auto_rule.dtable_db_api.query(sql)
+                results, _ = self.auto_rule.dtable_db_api.query(sql)
             except Exception as e:
                 logger.exception(e)
                 logger.error('query dtable: %s, table name: %s, error: %s', self.auto_rule.dtable_uuid, table_name, e)
@@ -2026,7 +2058,7 @@ class ExtractUserNameAction(BaseAction):
         while True:
             sql = f"select `_id`, `{extract_column_name}`, `{result_column_name}` from `{table_name}` limit {start},{step}"
             try:
-                results = self.auto_rule.dtable_db_api.query(sql)
+                results, _ = self.auto_rule.dtable_db_api.query(sql)
             except Exception as e:
                 logger.error('query dtable: %s, table name: %s, error: %s', self.auto_rule.dtable_uuid, table_name, e)
                 return []
@@ -2310,7 +2342,6 @@ class AutomationRule:
             return self._trigger_conditions_rows
         filters = self.trigger.get('filters', [])
         filter_conjunction = self.trigger.get('filter_conjunction', 'And')
-        table_id = self.table_id
         view_info = self.view_info
         view_filters = view_info.get('filters', [])
         view_filter_conjunction = view_info.get('filter_conjunction', 'And')
@@ -2325,20 +2356,19 @@ class AutomationRule:
             if trigger_filters:
                 filter_groups.append({'filters': trigger_filters, 'filter_conjunction': filter_conjunction})
 
-        json_data = {
-            'table_id': table_id,
-            'filter_conditions': {
-                'filter_groups':filter_groups,
-                'group_conjunction': 'And'
-            },
-            'limit': 500,
-            'server_only': True
-        }
+        filter_conditions = {
+                'filter_groups': filter_groups,
+                'group_conjunction': 'And',
+                'start': 0,
+                'limit': 500,
+            }
+        table_name = self.table_info.get('name')
+        columns = self.table_info.get('columns')
 
+        sql = filter2sql(table_name, columns, filter_conditions, by_group=True)
         try:
-            response_data = self.dtable_server_api.internal_filter_rows(json_data)
-            rows_data = response_data.get('rows') or []
-        except WrongFilterException:
+            rows_data, _ = self.dtable_db_api.query(sql, convert=False)
+        except RowsQueryError:
             raise RuleInvalidException('wrong filter in rule: %s trigger filters', self.rule_id)
         except Exception as e:
             logger.error('request filter rows error: %s', e)
@@ -2348,7 +2378,7 @@ class AutomationRule:
             self.rule_id,
             len(rows_data),
             self.dtable_uuid,
-            json.dumps(json_data)
+            json.dumps(filter_conditions)
         ))
         self._trigger_conditions_rows = rows_data
         if len(self._trigger_conditions_rows) > 50:
