@@ -1047,14 +1047,24 @@ class StatisticSQLGenerator(object):
         return '%s(`%s`)' % (DTABLE_DB_SUMMARY_METHOD[summary_method], column_name)
 
     def _basic_statistic_2_sql(self):
-        x_axis_column_key = self.statistic.get('x_axis_column_key', '')
-        x_axis_date_granularity = self.statistic.get('x_axis_date_granularity', '')
-        x_axis_geolocation_granularity = self.statistic.get('x_axis_geolocation_granularity', '')
-        x_axis_include_empty_cells = self.statistic.get('x_axis_include_empty_cells', False) or False
+        if self.statistic_type in [StatisticType.HORIZONTAL_BAR, StatisticType.HORIZONTAL_GROUP_BAR]:
+            x_axis_column_key = self.statistic.get('vertical_axis_column_key', '')
+            x_axis_date_granularity = self.statistic.get('vertical_axis_date_granularity', '')
+            x_axis_geolocation_granularity = self.statistic.get ('vertical_axis_geolocation_granularity', '')
+            x_axis_include_empty_cells = self.statistic.get('vertical_axis_include_empty', False) or False
 
-        y_axis_summary_type = self.statistic.get('y_axis_summary_type', '')
-        y_axis_summary_method = self.statistic.get('y_axis_summary_method', '')
-        y_axis_summary_column_key = self.statistic.get('y_axis_summary_column_key', '')        
+            y_axis_summary_type = self.statistic.get('horizontal_axis_summary_type', '')
+            y_axis_summary_method = self.statistic.get('horizontal_axis_summary_method', '')
+            y_axis_summary_column_key = self.statistic.get('horizontal_axis_column_key', '')
+        else:
+            x_axis_column_key = self.statistic.get('x_axis_column_key', '')
+            x_axis_date_granularity = self.statistic.get('x_axis_date_granularity', '')
+            x_axis_geolocation_granularity = self.statistic.get('x_axis_geolocation_granularity', '')
+            x_axis_include_empty_cells = self.statistic.get('x_axis_include_empty_cells', False) or False
+
+            y_axis_summary_type = self.statistic.get('y_axis_summary_type', '')
+            y_axis_summary_method = self.statistic.get('y_axis_summary_method', '')
+            y_axis_summary_column_key = self.statistic.get('y_axis_summary_column_key', '')  
 
         groupby_column = self._get_column_by_key(x_axis_column_key)
         if not groupby_column:
@@ -1079,14 +1089,26 @@ class StatisticSQLGenerator(object):
         return 'SELECT %s FROM %s %s GROUP BY %s LIMIT 0, 5000`' % (groupby_column_name, self.table_name, self.filter_sql, groupby_column_name)
 
     def _grouping_statistic_2_sql(self):
-        x_axis_column_key = self.statistic.get('x_axis_column_key', '')
-        x_axis_include_empty_cells = self.statistic.get('x_axis_include_empty_cells', False) or False
-        x_axis_date_granularity = self.statistic.get('x_axis_date_granularity', '')
-        x_axis_geolocation_granularity = self.statistic.get('x_axis_geolocation_granularity', '')
 
-        y_axis_summary_column_key = self.statistic.get('y_axis_summary_column_key', '')
-        y_axis_summary_type = self.statistic.get('y_axis_summary_type', '')
-        y_axis_summary_method = self.statistic.get('y_axis_summary_method', '')
+        if self.statistic_type == StatisticType.HORIZONTAL_GROUP_BAR:
+            x_axis_column_key = self.statistic.get('vertical_axis_column_key', '')
+            x_axis_date_granularity = self.statistic.get('vertical_axis_date_granularity','')
+            x_axis_geolocation_granularity = self.statistic.get ('vertical_axis_geolocation_granularity', '')
+            x_axis_include_empty_cells = self.statistic.get('vertical_axis_include_empty', False) or False
+
+            y_axis_summary_type = self.statistic.get('horizontal_axis_summary_type', '')
+            y_axis_summary_method = self.statistic.get('horizontal_axis_summary_method', '')
+            y_axis_summary_column_key = self.statistic.get('horizontal_axis_column_key', '')
+        else:
+            x_axis_column_key = self.statistic.get('x_axis_column_key', '')
+            x_axis_date_granularity = self.statistic.get('x_axis_date_granularity', '')
+            x_axis_geolocation_granularity = self.statistic.get('x_axis_geolocation_granularity', '')
+            x_axis_include_empty_cells = self.statistic.get('x_axis_include_empty_cells', False) or False
+
+            y_axis_summary_type = self.statistic.get('y_axis_summary_type', '')
+            y_axis_summary_method = self.statistic.get('y_axis_summary_method', '')
+            y_axis_summary_column_key = self.statistic.get('y_axis_summary_column_key', '') 
+
 
         column_groupby_column_key = self.statistic.get('column_groupby_column_key', '')
         column_groupby_date_granularity = self.statistic.get('column_groupby_date_granularity', '')
@@ -1285,11 +1307,11 @@ class StatisticSQLGenerator(object):
         if self.error:
             return '', self.error
 
-        if self.statistic_type in [StatisticType.BAR, StatisticType.LINE]:
+        if self.statistic_type in [StatisticType.BAR, StatisticType.LINE, StatisticType.HORIZONTAL_BAR]:
             sql = self._basic_statistic_2_sql()
             return sql, self.error
 
-        if self.statistic_type in [StatisticType.BAR_GROUP, StatisticType.LINE_GROUP]:
+        if self.statistic_type in [StatisticType.BAR_GROUP, StatisticType.LINE_GROUP, StatisticType.HORIZONTAL_GROUP_BAR]:
             column_groupby_column_key = self.statistic.get('column_groupby_column_key', '')
             column_groupby_multiple_numeric_column = self.statistic.get('column_groupby_multiple_numeric_column', False) or False
             if not (column_groupby_column_key or column_groupby_multiple_numeric_column):
