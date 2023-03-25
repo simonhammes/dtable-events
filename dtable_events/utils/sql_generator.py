@@ -1418,11 +1418,10 @@ class StatisticSQLGenerator(object):
         target_summary_method = self.statistic.get('target_value_column_summary_method', '')
         target_column = self._get_column_by_key(target_column_key)
         if not target_column:
-            self.error = 'Numeric column not found'
+            self.error = 'Target column not found'
             return ''
-        self._update_filter_sql(True, target_column)
         if not target_summary_method:
-            self.error = 'Summary method is not valid'
+            self.error = 'Target summary method is not valid'
             return ''
         target_summary_method = target_summary_method.upper()
         target_summary_column_name = self._summary_column_2_sql(target_summary_method, target_column)
@@ -1431,14 +1430,15 @@ class StatisticSQLGenerator(object):
         total_summary_method = self.statistic.get('total_value_column_summary_method', '')
         total_column = self._get_column_by_key(total_column_key)
         if not total_column:
-            self.error = 'Numeric column not found'
+            self.error = 'Total column not found'
             return ''
         if not total_summary_method:
-            self.error = 'Summary method is not valid'
+            self.error = 'Total summary method is not valid'
             return ''
+        self._update_filter_sql(True, target_column)
         total_summary_method = total_summary_method.upper()
         total_summary_column_name = self._summary_column_2_sql(total_summary_method, total_column)
-        return 'SELECT %s, %s FROM %s LIMIT 0, 5000' % (target_summary_column_name, total_summary_column_name, self.table_name)
+        return 'SELECT %s, %s FROM %s %s LIMIT 0, 5000' % (target_summary_column_name, total_summary_column_name, self.table_name, self.filter_sql)
 
 
     
