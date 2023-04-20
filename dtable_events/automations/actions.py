@@ -21,7 +21,7 @@ from dtable_events.dtable_io import send_wechat_msg, send_email_msg, send_dingta
 from dtable_events.notification_rules.notification_rules_utils import fill_msg_blanks_with_converted_row, \
     send_notification, fill_msg_blanks_with_sql_row
 from dtable_events.utils import uuid_str_to_36_chars, is_valid_email, get_inner_dtable_server_url, \
-    normalize_file_path, gen_file_get_url
+    normalize_file_path, gen_file_get_url, gen_random_option
 from dtable_events.utils.constants import ColumnTypes
 from dtable_events.utils.dtable_server_api import DTableServerAPI
 from dtable_events.utils.dtable_web_api import DTableWebAPI
@@ -217,6 +217,19 @@ class UpdateAction(BaseAction):
         self.col_name_dict = {}
         self.init_updates()
 
+    def add_or_create_options(self, column, value):
+        table_name = self.update_data['table_name']
+        select_options = column.get('data', {}).get('options', [])
+        for option in select_options:
+            if value == option.get('name'):
+                return value
+        self.auto_rule.dtable_server_api.add_column_options(
+            table_name,
+            column['name'],
+            options = [gen_random_option(value)]
+        )
+        return value
+
     def format_time_by_offset(self, offset, format_length):
         cur_datetime = datetime.now()
         cur_datetime_offset = cur_datetime + timedelta(days=offset)
@@ -233,7 +246,7 @@ class UpdateAction(BaseAction):
     def init_updates(self):
         src_row = self.data['converted_row']
         self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
-
+        self.col_key_dict = {col.get('key'):  col for col in self.auto_rule.table_info['columns']}
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         filtered_updates = {}
 
@@ -256,6 +269,84 @@ class UpdateAction(BaseAction):
                         elif set_type == 'relative_date':
                             offset = time_dict.get('offset')
                             filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
+                        elif set_type == 'date_column':
+                            col_key = time_dict.get('date_column_key')
+                            col = self.col_key_dict.get(col_key)
+                            value = src_row.get(col['name'])
+                            filtered_updates[col_name] = value
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.updates.get(col_key)
+                elif col_type == ColumnTypes.SINGLE_SELECT:
+                    try:
+                        data_dict = self.updates.get(col_key)
+                        if not data_dict:
+                            continue
+                        if isinstance(data_dict, dict):
+                            set_type = data_dict.get('set_type')
+                            if set_type == 'default':
+                                value = data_dict.get('value')
+                                filtered_updates[col_name] = self.parse_column_value(col, value)
+                            elif set_type == 'column':
+                                src_col_key = data_dict.get('value')
+                                src_col = self.col_key_dict.get(src_col_key)
+                                value = src_row.get(src_col['name'])
+                                if value:
+                                    filtered_updates[col_name] = self.add_or_create_options(col, value)
+                        else:
+                            value = data_dict  # compatible with the old data strcture
+                            filtered_updates[col_name] = self.parse_column_value(col, value)
+
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.updates.get(col_key)
+
+                elif col_type == ColumnTypes.COLLABORATOR:
+                    try:
+                        data_dict = self.updates.get(col_key)
+                        if not data_dict:
+                            continue
+                        if isinstance(data_dict, dict):
+                            set_type = data_dict.get('set_type')
+                            if set_type == 'default':
+                                value = data_dict.get('value')
+                                filtered_updates[col_name] = self.parse_column_value(col, value)
+                            elif set_type == 'column':
+                                src_col_key = data_dict.get('value')
+                                src_col = self.col_key_dict.get(src_col_key)
+                                value = src_row.get(src_col['name'])
+                                if not isinstance(value, list):
+                                    value = [value, ]
+                                filtered_updates[col_name] = value
+                        else:
+                            value = data_dict  # compatible with the old data strcture
+                            filtered_updates[col_name] = self.parse_column_value(col, value)
+
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.updates.get(col_key)
+
+                elif col_type in [
+                    ColumnTypes.NUMBER,
+                ]:
+                    try:
+                        data_dict = self.updates.get(col_key)
+                        if not data_dict:
+                            continue
+                        if isinstance(data_dict, dict):
+                            set_type = data_dict.get('set_type')
+                            if set_type == 'default':
+                                value = data_dict.get('value')
+                                filtered_updates[col_name] = self.parse_column_value(col, value)
+                            elif set_type == 'column':
+                                src_col_key = data_dict.get('value')
+                                src_col = self.col_key_dict.get(src_col_key)
+                                value = src_row.get(src_col['name'])
+                                filtered_updates[col_name] = value
+                        else:
+                            value = data_dict  # compatible with the old data strcture
+                            filtered_updates[col_name] = self.parse_column_value(col, value)
+
                     except Exception as e:
                         logger.error(e)
                         filtered_updates[col_name] = self.updates.get(col_key)
@@ -1487,10 +1578,24 @@ class AddRecordToOtherTableAction(BaseAction):
         if format_length == 1:
             return cur_datetime_offset.strftime("%Y-%m-%d")
 
+    def add_or_create_options(self, column, value):
+        table_name = self.row_data['table_name']
+        select_options = column.get('data', {}).get('options', [])
+        for option in select_options:
+            if value == option.get('name'):
+                return value
+        self.auto_rule.dtable_server_api.add_column_options(
+            table_name,
+            column['name'],
+            options = [gen_random_option(value)]
+        )
+        return value
+
     def init_append_rows(self):
-        raw_row = self.data['row']
         src_row = self.data['converted_row']
-        self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
+        src_columns = self.auto_rule.table_info['columns']
+        self.col_name_dict = {col.get('name'): col for col in src_columns}
+        self.col_key_dict = {col.get('key'): col for col in src_columns}
 
         for row_id in self.row:
             cell_value = self.row.get(row_id)
@@ -1527,7 +1632,82 @@ class AddRecordToOtherTableAction(BaseAction):
                             filtered_updates[col_name] = self.format_time_by_offset(int(offset), format_length)
                         elif set_type == 'date_column':
                             date_column_key = time_dict.get('date_column_key')
-                            filtered_updates[col_name] = raw_row.get(date_column_key)
+                            src_col = self.col_key_dict.get(date_column_key)
+                            filtered_updates[col_name] = src_row.get(src_col['name'])
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.row.get(col_key)
+
+                elif col_type == ColumnTypes.SINGLE_SELECT:
+                    try:
+                        data_dict = self.row.get(col_key)
+                        if not data_dict:
+                            continue
+                        if isinstance(data_dict, dict):
+                            set_type = data_dict.get('set_type')
+                            if set_type == 'default':
+                                value = data_dict.get('value')
+                                filtered_updates[col_name] = self.parse_column_value(col, value)
+                            elif set_type == 'column':
+                                src_col_key = data_dict.get('value')
+                                src_col = self.col_key_dict.get(src_col_key)
+                                value = src_row.get(src_col['name'])
+                                if value:
+                                    filtered_updates[col_name] = self.add_or_create_options(col, value)
+                        else:
+                            value = data_dict # compatible with the old data strcture
+                            filtered_updates[col_name] = self.parse_column_value(col, value)
+                
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.row.get(col_key)
+
+                elif col_type == ColumnTypes.COLLABORATOR:
+                    try:
+                        data_dict = self.row.get(col_key)
+                        if not data_dict:
+                            continue
+                        if isinstance(data_dict, dict):
+                            set_type = data_dict.get('set_type')
+                            if set_type == 'default':
+                                value = data_dict.get('value')
+                                filtered_updates[col_name] = self.parse_column_value(col, value)
+                            elif set_type == 'column':
+                                src_col_key = data_dict.get('value')
+                                src_col = self.col_key_dict.get(src_col_key)
+                                value = src_row.get(src_col['name'])
+                                if not isinstance(value, list):
+                                    value = [value, ]
+                                filtered_updates[col_name] = value
+                        else:
+                            value = data_dict # compatible with the old data strcture
+                            filtered_updates[col_name] = self.parse_column_value(col, value)
+                
+                    except Exception as e:
+                        logger.error(e)
+                        filtered_updates[col_name] = self.row.get(col_key)
+
+                elif col_type in [
+                        ColumnTypes.NUMBER, 
+                    ]:
+                    try:
+                        data_dict = self.row.get(col_key)
+                        if not data_dict:
+                            continue
+                        if isinstance(data_dict, dict):
+                            set_type = data_dict.get('set_type')
+                            if set_type == 'default':
+                                value = data_dict.get('value')
+                                filtered_updates[col_name] = self.parse_column_value(col, value)
+                            elif set_type == 'column':
+                                src_col_key = data_dict.get('value')
+                                src_col = self.col_key_dict.get(src_col_key)
+                                value = src_row.get(src_col['name'])
+                                filtered_updates[col_name] = value
+                        else:
+                            value = data_dict # compatible with the old data strcture
+                            filtered_updates[col_name] = self.parse_column_value(col, value)
+                
                     except Exception as e:
                         logger.error(e)
                         filtered_updates[col_name] = self.row.get(col_key)
