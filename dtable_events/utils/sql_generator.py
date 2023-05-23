@@ -266,7 +266,7 @@ class SingleSelectOperator(Operator):
         for op in options:
             if op.get('id') == option_id:
                 return op.get('name')
-        return ''
+        raise ValueError('option is invalid.')
 
     def op_is(self):
         filter_term = self._get_option_name_by_id(self.filter_term)
@@ -337,7 +337,7 @@ class MultipleSelectOperator(Operator):
         for op in options:
             if op.get('id') == option_id:
                 return op.get('name')
-        return option_id
+        raise ValueError('option is invalid')
 
     def op_has_any_of(self):
         if not self.filter_term:
