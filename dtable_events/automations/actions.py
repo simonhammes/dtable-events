@@ -1230,6 +1230,7 @@ class LinkRecordsAction(BaseAction):
         ColumnTypes.DURATION,
         ColumnTypes.EMAIL,
         ColumnTypes.RATE,
+        ColumnTypes.FORMULA,
     ]
 
     def __init__(self, auto_rule, data, linked_table_id, link_id, match_conditions):
@@ -2062,6 +2063,7 @@ class LookupAndCopyAction(BaseAction):
         ColumnTypes.DURATION,
         ColumnTypes.EMAIL,
         ColumnTypes.RATE,
+        ColumnTypes.FORMULA,
     ]
 
     def __init__(self, auto_rule, data, table_condition, equal_column_conditions, fill_column_conditions):
