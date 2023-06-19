@@ -112,7 +112,7 @@ class DTableServerAPI(object):
         response = requests.get(url, params=params, headers=self.headers, timeout=self.timeout)
         data = parse_response(response)
         return data.get('rows')
-
+    
     def get_row(self, table_name, row_id, convert_link_id=False):
         """
         :param table_name: str
@@ -397,3 +397,11 @@ class DTableServerAPI(object):
             'name': d.get('name'),
             'url': url
         }
+
+    def batch_send_notification(self, user_msg_list):
+        url = self.dtable_server_url + '/api/v1/dtables/' + self.dtable_uuid + '/notifications-batch/?from=dtable_events'
+        body = {
+            'user_messages': user_msg_list,
+        }
+        response = requests.post(url, json=body, headers=self.headers)
+        return parse_response(response)

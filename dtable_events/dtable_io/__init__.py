@@ -34,7 +34,7 @@ from dtable_events.dtable_io.excel import parse_excel_csv_to_json, import_excel_
 from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.statistics.db import save_email_sending_records, batch_save_email_sending_records
 from dtable_events.data_sync.data_sync_utils import run_sync_emails
-from dtable_events.utils import get_inner_dtable_server_url
+from dtable_events.utils import get_inner_dtable_server_url, is_valid_email
 from dtable_events.utils.dtable_server_api import DTableServerAPI
 
 dtable_io_logger = setup_logger('dtable_events_io.log')
@@ -519,6 +519,64 @@ def send_dingtalk_msg(webhook_url, msg, msg_type="text", msg_title=None):
         result['err_msg'] = 'Dingtalk URL invalid'
     else:
         dtable_message_logger.info('Dingtalk sending success!')
+    return result
+
+def send_notification_msg(emails, user_col_key, msg, dtable_uuid, username, table_id=None, row_id=None):
+    result = {}
+    try:
+        dtable_server_url = get_inner_dtable_server_url()
+        dtable_server_api = DTableServerAPI(username, dtable_uuid, dtable_server_url)
+        metadata = dtable_server_api.get_metadata()
+        table = None
+        for tmp_table in metadata['tables']:
+            if tmp_table['_id'] == table_id:
+                table = tmp_table
+                break
+        if not table:
+            return
+        
+        target_row = dtable_server_api.get_row(table['name'], row_id)
+        
+        sending_list = emails
+        if user_col_key:
+            column = None
+            for tmp_col in table['columns']:
+                if tmp_col['key'] == user_col_key:
+                    column = tmp_col
+                    break
+
+            user_col_info = column and target_row.get(column['name']) or None
+            if user_col_info:
+                if isinstance(user_col_info, list):
+                    for user in user_col_info:
+                        if user in sending_list:
+                            continue
+                        sending_list.append(user)
+                else:
+                    if user_col_info not in sending_list:
+                        sending_list.append(user_col_info)
+
+        detail = {
+            'table_id': table_id or '',
+            'msg': msg,
+            'row_id_list': row_id and [row_id, ] or [],
+        }
+        user_msg_list = []
+        for user in sending_list:
+            if not is_valid_email(user):
+                continue
+            user_msg_list.append({
+                'to_user': user,
+                'msg_type': 'notification_rules',
+                'detail': detail,
+                })
+
+        dtable_server_api.batch_send_notification(user_msg_list)
+    except Exception as e:
+        dtable_message_logger.error('Notification sending failed. ERROR: {}'.format(e))
+        result['err_msg'] = 'Notification send failed'
+    else:
+        dtable_message_logger.info('Notification sending success!')
     return result
 
 
