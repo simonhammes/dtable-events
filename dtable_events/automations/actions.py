@@ -1272,6 +1272,7 @@ class LinkRecordsAction(BaseAction):
 
     def format_filter_groups(self):
         filters = []
+        column_names = []
         for match_condition in self.match_conditions:
             column_key = match_condition.get("column_key")
             column = self.get_column(self.auto_rule.table_id, column_key)
@@ -1279,11 +1280,12 @@ class LinkRecordsAction(BaseAction):
                 raise RuleInvalidException('match column not found')
             row_value = self.data['converted_row'].get(column.get('name'))
             if not row_value:
-                return []
+                return [], []
             other_column_key = match_condition.get("other_column_key")
             other_column = self.get_column(self.linked_table_id, other_column_key)
             if not other_column:
                 raise RuleInvalidException('match other column not found')
+            column_names.append(other_column['name'])
             parsed_row_value = self.parse_column_value(other_column, row_value)
             if not parsed_row_value and other_column['type'] in [ColumnTypes.SINGLE_SELECT, ColumnTypes.MULTIPLE_SELECT]:
                 raise RuleInvalidException('match other single/multi-select column options: %s not found' % row_value)
@@ -1293,8 +1295,12 @@ class LinkRecordsAction(BaseAction):
                 "filter_term": parsed_row_value,
                 "filter_term_modifier":"exact_date"
             }
+
             filters.append(filter_item)
-        return filters and [{"filters": filters, "filter_conjunction": "And"}] or []
+        if filters:
+            return [{"filters": filters, "filter_conjunction": "And"}], column_names
+        return [], column_names
+
 
     def get_table_name(self, table_id):
         dtable_metadata = self.auto_rule.dtable_metadata
@@ -1324,7 +1330,7 @@ class LinkRecordsAction(BaseAction):
         return []
 
     def get_linked_table_rows(self):
-        filter_groups = self.format_filter_groups()
+        filter_groups, column_names = self.format_filter_groups()
         if not filter_groups:
             return []
 
@@ -1338,8 +1344,13 @@ class LinkRecordsAction(BaseAction):
         columns = self.get_columns(self.linked_table_id)
 
         sql = filter2sql(table_name, columns, filter_conditions, by_group=True)
-
+        query_clause = "*"
+        if column_names:
+            if "_id" not in column_names:
+                column_names.append("_id")
+            query_clause = ",".join(["`%s`" % n for n in column_names])
         try:
+            sql = sql.replace("*", query_clause, 1)
             rows_data, _ = self.auto_rule.dtable_db_api.query(sql, convert=False)
         except RowsQueryError:
             raise RuleInvalidException('wrong filter in filters in link-records')
@@ -1402,16 +1413,19 @@ class LinkRecordsAction(BaseAction):
                     column_dict[col.get('key')] = col
         return column_dict
 
-    def query_table_rows(self, table_name, filter_conditions=None):
+    def query_table_rows(self, table_name, filter_conditions=None, query_columns=None):
         start = 0
         step = 10000
         result_rows = []
         filter_clause = ''
+        query_clause = "*"
+        if query_columns:
+            query_clause = ",".join(["`%s`" % cn for cn in query_columns])
         if filter_conditions:
             table = self.get_table_by_name(table_name)
             filter_clause = BaseSQLGenerator(table_name, table['columns'], filter_conditions=filter_conditions)._filter2sql()
         while True:
-            sql = f"select * from `{table_name}` {filter_clause} limit {start}, {step}"
+            sql = f"select {query_clause} from `{table_name}` {filter_clause} limit {start}, {step}"
             try:
                 results, _ = self.auto_rule.dtable_db_api.query(sql)
             except Exception as e:
@@ -1450,6 +1464,7 @@ class LinkRecordsAction(BaseAction):
 
         equal_columns = []
         equal_other_columns = []
+        filter_columns = []
         # check column valid
         for condition in self.match_conditions:
             if not condition.get('column_key') or not condition.get('other_column_key'):
@@ -1463,12 +1478,28 @@ class LinkRecordsAction(BaseAction):
             equal_columns.append(column.get('name'))
             equal_other_columns.append(other_column.get('name'))
 
+        view_filters = self.auto_rule.view_info.get('filters', [])
+        for f in view_filters:
+            column_key = f.get('column_key')
+            column = column_dict.get(column_key)
+            if not column:
+                raise RuleInvalidException('column not found')
+            filter_columns.append(column.get('name'))
+
+
         view_filter_conditions = {
-            'filters': self.auto_rule.view_info.get('filters', []),
+            'filters': view_filters,
             'filter_conjunction': self.auto_rule.view_info.get('filter_conjunction', 'And')
         }
-        table_rows = self.query_table_rows(table_name, filter_conditions=view_filter_conditions)
-        other_table_rows = self.query_table_rows(other_table_name)
+
+        if "_id" not in equal_columns:
+            equal_columns.append("_id")
+
+        if "_id" not in equal_other_columns:
+            equal_other_columns.append("_id")
+
+        table_rows = self.query_table_rows(table_name, filter_conditions=view_filter_conditions, query_columns=equal_columns)
+        other_table_rows = self.query_table_rows(other_table_name, query_columns=equal_other_columns)
 
         table_rows_dict = {}
         row_id_list, other_rows_ids_map = [], {}
@@ -1948,15 +1979,21 @@ class CalculateAction(BaseAction):
         elif self.action_type == 'calculate_rank':
             self.rank_rows.extend(rows)
 
-    def query_table_rows(self, table_name, columns, filter_conditions):
+    def query_table_rows(self, table_name, columns, filter_conditions, query_columns):
         offset = 10000
         start = 0
         rows = []
+        query_clause = "*"
+        if query_columns:
+            if "_id" not in query_columns:
+                query_columns.append("_id")
+            query_clause = ",".join(["`%s`" % cn for cn in query_columns])
         while True:
             filter_conditions['start'] = start
             filter_conditions['limit'] = offset
 
             sql = filter2sql(table_name, columns, filter_conditions, by_group=False)
+            sql = sql.replace("*", query_clause, 1)
             response_rows, _ = self.auto_rule.dtable_db_api.query(sql)
             rows.extend(response_rows)
 
@@ -2002,7 +2039,7 @@ class CalculateAction(BaseAction):
                 'filters': self.auto_rule.view_info.get('filters'),
                 'filter_conjunction': self.auto_rule.view_info.get('filter_conjunction'),
             }
-            view_rows = self.query_table_rows(table_name, self.auto_rule.view_columns, filter_conditions)
+            view_rows = self.query_table_rows(table_name, self.auto_rule.view_columns, filter_conditions, [calculate_col_name])
 
         if view_rows and ('rows' in view_rows[0] or 'subgroups' in view_rows[0]):
             self.parse_group_rows(view_rows)
@@ -2106,8 +2143,15 @@ class LookupAndCopyAction(BaseAction):
         start = 0
         step = 10000
         result_rows = []
+        query_clause = '*'
+        if column_names:
+            query_columns = list(set(column_names))
+            if "_id" not in query_columns:
+                query_columns.append("_id")
+            query_clause = ",".join(["`%s`" % cn for cn in query_columns])
+            
         while True:
-            sql = f"select * from `{table_name}` limit {start}, {step}"
+            sql = f"select {query_clause} from `{table_name}` limit {start}, {step}"
             try:
                 results, _ = self.auto_rule.dtable_db_api.query(sql)
             except Exception as e:
