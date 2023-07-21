@@ -85,7 +85,7 @@ class Operator(object):
         )
 
     def op_equal(self):
-        if self.filter_term is None:
+        if not self.filter_term and self.filter_term != 0:
             return ''
         return "`%(column_name)s` = %(value)s" % ({
             'column_name': self.column_name,
@@ -93,7 +93,7 @@ class Operator(object):
         })
 
     def op_not_equal(self):
-        if self.filter_term is None:
+        if not self.filter_term and self.filter_term != 0:
             return ''
         return "`%(column_name)s` <> %(value)s" % ({
             'column_name': self.column_name,
@@ -101,7 +101,7 @@ class Operator(object):
         })
 
     def op_less(self):
-        if self.filter_term is None:
+        if not self.filter_term and self.filter_term != 0:
             return ''
         return "`%(column_name)s` < %(value)s" % ({
             'column_name': self.column_name,
@@ -109,7 +109,7 @@ class Operator(object):
         })
 
     def op_less_or_equal(self):
-        if self.filter_term is None:
+        if not self.filter_term and self.filter_term != 0:
             return ''
         return "`%(column_name)s` <= %(value)s" % ({
             'column_name': self.column_name,
@@ -117,7 +117,7 @@ class Operator(object):
         })
 
     def op_greater(self):
-        if self.filter_term is None:
+        if not self.filter_term and self.filter_term != 0:
             return ''
         return "`%(column_name)s` > %(value)s" % ({
             'column_name': self.column_name,
@@ -125,7 +125,7 @@ class Operator(object):
         })
 
     def op_greater_or_equal(self):
-        if self.filter_term is None:
+        if not self.filter_term and self.filter_term != 0:
             return ''
         return "`%(column_name)s` >= %(value)s" % ({
             'column_name': self.column_name,
@@ -551,7 +551,21 @@ class DateOperator(Operator):
 
         return None, None
 
+    def is_need_filter_term(self):
+        filter_term_modifier = self.filter_term_modifier
+        if filter_term_modifier in [
+            FilterTermModifier.NUMBER_OF_DAYS_AGO,
+            FilterTermModifier.NUMBER_OF_DAYS_FROM_NOW,
+            FilterTermModifier.THE_NEXT_NUMBERS_OF_DAYS,
+            FilterTermModifier.THE_PAST_NUMBERS_OF_DAYS,
+            FilterTermModifier.EXACT_DATE
+        ]:
+            return True
+        return False
+
     def op_is(self):
+        if self.is_need_filter_term() and not self.filter_term and self.filter_term != 0:
+            return ''
         date, _ = self._other_date()
         if not date:
             return ""
@@ -564,6 +578,8 @@ class DateOperator(Operator):
         })
 
     def op_is_within(self):
+        if self.is_need_filter_term() and not self.filter_term and self.filter_term != 0:
+            return ''
         start_date, end_date = self._other_date()
         if not (start_date, end_date):
             return ""
@@ -574,6 +590,8 @@ class DateOperator(Operator):
         })
 
     def op_is_before(self):
+        if self.is_need_filter_term() and not self.filter_term and self.filter_term != 0:
+            return ''
         target_date, _ = self._other_date()
         if not target_date:
             return ""
@@ -583,6 +601,8 @@ class DateOperator(Operator):
         })
 
     def op_is_after(self):
+        if self.is_need_filter_term() and not self.filter_term and self.filter_term != 0:
+            return ''
         target_date, _ = self._other_date()
         if not target_date:
             return ""
@@ -592,6 +612,8 @@ class DateOperator(Operator):
         })
 
     def op_is_on_or_before(self):
+        if self.is_need_filter_term() and not self.filter_term and self.filter_term != 0:
+            return ''
         target_date, _ = self._other_date()
         if not target_date:
             return ""
@@ -601,6 +623,8 @@ class DateOperator(Operator):
         })
 
     def op_is_on_or_after(self):
+        if self.is_need_filter_term() and not self.filter_term and self.filter_term != 0:
+            return ''
         target_date, _ = self._other_date()
         if not target_date:
             return ""
@@ -610,6 +634,8 @@ class DateOperator(Operator):
         })
 
     def op_is_not(self):
+        if self.is_need_filter_term() and not self.filter_term and self.filter_term != 0:
+            return ''
         target_date, _ = self._other_date()
         if not target_date:
             return ""
@@ -632,7 +658,7 @@ class CheckBoxOperator(Operator):
             return "(`%(column_name)s` = %(value)s or `%(column_name)s` is null)" % ({
                 "column_name": self.column_name,
                 "value": self.filter_term
-        })
+            })
 
         return "`%(column_name)s` = %(value)s" % ({
             "column_name": self.column_name,
@@ -851,6 +877,12 @@ class FormulaOperator(object):
 def _filter2sqlslice(operator):
     support_filter_predicates = operator.SUPPORT_FILTER_PREDICATE
     filter_predicate = operator.filter_predicate
+    # no predicate, ignore
+    if not filter_predicate:
+        return ''
+    # only operator need modifier, date and no filter_term_modifier, ignore
+    if isinstance(operator, DateOperator) and not operator.filter_term_modifier:
+        return ''
     if not operator.filter_predicate in support_filter_predicates:
         raise ValueError(
             "%(column_type)s type column '%(column_name)s' does not support '%(value)s', available predicates are %(available_predicates)s" % (
@@ -1633,7 +1665,10 @@ class BaseSQLGenerator(object):
             if not column:
                 column = column_name and self._get_column_by_name(column_name)
             column_type = column.get('type')
-            operator = _get_operator_by_type(column_type)(column, filter_item)
+            operator_cls = _get_operator_by_type(column_type)
+            if not operator_cls:
+                raise ValueError('filter: %s not support to sql', filter_item)
+            operator = operator_cls(column, filter_item)
             sql_condition = _filter2sqlslice(operator)
             if not sql_condition:
                 continue
