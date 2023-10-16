@@ -23,6 +23,10 @@ DTABLE_DB_SUMMARY_METHOD = {
     'COUNT': 'COUNT'
 }
 
+class SQLGeneratorOptionInvalidError(Exception):
+    pass
+
+
 class Operator(object):
 
     def __init__(self, column, filter_item):
@@ -266,7 +270,7 @@ class SingleSelectOperator(Operator):
         for op in options:
             if op.get('id') == option_id:
                 return op.get('name')
-        raise ValueError('option is invalid.')
+        raise SQLGeneratorOptionInvalidError('option is invalid.')
 
     def op_is(self):
         if not self.filter_term:
@@ -343,7 +347,7 @@ class MultipleSelectOperator(Operator):
         for op in options:
             if op.get('id') == option_id:
                 return op.get('name')
-        raise ValueError('option is invalid')
+        raise SQLGeneratorOptionInvalidError('option is invalid')
 
     def op_has_any_of(self):
         if not self.filter_term:
