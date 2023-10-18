@@ -10,7 +10,7 @@ from dtable_events.app.config import INNER_DTABLE_DB_URL
 from dtable_events.common_dataset.dtable_db_cell_validators import validate_table_db_cell_value
 from dtable_events.utils import get_inner_dtable_server_url
 from dtable_events.utils.constants import ColumnTypes
-from dtable_events.utils.dtable_server_api import BaseExceedsLimitException, DTableServerAPI
+from dtable_events.utils.dtable_server_api import BaseExceedsException, DTableServerAPI
 from dtable_events.utils.dtable_db_api import DTableDBAPI
 
 logger = logging.getLogger(__name__)
@@ -562,11 +562,11 @@ def create_dst_table_or_update_columns(dst_dtable_uuid, dst_table_id, dst_table_
         try:
             resp_json = dst_dtable_server_api.add_table(dst_table_name, lang, columns=columns)
             dst_table_id = resp_json.get('_id')
-        except BaseExceedsLimitException:
+        except BaseExceedsException as e:
             return None, {
                 'dst_table_id': None,
-                'error_msg': 'base exceeds limit',
-                'error_type': 'base_exceeds_limit',
+                'error_msg': e.error_msg,
+                'error_type': e.error_type,
                 'task_status_code': 400
             }
         except Exception as e:
@@ -587,11 +587,11 @@ def create_dst_table_or_update_columns(dst_dtable_uuid, dst_table_id, dst_table_
             } for col in to_be_appended_columns]
             try:
                 dst_dtable_server_api.batch_append_columns_by_table_id(dst_table_id, columns)
-            except BaseExceedsLimitException:
+            except BaseExceedsException as e:
                 return None, {
                     'dst_table_id': None,
-                    'error_msg': 'base exceeds limit',
-                    'error_type': 'base_exceeds_limit',
+                    'error_msg': e.error_msg,
+                    'error_type': e.error_type,
                     'task_status_code': 400
                 }
             except Exception as e:
@@ -610,11 +610,11 @@ def create_dst_table_or_update_columns(dst_dtable_uuid, dst_table_id, dst_table_
             } for col in to_be_updated_columns]
             try:
                 dst_dtable_server_api.batch_update_columns_by_table_id(dst_table_id, columns)
-            except BaseExceedsLimitException:
+            except BaseExceedsException as e:
                 return None, {
                     'dst_table_id': None,
-                    'error_msg': 'base exceeds limit',
-                    'error_type': 'base_exceeds_limit',
+                    'error_msg': e.error_msg,
+                    'error_type': e.error_type,
                     'task_status_code': 400
                 }
             except Exception as e:
@@ -632,11 +632,11 @@ def append_dst_rows(dst_dtable_uuid, dst_table_name, to_be_appended_rows, dst_dt
     for i in range(0, len(to_be_appended_rows), step):
         try:
             dst_dtable_server_api.batch_append_rows(dst_table_name, to_be_appended_rows[i: i+step], need_convert_back=False)
-        except BaseExceedsLimitException:
+        except BaseExceedsException as e:
             return {
                 'dst_table_id': None,
-                'error_msg': 'base exceeds limit',
-                'error_type': 'base_exceeds_limit',
+                'error_msg': e.error_msg,
+                'error_type': e.error_type,
                 'task_status_code': 400
             }
         except Exception as e:
@@ -660,11 +660,11 @@ def update_dst_rows(dst_dtable_uuid, dst_table_name, to_be_updated_rows, dst_dta
             })
         try:
             dst_dtable_server_api.batch_update_rows(dst_table_name, updates, need_convert_back=False)
-        except BaseExceedsLimitException:
+        except BaseExceedsException as e:
             return {
                 'dst_table_id': None,
-                'error_msg': 'base exceeds limit',
-                'error_type': 'base_exceeds_limit',
+                'error_msg': e.error_msg,
+                'error_type': e.error_type,
                 'task_status_code': 400
             }
         except Exception as e:
@@ -770,11 +770,11 @@ def import_sync_CDS(context):
         if server_only and (start + step) > SRC_ROWS_LIMIT:
             step = SRC_ROWS_LIMIT - start
         sql = sql_template + (" LIMIT {offset}, {limit}".format(offset=start, limit=step))
-        logger.debug('fetch src rows-id sql: %s', sql)
+        logger.debug('fetch src rows-id sql: %s', sql[:200])
         try:
             rows, _ = src_dtable_db_api.query(sql, convert=False, server_only=server_only)
         except Exception as e:
-            logger.error('fetch src rows id filter_conditions: %s sql: %s src columns: %s error: %s', filter_conditions, sql, src_table['columns'], e)
+            logger.error('fetch src rows id filter_conditions: %s sql: %s src columns: %s error: %s', filter_conditions, sql[:200], src_table['columns'], e)
             return {
                 'dst_table_id': None,
                 'error_msg': 'fetch src rows id error: %s' % e,
@@ -795,11 +795,11 @@ def import_sync_CDS(context):
     start, step = 0, 10000
     while is_sync and True:
         sql = f"SELECT `_id` FROM `{dst_table_name}` LIMIT {start}, {step}"
-        logger.debug('fetch dst rows-id sql: %s', sql)
+        logger.debug('fetch dst rows-id sql: %s', sql[:200])
         try:
             rows, _ = dst_dtable_db_api.query(sql, convert=False, server_only=True)
         except Exception as e:
-            logger.error('fetch dst rows id sql: %s error: %s', sql, e)
+            logger.error('fetch dst rows id sql: %s error: %s', sql[:200], e)
             return {
                 'dst_table_id': None,
                 'error_msg': 'fetch dst rows id error: %s' % e,
@@ -834,7 +834,7 @@ def import_sync_CDS(context):
         try:
             src_rows, _ = src_dtable_db_api.query(sql, convert=False, server_only=server_only)
         except Exception as e:
-            logger.error('fetch src to-be-updated-rows sql: %s error: %s', sql, e)
+            logger.error('fetch src to-be-updated-rows sql: %s error: %s', sql[:200], e)
             return {
                 'dst_table_id': None,
                 'error_msg': 'fetch src to-be-updated-rows error: %s' % e,
@@ -846,7 +846,7 @@ def import_sync_CDS(context):
         try:
             dst_rows, _ = dst_dtable_db_api.query(sql, convert=False, server_only=True)
         except Exception as e:
-            logger.error('fetch dst to-be-updated-rows sql: %s error: %s', sql, e)
+            logger.error('fetch dst to-be-updated-rows sql: %s error: %s', sql[:200], e)
             return {
                 'dst_table_id': None,
                 'error_msg': 'fetch dst to-be-updated-rows error: %s' % e,
@@ -882,7 +882,7 @@ def import_sync_CDS(context):
         try:
             src_rows, _ = src_dtable_db_api.query(sql, convert=False, server_only=server_only)
         except Exception as e:
-            logger.error('fetch to-be-appended-rows sql: %s error: %s', sql, e)
+            logger.error('fetch to-be-appended-rows sql: %s error: %s', sql[:200], e)
             return {
                 'dst_table_id': None,
                 'error_msg': 'fetch to-be-appended-rows error: %s' % e,
