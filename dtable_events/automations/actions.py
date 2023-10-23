@@ -55,6 +55,7 @@ MINUTE_TIMEOUT = 60
 NOTIFICATION_CONDITION_ROWS_LIMIT = 50
 EMAIL_CONDITION_ROWS_LIMIT = 50
 CONDITION_ROWS_LOCKED_LIMIT = 200
+CONDITION_ROWS_UPDATE_LIMIT = 50
 WECHAT_CONDITION_ROWS_LIMIT = 20
 DINGTALK_CONDITION_ROWS_LIMIT = 20
 
@@ -296,6 +297,7 @@ class UpdateAction(BaseAction):
 
     def add_or_create_options(self, column, value):
         table_name = self.update_data['table_name']
+        
         select_options = column.get('data', {}).get('options', [])
         for option in select_options:
             if value == option.get('name'):
@@ -305,6 +307,8 @@ class UpdateAction(BaseAction):
             column['name'],
             options = [gen_random_option(value)]
         )
+        self.auto_rule.cache_clean()
+        
         return value
 
     def format_time_by_offset(self, offset, format_length):
@@ -320,13 +324,17 @@ class UpdateAction(BaseAction):
         db_session, dtable_metadata = self.auto_rule.db_session, self.auto_rule.dtable_metadata
         return fill_msg_blanks_with_converted_row(text, blanks, col_name_dict, row, db_session, dtable_metadata)
 
-    def init_updates(self):
-        src_row = self.data['converted_row']
-        self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
-        self.col_key_dict = {col.get('key'):  col for col in self.auto_rule.table_info['columns']}
+    
+    def fill_msg_blanks_with_sql(self, row, text, blanks):
+        col_name_dict = self.col_name_dict
+        db_session, dtable_metadata = self.auto_rule.db_session, self.auto_rule.dtable_metadata
+        return fill_msg_blanks_with_sql_row(text, blanks, col_name_dict, row, db_session)
+
+
+    def formate_update_datas(self, converted_row, row, fill_msg_blank_func):
+        src_row = converted_row
         # filter columns in view and type of column is in VALID_COLUMN_TYPES
         filtered_updates = {}
-
         for col in self.auto_rule.table_info['columns']:
             if col.get('type') not in self.VALID_COLUMN_TYPES:
                 continue
@@ -440,11 +448,21 @@ class UpdateAction(BaseAction):
                     if isinstance(cell_value, str):
                         blanks = set(re.findall(r'\{([^{]*?)\}', cell_value))
                         column_blanks = [blank for blank in blanks if blank in self.col_name_dict]
-                        cell_value = self.fill_msg_blanks(src_row, cell_value, column_blanks)
+                        cell_value = fill_msg_blank_func(row, cell_value, column_blanks)
                     filtered_updates[col_name] = self.parse_column_value(col, cell_value)
-        row_id = self.data['row']['_id']
+        return filtered_updates
+        
+    def init_updates(self):
+        self.col_name_dict = {col.get('name'): col for col in self.auto_rule.table_info['columns']}
+        self.col_key_dict = {col.get('key'):  col for col in self.auto_rule.table_info['columns']}
+        if not self.data:
+            return None
+        src_row = self.data.get('converted_row', None)
+        if not src_row:
+            return None
+        filtered_updates = self.formate_update_datas(src_row, src_row, self.fill_msg_blanks)
         self.update_data['row'] = filtered_updates
-        self.update_data['row_id'] = row_id
+        self.update_data['row_id'] = src_row.get('_id')
 
     def can_do_action(self):
         if not self.update_data.get('row') or not self.update_data.get('row_id'):
@@ -456,12 +474,9 @@ class UpdateAction(BaseAction):
         for key in updated_column_keys:
             if key in to_update_keys:
                 return False
-
         return True
-
-    def do_action(self):
-        if not self.can_do_action():
-            return
+    
+    def per_update(self):
         table_name = self.auto_rule.table_info['name']
         try:
             self.auto_rule.dtable_server_api.update_row(table_name, self.data['row']['_id'], self.update_data['row'])
@@ -474,6 +489,35 @@ class UpdateAction(BaseAction):
         except Exception as e:
             logger.exception('send selected notifications error: %s', e)
 
+
+    def condition_cron_update(self):
+        triggered_rows = self.auto_rule.get_trigger_conditions_rows(warning_rows=CONDITION_ROWS_UPDATE_LIMIT)[:CONDITION_ROWS_UPDATE_LIMIT]
+        batch_update_list = []
+        for row in triggered_rows:
+            converted_row = {self.col_key_dict.get(key).get('name') if self.col_key_dict.get(key) else key:
+                             self.parse_column_value(self.col_key_dict.get(key), row.get(key)) if self.col_key_dict.get(key) else row.get(key)
+                             for key in row}
+            batch_update_list.append({
+                'row': self.formate_update_datas(converted_row, row, self.fill_msg_blanks_with_sql),
+                'row_id': row.get('_id')
+            })
+        table_name = self.auto_rule.table_info['name']
+        try:
+            self.auto_rule.dtable_server_api.batch_update_rows(table_name, batch_update_list)
+        except Exception as e:
+            logger.error('update dtable: %s, error: %s', self.auto_rule.dtable_uuid, e)
+            return
+
+    def do_action(self):
+        if self.auto_rule.run_condition == PER_UPDATE:
+            if not self.can_do_action():
+                return
+            self.per_update()
+        elif self.auto_rule.run_condition in CRON_CONDITIONS:
+            if self.auto_rule.trigger.get('condition') == CONDITION_PERIODICALLY_BY_CONDITION:
+                self.condition_cron_update()
+            
+        self.auto_rule.set_done_actions()
 
 class LockRowAction(BaseAction):
 
@@ -2821,6 +2865,15 @@ class AutomationRule:
     @property
     def headers(self):
         return self.dtable_server_api.headers
+    
+
+    def cache_clean(self):
+        # when some attribute changes, such as option added in single-select column
+        # the cache should be cleared
+        self._table_info = None
+        self._view_info = None
+        self._dtable_metadata = None
+        self._view_columns = None
 
     @property
     def dtable_metadata(self):
@@ -3026,6 +3079,8 @@ class AutomationRule:
             return True
         elif action_type == 'update_record':
             if run_condition == PER_UPDATE:
+                return True
+            if run_condition in CRON_CONDITIONS and trigger_condition == CONDITION_PERIODICALLY_BY_CONDITION:
                 return True
             return False
         elif action_type == 'add_record':
