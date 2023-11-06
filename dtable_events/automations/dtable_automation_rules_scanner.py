@@ -4,6 +4,7 @@ from threading import Thread
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
+from dtable_events.app.metadata_cache_managers import RuleIntervalMetadataCacheManager
 from dtable_events.automations.auto_rules_utils import run_regular_execution_rule
 from dtable_events.db import init_db_session_class
 from dtable_events.utils import get_opt_from_conf_or_env, parse_bool
@@ -68,9 +69,12 @@ def scan_dtable_automation_rules(db_session):
         'per_month_check_time': per_month_check_time
     })
 
+    # each base's metadata only requested once and recorded in memory
+    # The reason why it doesn't cache metadata in redis is metadatas in interval rules need to be up-to-date
+    rule_interval_metadata_cache_manager = RuleIntervalMetadataCacheManager()
     for rule in rules:
         try:
-            run_regular_execution_rule(rule, db_session)
+            run_regular_execution_rule(rule, db_session, rule_interval_metadata_cache_manager)
         except Exception as e:
             logging.exception(e)
             logging.error(f'check rule failed. {rule}, error: {e}')
