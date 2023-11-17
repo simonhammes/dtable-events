@@ -81,10 +81,10 @@ def get_dtable_server_token(username, dtable_uuid, timeout=300):
 
     return access_token
 
-def get_app_access_token(username, app_token):
+def get_app_access_token(username, app_uuid):
     payload = {
         'exp': int(time.time()) + 300,
-        'app_token': app_token,
+        'app_uuid': app_uuid,
         'username': username,
         'permission': 'rw',
     }

@@ -37,19 +37,19 @@ def parse_response(response):
 class UniversalAppAPI(object):
 
 
-    def __init__(self, username, app_token, dtable_web_service_url):
+    def __init__(self, username, app_uuid, dtable_web_service_url):
         self.username = username
-        self.app_token = app_token
+        self.app_uuid = app_uuid
         self.headers = None
         self.server_url = dtable_web_service_url.rstrip('/')
         self._init()
 
     def _init(self):
-        access_token = get_app_access_token(self.username, self.app_token)
+        access_token = get_app_access_token(self.username, self.app_uuid)
         self.headers = {'Authorization': 'Token ' + access_token}
 
     def batch_send_notification(self, user_msg_list):
-        url = self.server_url + '/api/v2.1/universal-apps/' + self.app_token + '/notifications/?from=dtable_events'
+        url = self.server_url + '/api/v2.1/universal-apps/' + self.app_uuid + '/notifications/?from=dtable_events'
         body = {
             'user_messages': user_msg_list,
         }
