@@ -857,7 +857,7 @@ class NotifyAction(BaseAction):
 
 class AppNotifyAction(BaseAction):
 
-    def __init__(self, auto_rule, data, msg, users, users_column_key, app_token):
+    def __init__(self, auto_rule, data, msg, users, users_column_key, app_uuid):
         """
         auto_rule: instance of AutomationRule
         data: if auto_rule.PER_UPDATE, data is event data from redis
@@ -869,11 +869,11 @@ class AppNotifyAction(BaseAction):
         self.msg = msg or ''
         self.users = users
         self.users_column_key = users_column_key or ''
-        self.app_token = app_token
+        self.app_uuid = app_uuid
 
         self.column_blanks = []
         self.col_name_dict = {}
-        self.notice_api = UniversalAppAPI('notification-rule', app_token, DTABLE_WEB_SERVICE_URL)
+        self.notice_api = UniversalAppAPI('notification-rule', app_uuid, DTABLE_WEB_SERVICE_URL)
 
         self.init_notify(msg)
 
@@ -3253,8 +3253,8 @@ class AutomationRule:
                     default_msg = action_info.get('default_msg', '')
                     users = action_info.get('users', [])
                     users_column_key = action_info.get('users_column_key', '')
-                    app_token = action_info.get('app_token')
-                    AppNotifyAction(self, self.data, default_msg, users, users_column_key, app_token).do_action()
+                    app_uuid = action_info.get('app_token', None) or action_info.get('app_uuid', None)
+                    AppNotifyAction(self, self.data, default_msg, users, users_column_key, app_uuid).do_action()
 
             except RuleInvalidException as e:
                 logger.warning('auto rule: %s, invalid error: %s', self.rule_id, e)
