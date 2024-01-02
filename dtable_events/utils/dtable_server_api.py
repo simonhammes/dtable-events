@@ -9,6 +9,7 @@ from datetime import datetime
 from seaserv import seafile_api
 from dtable_events.dtable_io.utils import get_dtable_server_token
 from dtable_events.app.config import FILE_SERVER_ROOT
+from dtable_events.utils import uuid_str_to_36_chars
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +78,9 @@ def gen_file_upload_url(token, op, replace=False):
 class DTableServerAPI(object):
     # simple version of python sdk without authorization for base or table manipulation
 
-    def __init__(self, username, dtable_uuid, dtable_server_url, server_url=None, repo_id=None, workspace_id=None, timeout=180, access_token_timeout=300):
+    def __init__(self, username, dtable_uuid, dtable_server_url, server_url=None, repo_id=None, workspace_id=None, timeout=180, access_token_timeout=3600):
         self.username = username
-        self.dtable_uuid = dtable_uuid
+        self.dtable_uuid = uuid_str_to_36_chars(dtable_uuid)
         self.headers = None
         self.internal_headers = None
         self.dtable_server_url = dtable_server_url.rstrip('/')
@@ -103,6 +104,14 @@ class DTableServerAPI(object):
         response = requests.get(url, headers=self.headers, timeout=self.timeout)
         data = parse_response(response)
         return data.get('metadata')
+
+    def get_metadata_plugin(self, plugin_type):
+        url = self.dtable_server_url + '/api/v1/dtables/' + self.dtable_uuid + '/metadata/plugin/?from=dtable_events'
+        params = {'plugin_type': plugin_type}
+        response = requests.get(url, params=params, headers=self.headers, timeout=self.timeout)
+        metadata = parse_response(response).get('metadata')
+        plugin_settings = metadata.get('plugin_settings')
+        return plugin_settings.get(plugin_type)
 
     def get_base(self):
         url = self.dtable_server_url + '/dtables/' + self.dtable_uuid + '?from=dtable_events'
