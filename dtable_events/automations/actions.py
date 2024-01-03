@@ -2867,24 +2867,9 @@ class ConvertPageToPDFAction(BaseAction):
     def can_do_action(self):
         if not self.auto_rule.current_valid:
             return False
-        plugin = self.auto_rule.get_plugin('page-design')
-        if not plugin:
-            return False
-        page = next(filter(lambda page: page.get('page_id') == self.page_id, plugin), None)
-        if not page:
-            return False
-        if page.get('table_id') != self.auto_rule.table_id:
-            return False
-        # if page.get('view_id') != self.auto_rule.view_id:
-        #     return False
-        self.page = page
-        self.target_column = next(filter(lambda col: col['key'] == self.target_column_key, self.auto_rule.table_info['columns']), None)
-        if not self.target_column or self.target_column['type'] != ColumnTypes.FILE:
-            return False
         return True
 
     def fill_msg_blanks_with_sql(self, column_blanks, col_name_dict, row):
-        
         return fill_msg_blanks_with_sql_row(self.file_name, column_blanks, col_name_dict, row, self.auto_rule.db_session)
 
     def do_action(self):
@@ -2899,6 +2884,8 @@ class ConvertPageToPDFAction(BaseAction):
             file_name = self.fill_msg_blanks_with_sql(column_blanks, col_name_dict, row)
             file_names_dict[row['_id']] = file_name
         try:
+            # put resources check to the place before convert page,
+            # because there is a distance between put task to queue and convert page
             conver_page_to_pdf_manager.add_task({
                 'dtable_uuid': self.auto_rule.dtable_uuid,
                 'page_id': self.page_id,
@@ -2906,8 +2893,8 @@ class ConvertPageToPDFAction(BaseAction):
                 'repo_id': self.repo_id,
                 'workspace_id': self.workspace_id,
                 'file_names_dict': file_names_dict,
-                'target_column': self.target_column,
-                'table_name': self.auto_rule.table_info['name']
+                'target_column_key': self.target_column_key,
+                'table_id': self.auto_rule.table_id
             })
         except Full:
             self.auto_rule.append_warning({
@@ -2951,7 +2938,6 @@ class AutomationRule:
         self._table_info = None
         self._view_info = None
         self._dtable_metadata = None
-        self.plugins_dict = {}
         self._access_token = None
         self._view_columns = None
         self.can_run_python = None
@@ -3019,9 +3005,6 @@ class AutomationRule:
         if not self._dtable_metadata:
             self._dtable_metadata = self.metadata_cache_manager.get_metadata(self.dtable_uuid)
         return self._dtable_metadata
-
-    def get_plugin(self, plugin_type):
-        return self.dtable_server_api.get_metadata_plugin(plugin_type)
 
     @property
     def view_columns(self):
