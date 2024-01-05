@@ -112,6 +112,11 @@ def transfer_link_formula_array_column(column, array_type, array_data):
     ]:
         column['type'] = array_type
         column['data'] = None
+    elif array_type in [
+        ColumnTypes.DEPARTMENT_SINGLE_SELECT
+    ]:
+        column['type'] = array_type
+        column['data'] = None
     else:
         column['type'] = ColumnTypes.TEXT
         column['data'] = None
@@ -338,6 +343,12 @@ def get_link_formula_converted_cell_value(transfered_column, dtable_db_cell_valu
                     return value.strftime('%Y-%m-%d %H:%M')
                 else:
                     return value.strftime('%Y-%m-%d')
+    elif transfered_type == ColumnTypes.DEPARTMENT_SINGLE_SELECT:
+        if dtable_db_cell_value:
+            try:
+                return int(dtable_db_cell_value[0])
+            except:
+                pass
 
 
 def get_converted_cell_value(dtable_db_cell_value, transfered_column, col):
@@ -363,6 +374,13 @@ def get_converted_cell_value(dtable_db_cell_value, transfered_column, col):
         ColumnTypes.GEOLOCATION
     ]:
         return deepcopy(dtable_db_cell_value)
+
+    elif col_type == ColumnTypes.DEPARTMENT_SINGLE_SELECT:
+        try:
+            dtable_db_cell_value = int(dtable_db_cell_value)  # department-single-select need a int
+        except:
+            return
+        return dtable_db_cell_value
 
     elif col_type == ColumnTypes.SINGLE_SELECT:
         if not isinstance(dtable_db_cell_value, str):
