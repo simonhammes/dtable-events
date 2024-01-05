@@ -1622,15 +1622,16 @@ class LinkRecordsAction(BaseAction):
         ColumnTypes.NUMBER,
         ColumnTypes.CHECKBOX,
         ColumnTypes.DATE,
-        ColumnTypes.LONG_TEXT,
         ColumnTypes.COLLABORATOR,
-        ColumnTypes.GEOLOCATION,
         ColumnTypes.URL,
         ColumnTypes.DURATION,
         ColumnTypes.EMAIL,
         ColumnTypes.RATE,
         ColumnTypes.FORMULA,
         ColumnTypes.AUTO_NUMBER,
+        ColumnTypes.SINGLE_SELECT,
+        ColumnTypes.MULTIPLE_SELECT,
+        ColumnTypes.DEPARTMENT_SINGLE_SELECT
     ]
 
     def __init__(self, auto_rule, action_type, data, linked_table_id, link_id, match_conditions):
