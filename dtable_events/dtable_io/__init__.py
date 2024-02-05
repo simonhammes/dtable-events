@@ -16,6 +16,8 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from datetime import datetime
 
+from seaserv import seafile_api
+
 from dtable_events.app.config import DTABLE_WEB_SERVICE_URL, SESSION_COOKIE_NAME, INNER_DTABLE_DB_URL
 from dtable_events.dtable_io.big_data import import_excel_to_db, update_excel_to_db, export_big_data_to_excel
 from dtable_events.dtable_io.utils import setup_logger, \
@@ -24,7 +26,9 @@ from dtable_events.dtable_io.utils import setup_logger, \
     prepare_dtable_json_from_memory, update_page_design_static_image, \
     copy_src_auto_rules_to_json, create_auto_rules_from_src_dtable, sync_app_users_to_table, \
     copy_src_workflows_to_json, create_workflows_from_src_dtable, copy_src_external_app_to_json,\
-    create_external_apps_from_src_dtable, zip_big_data_screen, post_big_data_screen_zip_file
+    create_external_apps_from_src_dtable, zip_big_data_screen, post_big_data_screen_zip_file, \
+    export_page_design_dir_to_path, update_page_design_content_to_path, upload_page_design, \
+    download_page_design_file
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io.excel import parse_excel_csv_to_json, import_excel_csv_by_dtable_server, \
     append_parsed_file_by_dtable_server, parse_append_excel_csv_upload_file_to_json, \
@@ -35,7 +39,7 @@ from dtable_events.dtable_io.task_manager import task_manager
 from dtable_events.page_design.utils import CHROME_DATA_DIR, convert_page_to_pdf as _convert_page_to_pdf, get_driver
 from dtable_events.statistics.db import save_email_sending_records, batch_save_email_sending_records
 from dtable_events.data_sync.data_sync_utils import run_sync_emails
-from dtable_events.utils import get_inner_dtable_server_url, is_valid_email
+from dtable_events.utils import get_inner_dtable_server_url, is_valid_email, uuid_str_to_36_chars
 from dtable_events.utils.dtable_server_api import DTableServerAPI
 from dtable_events.utils.exception import BaseSizeExceedsLimitError
 
@@ -45,12 +49,20 @@ dtable_data_sync_logger = setup_logger('dtable_events_data_sync.log')
 dtable_plugin_email_logger = setup_logger('dtable_events_plugin_email.log')
 
 
+def clear_tmp_dir(tmp_dir_path):
+    if os.path.exists(tmp_dir_path):
+        shutil.rmtree(tmp_dir_path)
+
+
+def clear_tmp_file(tmp_file_path):
+    if os.path.exists(tmp_file_path):
+        os.remove(tmp_file_path)
+
+
 def clear_tmp_files_and_dirs(tmp_file_path, tmp_zip_path):
     # delete tmp files/dirs
-    if os.path.exists(tmp_file_path):
-        shutil.rmtree(tmp_file_path)
-    if os.path.exists(tmp_zip_path):
-        os.remove(tmp_zip_path)
+    clear_tmp_dir(tmp_file_path)
+    clear_tmp_file(tmp_zip_path)
 
 def get_dtable_export_content(username, repo_id, workspace_id, dtable_uuid, asset_dir_id, config):
     """
@@ -1134,3 +1146,71 @@ def convert_big_data_view_to_execl(dtable_uuid, table_id, view_id, username, nam
         dtable_io_logger.info('export big data table_id: %s, view_id: %s success!', table_id, view_id)
 
 
+def export_page_design(repo_id, dtable_uuid, page_id, username):
+    # prepare empty dir
+    tmp_zip_dir = os.path.join('/tmp/dtable-io', 'page-design')
+    os.makedirs(tmp_zip_dir, exist_ok=True)
+    tmp_zip_path = os.path.join(tmp_zip_dir, f'{uuid_str_to_36_chars(dtable_uuid)}-{page_id}.zip')
+
+    # download and save to path
+    export_page_design_dir_to_path(repo_id, dtable_uuid, page_id, tmp_zip_path, username)
+
+
+def import_page_design(repo_id, workspace_id, dtable_uuid, page_id, is_dir, username):
+    # check file exists
+    need_check_static = False
+    try:
+        if is_dir:
+            tmp_page_path = os.path.join('/tmp/dtable-io', 'page-design', f'{uuid_str_to_36_chars(dtable_uuid)}-{page_id}')
+            download_page_design_file(repo_id, dtable_uuid, page_id, is_dir, username)
+            items = os.listdir(tmp_page_path)
+            if 'static_image' in items:
+                need_check_static = True
+        else:
+            download_page_design_file(repo_id, dtable_uuid, page_id, is_dir, username)
+            tmp_page_path = os.path.join('/tmp/dtable-io', 'page-design', f'{uuid_str_to_36_chars(dtable_uuid)}-{page_id}.json')
+    except Exception as e:
+        if is_dir:
+            tmp_page_path = os.path.join('/tmp/dtable-io', 'page-design', f'{uuid_str_to_36_chars(dtable_uuid)}-{page_id}')
+            clear_tmp_dir(tmp_page_path)
+            clear_tmp_file(tmp_page_path + '.zip')
+        else:
+            tmp_page_path = os.path.join('/tmp/dtable-io', 'page-design', f'{uuid_str_to_36_chars(dtable_uuid)}-{page_id}.json')
+            clear_tmp_file(tmp_page_path)
+        raise e
+    finally:
+        if is_dir:
+            try:
+                seafile_tmp_file = f'/asset/{uuid_str_to_36_chars(dtable_uuid)}/page-design/{uuid_str_to_36_chars(dtable_uuid)}-{page_id}.zip'
+                if seafile_api.get_file_id_by_path(repo_id, seafile_tmp_file):
+                    seafile_api.del_file(repo_id, os.path.dirname(seafile_tmp_file), os.path.basename(seafile_tmp_file), username)
+            except Exception as e:
+                dtable_io_logger.exception('delete repo: %s temp zip file: %s error: %s', repo_id, tmp_page_path, e)
+        else:
+            try:
+                seafile_tmp_file = f'/asset/{uuid_str_to_36_chars(dtable_uuid)}/page-design/{uuid_str_to_36_chars(dtable_uuid)}-{page_id}.json'
+                if seafile_api.get_file_id_by_path(repo_id, seafile_tmp_file):
+                    seafile_api.del_file(repo_id, os.path.dirname(seafile_tmp_file), os.path.basename(seafile_tmp_file), username)
+            except Exception as e:
+                dtable_io_logger.exception('delete repo: %s temp zip file: %s error: %s', repo_id, tmp_page_path, e)
+
+    if not os.path.exists(tmp_page_path):
+        return
+
+    try:
+        if is_dir:
+            # update content and save to file
+            tmp_content_file = os.path.join(tmp_page_path, f'{page_id}.json')
+            update_page_design_content_to_path(workspace_id, dtable_uuid, page_id, tmp_content_file, need_check_static)
+        else:
+            update_page_design_content_to_path(workspace_id, dtable_uuid, page_id, tmp_page_path, need_check_static)
+        # upload
+        upload_page_design(repo_id, dtable_uuid, page_id, tmp_page_path, is_dir, username)
+    except Exception as e:
+        raise e
+    finally:
+        if is_dir:
+            clear_tmp_dir(tmp_page_path)
+            clear_tmp_file(tmp_page_path + '.zip')
+        else:
+            clear_tmp_file(tmp_page_path)
