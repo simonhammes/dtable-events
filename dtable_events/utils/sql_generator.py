@@ -32,6 +32,15 @@ class DateTimeQueryInvalidError(Exception):
         self.column_name = column_name
 
 
+class ColumnFilterInvalidError(Exception):
+    def __init__(self, column_name, column_type, filter_predicate, support_filter_predicates, msg):
+        self.column_name = column_name
+        self.column_type = column_type
+        self.filter_predicate = filter_predicate
+        self.support_filter_predicates = support_filter_predicates
+        self.msg = msg
+
+
 class Operator(object):
 
     def __init__(self, column, filter_item):
@@ -983,14 +992,17 @@ def _filter2sqlslice(operator):
     if isinstance(operator, DateOperator) and not operator.filter_term_modifier:
         return ''
     if not operator.filter_predicate in support_filter_predicates:
-        raise ValueError(
-            "%(column_type)s type column '%(column_name)s' does not support '%(value)s', available predicates are %(available_predicates)s" % (
-            {
+        raise ColumnFilterInvalidError(
+            operator.column_name,
+            operator.column_type,
+            operator.filter_predicate,
+            support_filter_predicates,
+            "Filter on %(column_name)s invalid: %(column_type)s type column '%(column_name)s' does not support '%(value)s', available predicates are %(available_predicates)s" % {
                 'column_type': operator.column_type,
                 'column_name': operator.column_name,
                 'value': operator.filter_predicate,
                 'available_predicates': support_filter_predicates,
-            })
+            }
         )
 
     if filter_predicate == FilterPredicateTypes.IS:
