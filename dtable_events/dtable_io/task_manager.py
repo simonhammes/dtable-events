@@ -18,8 +18,13 @@ class TaskManager(object):
         self.config = None
         self.current_task_info = {}
         self.threads = []
+
         self.dataset_sync_ids = set()
         self.dataset_sync_ids_lock = Lock()
+
+        self.force_sync_dataset_ids = set()
+        self.force_sync_dataset_ids_lock = Lock()
+
         self.conf = {}
 
     def init(self, workers, file_server_port, io_task_timeout, config):
@@ -288,12 +293,31 @@ class TaskManager(object):
 
         dataset_sync_id = context.get('dataset_sync_id')
         with self.dataset_sync_ids_lock:
-            if self.is_dataset_id_syncing(dataset_sync_id):
+            if self.is_syncing(dataset_sync_id):
                 return None, 'syncing'
-            self.dataset_sync_ids.add(dataset_sync_id)
+            self.add_dataset_sync(dataset_sync_id)
 
         task_id = str(uuid.uuid4())
         task = (sync_common_dataset, (context, self.config))
+        self.tasks_queue.put(task_id)
+        self.tasks_map[task_id] = task
+
+        return task_id, None
+
+    def add_force_sync_common_dataset_task(self, context):
+        """
+        return: task_id -> str or None, error_type -> str or None
+        """
+        from dtable_events.dtable_io.import_sync_common_dataset import force_sync_common_dataset
+
+        dataset_id = context.get('dataset_id')
+        with self.force_sync_dataset_ids_lock:
+            if self.is_dataset_force_syncing(dataset_id):
+                return None, 'syncing'
+            self.force_sync_dataset_ids.add(dataset_id)
+
+        task_id = str(uuid.uuid4())
+        task = (force_sync_common_dataset, (context, self.config))
         self.tasks_queue.put(task_id)
         self.tasks_map[task_id] = task
 
@@ -401,9 +425,12 @@ class TaskManager(object):
                 self.current_task_info.pop(task_id, None)
             finally:
                 self.tasks_map.pop(task_id, None)
-                if hasattr(task[0], '__name__') and task[0].__name__ == 'sync_common_dataset':
+                if getattr(task[0], '__name__', None) == 'sync_common_dataset':
                     context = task[1][0]
-                    self.finish_dataset_id_sync(context.get('dataset_sync_id'))
+                    self.finish_dataset_sync(context.get('dataset_sync_id'))
+                if getattr(task[0], '__name__', None) == 'force_sync_common_dataset':
+                    context = task[1][0]
+                    self.finish_dataset_force_sync(context.get('dataset_id'))
 
     def run(self):
         thread_num = self.conf['workers']
@@ -417,12 +444,22 @@ class TaskManager(object):
     def cancel_task(self, task_id):
         self.tasks_map.pop(task_id, None)
 
-    def is_dataset_id_syncing(self, dataset_id):
-        return dataset_id in self.dataset_sync_ids
+    def is_syncing(self, db_sync_id):
+        return db_sync_id in self.dataset_sync_ids
 
-    def finish_dataset_id_sync(self, db_sync_id):
+    def finish_dataset_sync(self, db_sync_id):
         with self.dataset_sync_ids_lock:
             self.dataset_sync_ids -= {db_sync_id}
+
+    def add_dataset_sync(self, db_sync_id):
+        self.dataset_sync_ids.add(db_sync_id)
+
+    def is_dataset_force_syncing(self, dataset_id):
+        return dataset_id in self.force_sync_dataset_ids
+
+    def finish_dataset_force_sync(self, dataset_id):
+        with self.force_sync_dataset_ids_lock:
+            self.force_sync_dataset_ids -= {dataset_id}
 
 
 task_manager = TaskManager()

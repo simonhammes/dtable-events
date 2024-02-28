@@ -3,13 +3,48 @@ from datetime import datetime
 
 from sqlalchemy import text
 
-from dtable_events.common_dataset.common_dataset_sync_utils import import_sync_CDS, get_dataset_data
+from dtable_events.common_dataset.common_dataset_sync_utils import import_sync_CDS, get_dataset_data, batch_sync_common_dataset
 from dtable_events.db import init_db_session_class
 from dtable_events.dtable_io import dtable_io_logger
-from dtable_events.utils import uuid_str_to_32_chars, get_inner_dtable_server_url
+from dtable_events.utils import uuid_str_to_32_chars, uuid_str_to_36_chars, get_inner_dtable_server_url
 from dtable_events.utils.dtable_server_api import DTableServerAPI
+from dtable_events.dtable_io.task_manager import task_manager
 
 dtable_server_url = get_inner_dtable_server_url()
+
+
+def force_sync_common_dataset(context: dict, config):
+    """
+    force apply common dataset to all syncs
+    """
+    dataset_id = context.get('dataset_id')
+    # select valid syncs
+    session_class = init_db_session_class(config)
+    sql = '''
+        SELECT dcds.dst_dtable_uuid, dcds.dst_table_id, dcd.table_id AS src_table_id, dcd.view_id AS src_view_id,
+                dcd.dtable_uuid AS src_dtable_uuid, dcds.id AS sync_id, dcds.src_version, dcd.id AS dataset_id
+        FROM dtable_common_dataset dcd
+        INNER JOIN dtable_common_dataset_sync dcds ON dcds.dataset_id=dcd.id
+        INNER JOIN dtables d_src ON dcd.dtable_uuid=d_src.uuid AND d_src.deleted=0
+        INNER JOIN dtables d_dst ON dcds.dst_dtable_uuid=d_dst.uuid AND d_dst.deleted=0
+        WHERE dcd.id=:dataset_id AND dcd.is_valid=1 AND dcds.is_valid=1
+    '''
+    results = []
+    with session_class() as db_session:
+        for sync_item in db_session.execute(text(sql), {'dataset_id': dataset_id}):
+            with task_manager.dataset_sync_ids_lock:
+                if task_manager.is_syncing(sync_item.sync_id):
+                    continue
+                results.append(sync_item)
+                task_manager.add_dataset_sync(sync_item.sync_id)
+        # sync one by one
+        try:
+            batch_sync_common_dataset(dataset_id, results, db_session, is_force_sync=True)
+        except Exception as e:
+            dtable_io_logger.exception('force sync dataset: %s error: %s', dataset_id, e)
+        else:
+            for sync_item in results:
+                task_manager.finish_dataset_sync(sync_item.sync_id)
 
 
 def sync_common_dataset(context, config):
