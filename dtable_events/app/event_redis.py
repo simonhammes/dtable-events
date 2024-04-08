@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-import time
 import logging
+import time
 import redis
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,9 @@ class RedisClient(object):
             try:
                 subscriber = self.connection.pubsub(ignore_subscribe_messages=True)
                 subscriber.subscribe(channel_name)
+            except redis.AuthenticationError as e:
+                logger.critical('connect to redis auth error: %s', e)
+                raise e
             except Exception as e:
                 logger.error('redis pubsub failed. {} retry after 10s'.format(e))
                 time.sleep(10)
