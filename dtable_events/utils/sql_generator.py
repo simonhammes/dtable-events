@@ -1571,6 +1571,10 @@ class StatisticSQLGenerator(object):
         return 'SELECT %s FROM %s %s GROUP BY %s LIMIT 0, 5000' % (groupby_column_name, self.table_name, self.filter_sql, groupby_column_name)
 
     def _basic_number_card_chart_statistic_2_sql(self):
+        summary_type = self.statistic.get('summary_type', '');
+        if summary_type == 'count':
+            return 'SELECT COUNT(*) FROM %s %s LIMIT 0, 5000' % (self.table_name, self.filter_sql)
+
         numeric_column_key = self.statistic.get('numeric_column_key', '')
         summary_method = self.statistic.get('summary_method', '')
         numeric_column = self._get_column_by_key(numeric_column_key)
