@@ -1464,7 +1464,7 @@ class StatisticSQLGenerator(object):
                     summary_method = self._summary_column_2_sql(summary_method, column)
                     group_methods.append(summary_method)
                 
-                sql = 'SELECT %s, %s FROM %s %s GROUP BY %s ORDER BY %s LIMIT 5000' % (group_by_column_name, ', '.join(group_methods), self.table_name, self.filter_sql, group_by_column_name, group_by_column_name)
+                sql = 'SELECT %s, %s FROM %s %s GROUP BY %s LIMIT 5000' % (group_by_column_name, ', '.join(group_methods), self.table_name, self.filter_sql, group_by_column_name)
             SQL_list.append(sql)
         
         if len(SQL_list) == 0:
