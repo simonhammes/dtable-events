@@ -1446,11 +1446,12 @@ class StatisticSQLGenerator(object):
         self._update_filter_sql(x_axis_include_empty_cells, group_by_column)
 
         group_by_column_name = self._statistic_column_name_to_sql(group_by_column, { 'date_granularity': x_axis_date_granularity, 'geolocation_granularity': x_axis_geolocation_granularity })
-        sqlArr = []
+        SQL_list = []
 
         for y_axis in y_axises:
             yAxisType = y_axis.get('type', '')
             column_groupby_numeric_columns = y_axis.get('column_groupby_numeric_columns', [])
+            sql = ''
             if yAxisType == StatisticType.BAR_STACK and column_groupby_numeric_columns:
                 group_methods = []
                 for group_item in column_groupby_numeric_columns:
@@ -1464,11 +1465,12 @@ class StatisticSQLGenerator(object):
                     group_methods.append(summary_method)
                 
                 sql = 'SELECT %s, %s FROM %s %s GROUP BY %s ORDER BY %s LIMIT 5000' % (group_by_column_name, ', '.join(group_methods), self.table_name, self.filter_sql, group_by_column_name, group_by_column_name)
-                sqlArr.append(sql)
-        if len(sqlArr) == 0:
+            SQL_list.append(sql)
+        
+        if len(SQL_list) == 0:
             self.error = 'Y axis column not found'
             return ''
-        return sqlArr
+        return SQL_list
 
 
     def _compare_chart_statistic_2_sql(self):
@@ -1824,7 +1826,7 @@ class StatisticSQLGenerator(object):
 
         groupby_column = self._get_column_by_key(geo_column_key)
         if not groupby_column:
-            self.error = 'Geo by column not found'
+            self.error = 'Geo column not found'
             return ''
         
         self._update_filter_sql(True, groupby_column)
@@ -1854,7 +1856,7 @@ class StatisticSQLGenerator(object):
 
         groupby_column = self._get_column_by_key(geo_column_key)
         if not groupby_column:
-            self.error = 'Geo by column not found'
+            self.error = 'Geo column not found'
             return ''
         
         self._update_filter_sql(False, groupby_column)
@@ -1881,7 +1883,7 @@ class StatisticSQLGenerator(object):
 
         groupby_column = self._get_column_by_key(time_column_key)
         if not groupby_column:
-            self.error = 'Time by column not found'
+            self.error = 'Group by column not found'
             return ''
 
         self._update_filter_sql(True, groupby_column)
@@ -1908,12 +1910,12 @@ class StatisticSQLGenerator(object):
 
         groupby_column = self._get_column_by_key(column_key)
         if not groupby_column:
-            self.error = 'X Group by column not found'
+            self.error = 'Group by column not found'
             return ''
         
         column_groupby_column = self._get_column_by_key(group_column_key)
         if not column_groupby_column:
-            self.error = 'Y Group by column not found'
+            self.error = 'Column group by column not found'
             return ''
 
         self._update_filter_sql(False, groupby_column)
@@ -1942,7 +1944,7 @@ class StatisticSQLGenerator(object):
 
         groupby_column = self._get_column_by_key(date_column_key)
         if not groupby_column:
-            self.error = 'X Group by column not found'
+            self.error = 'Group by column not found'
             return ''
 
         self._update_filter_sql(True, groupby_column)
