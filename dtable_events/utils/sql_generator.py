@@ -1352,8 +1352,8 @@ class StatisticSQLGenerator(object):
 
     def _completeness_chart_statistic_2_sql(self):
         groupby_column_key = self.statistic.get('groupby_column_key', '')
-        targetColumnKey = self.statistic.get('target_column_key', '')
-        completedColumnKey = self.statistic.get('completed_column_key', '')
+        target_column_key = self.statistic.get('target_column_key', '')
+        completed_column_key = self.statistic.get('completed_column_key', '')
 
         column_groupby_column_key = self.statistic.get('column_groupby_column_key', '')
         date_granularity = self.statistic.get('date_granularity', '')
@@ -1365,24 +1365,21 @@ class StatisticSQLGenerator(object):
             return ''
         
         x_axis_include_empty_cells = self.statistic.get('x_axis_include_empty_cells', False)
-
         self._update_filter_sql(x_axis_include_empty_cells, groupby_column)
+        group_by_column_name = groupby_column.get('name', '')
 
-        groupbyColumnName = groupby_column.get('name', '')
-
-        targetColumn = self._get_column_by_key(targetColumnKey)
-        completedColumn = self._get_column_by_key(completedColumnKey)
-        if not targetColumn:
+        target_column = self._get_column_by_key(target_column_key)
+        completed_column = self._get_column_by_key(completed_column_key)
+        if not target_column:
             self.error = 'Target column not found'
             return ''
 
-        if not completedColumn:
+        if not completed_column:
             self.error = 'Completed column not found'
             return ''
 
-        targetColumnName = targetColumn.get('name', '')
-        completedColumnName = completedColumn.get('name', '')
-
+        target_column_name = target_column.get('name', '')
+        completed_column_name = completed_column.get('name', '')
         if column_groupby_column_key:
             column_groupby_column = self._get_column_by_key(column_groupby_column_key)
             if not column_groupby_column:
@@ -1390,9 +1387,9 @@ class StatisticSQLGenerator(object):
                 return ''
             
             column_groupby_column_name = self._statistic_column_name_to_sql(column_groupby_column, { 'date_granularity': date_granularity, 'geolocation_granularity': geolocation_granularity })
-            return 'SELECT `%s`, ${column_groupby_column_name}, SUM(`%s`), SUM(`%s`) FROM %s %s GROUP BY `%s`, %s LIMIT 0, 5000' % (groupbyColumnName, targetColumnName, completedColumnName, self.table_name, self.filter_sql, groupbyColumnName, column_groupby_column_name)
+            return 'SELECT `%s`, %s, SUM(`%s`), SUM(`%s`) FROM %s %s GROUP BY `%s`, %s LIMIT 0, 5000' % (group_by_column_name, column_groupby_column_name, target_column_name, completed_column_name, self.table_name, self.filter_sql, group_by_column_name, column_groupby_column_name)
 
-        return 'SELECT `%s`, `%s`, `%s` FROM %s %s GROUP BY `%s`, `%s`, `%s` LIMIT 0, 5000' % (groupbyColumnName, targetColumnName, completedColumnName, self.table_name, self.filter_sql, groupbyColumnName, targetColumnName, completedColumnName)
+        return 'SELECT `%s`, `%s`, `%s` FROM %s %s GROUP BY `%s`, `%s`, `%s` LIMIT 0, 5000' % (group_by_column_name, target_column_name, completed_column_name, self.table_name, self.filter_sql, group_by_column_name, target_column_name, completed_column_name)
 
     def _scatter_statistic_2_sql(self):
         x_axis_column_key = self.statistic.get('x_axis_column_key', '')
@@ -1417,7 +1414,7 @@ class StatisticSQLGenerator(object):
         y_axis_column_name = y_axis_column.get('name', '')
 
         if column_groupby_column_key:
-            column_groupby_column = self._get_column_by_key(column_groupby_column)
+            column_groupby_column = self._get_column_by_key(column_groupby_column_key)
             if not column_groupby_column:
                 self.error = 'Column group by column not found'
                 return ''
@@ -1931,7 +1928,7 @@ class StatisticSQLGenerator(object):
             summary_method = summary_method.upper()
             summary_column_name = self._summary_column_2_sql(summary_method, summary_column)
 
-        return 'SELECT %s, %s, %s FROM %s %s GROUP BY %s LIMIT 0, 5000' % (groupby_column_name, column_groupby_column_name, summary_column_name, self.table_name, self.filter_sql, groupby_column_name)
+        return 'SELECT %s, %s, %s FROM %s %s GROUP BY %s, %s LIMIT 0, 5000' % (groupby_column_name, column_groupby_column_name, summary_column_name, self.table_name, self.filter_sql, groupby_column_name, column_groupby_column_name)
         
     def _trend_map_statistic_2_sql(self):
         date_column_key = self.statistic.get('date_column_key', '')
