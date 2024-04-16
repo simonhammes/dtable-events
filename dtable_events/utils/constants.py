@@ -146,20 +146,59 @@ DATE_COLUMN_TYPES = [
 class StatisticType:
     BAR = 'bar'
     BAR_GROUP = 'bar_group'
-    PIE = 'pie'
-    LINE = 'line'
-    LINE_GROUP = 'line_group'
-    TABLE = 'table'
-    RING = 'ring'
+    BAR_STACK = 'bar_stack'
+    COMPARE_BAR = 'compare_bar'
+    BAR_CUSTOM = 'bar_custom'
+
     HORIZONTAL_BAR = 'horizontal_bar'
     HORIZONTAL_GROUP_BAR = 'horizontal_group_bar'
+    STACKED_HORIZONTAL_BAR = 'stacked_horizontal_bar'
+    COMPLETENESS = 'completeness'
+    COMPLETENESS_GROUP = 'completeness_group'
+
+    LINE = 'line'
+    LINE_GROUP = 'line_group'
+
     AREA = 'area'
-    BASIC_NUMBER_CARD = 'basic_number_card'
-    TREE_MAP = 'tree_map'
+    AREA_GROUP = 'area_group'
+
+    PIE = 'pie'
+    RING = 'ring'
+
+    SCATTER = 'scatter'
+
     COMBINATION = 'combination'
+
+    MAP = 'map'
+    MAP_BUBBLE = 'map_bubble'
+    WORLD_MAP = 'world_map'
+    WORLD_MAP_BUBBLE = 'world_map_bubble'
+
+    HEAT_MAP = 'heat_map'
+
+    MIRROR = 'mirror'
+
+    BASIC_NUMBER_CARD = 'basic_number_card'
+    TREND = 'trend'
+
     DASHBOARD = 'dashboard'
 
+    TREE_MAP = 'tree_map'
 
+    TABLE = 'table'
+
+class GeolocationGranularity:
+    PROVINCE = 'province'
+    CITY = 'city'
+    DISTRICT = 'district'
+
+class MapLevel:
+    WORLD = 'world'
+    COUNTRY = 'country'
+    PROVINCE = 'province'
+    CITY = 'city'
+
+MUNICIPALITIES = ['北京市', '天津市', '上海市', '重庆市']
 DATE_FORMATS = ['YYYY-MM-DD', 'M/D/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD HH:mm', 'DD.MM.YYYY', 'DD.MM.YYYY HH:mm', 'M/D/YYYY HH:mm']
 DURATION_FORMATS = ['h:mm', 'h:mm:ss']
 NUMBER_FORMATS = ['number', 'percent', 'yuan', 'dollar', 'euro', 'custom_currency']
