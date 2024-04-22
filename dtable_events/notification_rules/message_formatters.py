@@ -170,7 +170,7 @@ class NumberMessageFormatter(BaseMessageFormatter):
 
         decimal = column_data.get('decimal', 'dot')
         thousands = column_data.get('thousands', 'no')
-        precision = column_data.get('precision', 2)
+        precision = column_data.get('precision') or 2
         enable_precision = column_data.get('enable_precision', False)
         currency_symbol = column_data.get('currency_symbol', '$')
         currency_symbol_position = column_data.get('currency_symbol_position', 'before')
@@ -233,9 +233,9 @@ class DateMessageFormatter(BaseMessageFormatter):
             value = datetime_obj.strftime('%Y-%m-%d')
         elif format == 'YYYY-MM-DD HH:mm':
             value = datetime_obj.strftime('%Y-%m-%d %H:%M')
-        elif format == 'DD.MM.YY':
+        elif format == 'DD.MM.YYYY':
             value = datetime_obj.strftime('%d.%m.%Y')
-        elif format == 'DD.MM.YY HH:mm':
+        elif format == 'DD.MM.YYYY HH:mm':
             value = datetime_obj.strftime('%d.%m.%Y %H:%M')
         else:
             value = datetime_obj.strftime('%Y-%m-%d')
