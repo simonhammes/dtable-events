@@ -1126,7 +1126,7 @@ class SendDingtalkAction(BaseAction):
         sql_row = self.auto_rule.get_sql_row()
         msg = self.msg
         if self.column_blanks:
-            msg = self.fill_msg_blanks(sql_row)
+            msg = self.fill_msg_blanks_with_sql(sql_row)
         try:
             send_dingtalk_msg(self.webhook_url, msg, self.msg_type, self.msg_title)
         except Exception as e:
@@ -1386,9 +1386,6 @@ class SendEmailAction(BaseAction):
         col_key_dict = {col.get('key'): col for col in self.auto_rule.view_columns}
         send_info_list = []
         for row in rows_data:
-            converted_row = {col_key_dict.get(key).get('name') if col_key_dict.get(key) else key:
-                             self.parse_column_value(col_key_dict.get(key), row.get(key)) if col_key_dict.get(key) else row.get(key)
-                             for key in row}
             send_info = deepcopy(self.send_info)
             msg = send_info.get('message', '')
             is_plain_text = send_info.get('is_plain_text', True)
@@ -1417,7 +1414,7 @@ class SendEmailAction(BaseAction):
             file_download_urls = self.get_file_download_urls(attachment_list, row)
 
             if self.column_blanks_subject:
-                subject = self.fill_msg_blanks(converted_row, subject, self.column_blanks_subject)
+                subject = self.fill_msg_blanks_with_sql(row, subject, self.column_blanks_subject)
 
             if is_plain_text:
                 send_info['message'] = msg
