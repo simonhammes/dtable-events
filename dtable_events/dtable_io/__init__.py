@@ -32,7 +32,8 @@ from dtable_events.dtable_io.excel import parse_excel_csv_to_json, import_excel_
     import_excel_csv_add_table_by_dtable_server, update_parsed_file_by_dtable_server, \
     parse_update_excel_upload_excel_to_json, parse_update_csv_upload_csv_to_json, parse_and_import_excel_csv_to_dtable, \
     parse_and_import_excel_csv_to_table, parse_and_update_file_to_table, parse_and_append_excel_csv_to_table
-from dtable_events.page_design.utils import CHROME_DATA_DIR, convert_page_to_pdf as _convert_page_to_pdf, get_driver
+from dtable_events.dtable_io.task_manager import task_manager
+from dtable_events.page_design.utils import convert_page_to_pdf as _convert_page_to_pdf
 from dtable_events.statistics.db import save_email_sending_records, batch_save_email_sending_records
 from dtable_events.data_sync.data_sync_utils import run_sync_emails
 from dtable_events.utils import get_inner_dtable_server_url, is_valid_email, uuid_str_to_36_chars
@@ -826,15 +827,7 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id):
         os.makedirs(target_dir)
     target_path = os.path.join(target_dir, '%s_%s_%s.pdf' % (dtable_uuid, page_id, row_id))
 
-    if not os.path.isdir(CHROME_DATA_DIR):
-        os.makedirs(CHROME_DATA_DIR)
-    driver = get_driver(os.path.join(CHROME_DATA_DIR, 'dtable-io'))
-    try:
-        _convert_page_to_pdf(driver, dtable_uuid, page_id, row_id, access_token, target_path)
-    except Exception as e:
-        dtable_io_logger.exception('convert dtable: %s page: %s row: %s error: %s', dtable_uuid, page_id, row_id, e)
-    finally:
-        driver.quit()
+    _convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, target_path)
 
 
 def convert_view_to_execl(dtable_uuid, table_id, view_id, username, id_in_org, user_department_ids_map, permission, name, repo_id, is_support_image=False):

@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import logging
+import requests
 import time
 
 from selenium import webdriver
@@ -125,6 +126,40 @@ def wait_page_view(driver: webdriver.Chrome, session_id, row_id, output):
         # logger.debug('network logs end')
 
 
-def convert_page_to_pdf(driver: webdriver.Chrome, dtable_uuid, page_id, row_id, access_token, output):
-    session_id = open_page_view(driver, dtable_uuid, page_id, row_id, access_token)
-    wait_page_view(driver, session_id, row_id, output)
+# See https://github.com/psf/requests/issues/1081#issuecomment-428504128 for details
+class ForceMultipartDict(dict):
+    def __bool__(self):
+        return True
+
+FORCE_MULTIPART = ForceMultipartDict()
+
+def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, output_path):
+    if row_id:
+        url = DTABLE_WEB_SERVICE_URL.strip('/') + '/dtable/%s/page-design/%s/row/%s/' % (uuid_str_to_36_chars(dtable_uuid), page_id, row_id)
+    else:
+        url = DTABLE_WEB_SERVICE_URL.strip('/') + '/dtable/%s/page-design/%s/' % (uuid_str_to_36_chars(dtable_uuid), page_id)
+
+    url += '?access-token=%s&need_convert=%s' % (access_token, 0)
+
+    # TODO: Change level to debug
+    logger.info('URL: %s', url)
+
+    data = {
+        'url': url,
+        # Wait for rendering to finish
+        'waitForExpression': '!! document.getElementById("page-design-render-complete")',
+        # PDF options (https://gotenberg.dev/docs/routes#page-properties-chromium)
+        'landscape': False,
+        'printBackground': True,
+        'preferCssPageSize': True,
+    }
+    response = requests.post('http://gotenberg:3000/forms/chromium/convert/url', data=data, files=FORCE_MULTIPART)
+
+    # TODO: Error handling (status code, mime type?)
+    if response.status_code != 200:
+        logger.error("Error: HTTP %d %s", response.status_code, response.text)
+        # TODO: Throw exception to notify task_manager.py that this action failed?
+        return
+
+    with open(output_path, 'wb') as f:
+        f.write(response.content)
