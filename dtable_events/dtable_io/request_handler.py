@@ -414,6 +414,11 @@ def convert_page_to_pdf():
     row_id = request.args.get('row_id')
 
     try:
+        # TODO: Potential TOCTOU problem (?)
+        # This function checks if the queue is full and returns HTTP 400 if this is the case.
+        # If the queue is not full, it will try to store a task on the queue by calling task_manager.convert_page_to_pdf().
+        # However, a different thread might have already stored a task inside the last spot, filling up the queue.
+        # This would cause .put() to potentially block for a long period of time until a free spot is available.
         task_id = task_manager.convert_page_to_pdf(
             dtable_uuid, page_id, row_id)
     except Exception as e:
