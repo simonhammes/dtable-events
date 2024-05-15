@@ -14,7 +14,7 @@ class TaskManager(object):
     def __init__(self):
         self.tasks_map = {}
         self.task_results_map = {}
-        self.tasks_queue = queue.Queue(10)
+        self.tasks_queue = queue.Queue(100)
         self.config = None
         self.current_task_info = {}
         self.threads = []
