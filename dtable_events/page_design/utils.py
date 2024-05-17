@@ -153,7 +153,7 @@ def convert_page_to_pdf(dtable_uuid, page_id, row_id, access_token, output_path)
         'printBackground': True,
         'preferCssPageSize': True,
     }
-    response = requests.post('http://gotenberg:3000/forms/chromium/convert/url', data=data, files=FORCE_MULTIPART)
+    response = requests.post('http://127.0.0.1/gotenberg/forms/chromium/convert/url', data=data, files=FORCE_MULTIPART)
 
     # TODO: Error handling (status code, mime type?)
     if response.status_code != 200:
