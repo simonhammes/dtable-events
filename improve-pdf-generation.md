@@ -91,4 +91,9 @@ The required code changes in `dtable-events` are on this branch.
 
 ## Architectural Improvements
 
-TODO
+- Remove coupling between dtable-events and dtable-web
+  - dtable-events stores the generated PDF file in `/tmp`, which `dtable-web` then directly accesses over the filesystem
+  - Storing the generated file in a remote location (Seafile/S3/...) or transferring it over the network would remove this coupling
+- Try to use the existing WS connection between the client and SeaTable instead of polling (dtable-web => dtable-events to check if the task has finished) and keeping HTTP connections open (Browser => dtable-web) for a more efficient transport mechanism
+- Use a proper queue (e.g. Redis) to run a variable number of workers (each in their own `process`)
+  - Right now they run inside the same process
