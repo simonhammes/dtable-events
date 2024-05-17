@@ -76,6 +76,15 @@ workers = 5
 threads = 20
 ```
 
+### Increase Number of dtable-events Workers
+
+Increase the number of workers (default: 3) in `dtable-events.conf`. Ideally, this number should match (or exceed) the number of Gotenberg instances.
+
+```ini
+[DTABLE-IO]
+workers = 5
+```
+
 ### Code Changes
 
 The required code changes in `dtable-events` are on this branch.
