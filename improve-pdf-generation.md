@@ -5,7 +5,6 @@
 - Allow resource limits since a headless Chrome instance uses quite a lot of resources
   - Currently, SeaTable and Chrome share the resources inside the container, potentially causing performance problems in SeaTable itself
 - Allow for variable scalability
-  - This approach allows you to run 1 or 10+ Gotenberg instances depending on your needs
 
 ## Required Changes
 
@@ -101,6 +100,8 @@ Since this is a POC, there are some remaining issues/tasks:
   - This seems surprising since Gotenberg waits for the network to be idle by default (https://gotenberg.dev/docs/routes#performance-mode-chromium)
   - Unfortunately I haven't found a way to reproduce this
 - Do more thorough testing and compare generated PDFs (especially for more complex page design templates)
+- Do not allow public access to Gotenberg instances
+- Evaluate Gotenberg usage for all PDF-related operations (e.g. automation rules)
 
 ## Architectural Improvements
 
