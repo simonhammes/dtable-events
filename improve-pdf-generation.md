@@ -1,5 +1,9 @@
 # Branch improve-pdf-generation
 
+We've identified PDF generation as a potential performance bottleneck in SeaTable and were able to overload instances by
+performing mass PDF generation using a button column to render page design templates, causing performance degradation **in the whole system**.
+As a result, we decided to create this proof of concept to look into possible improvements concerning the scalability of the PDF generation pipeline.
+
 ## Goals
 - Decouple PDF generation from the main SeaTable system
 - Allow resource limits since a headless Chrome instance uses quite a lot of resources
