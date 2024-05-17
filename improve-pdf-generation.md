@@ -39,7 +39,10 @@ services:
 ```
 
 *Note:* Settings `mode.replicas` (https://docs.docker.com/compose/compose-file/deploy/#replicas) to 5 is easier,
-but gives you less control over the load balacing algorithm.
+but gives you less control over the load balancing algorithm.
+Instead, I've decided to use NGINX as a reverse proxy in front of the Gotenberg instances. NGINX employs a round-robin
+load balancing algorithm by default, which seemed to perform better since it prevents sequential PDF generation requests to hit the
+same Gotenberg instance (causing the second request to take much longer).
 
 ### Update nginx.conf
 
