@@ -89,6 +89,19 @@ workers = 5
 
 The required code changes in `dtable-events` are on this branch.
 
+## ToDos
+
+Since this is a POC, there are some remaining issues/tasks:
+- Gotenberg uses a newer version of Chrome (124 vs 96 in the SeaTable container) which apparently causes layout changes
+  - This causes an extra blank page at the end of each document
+  - The problem also occurs if you open a generated URL (e.g. `https://DOMAIN/dtable/d5910317-0477-4b32-800e-1c1a9b5b441f/page-design/ZKyC/row/F_tdujaNTXu98fbssjF2eQ/?access-token=TOKEN&need_convert=0`) in your browser and try to print it
+  - This is probably caused by the `<div data-evergreen-toaster-container>` element at the end of the body
+  - If you manually remove this element from the DOM, the extra blank page is gone
+- Sometimes (this seems to happen quite rarely) images from the page design template are missing :/
+  - This seems surprising since Gotenberg waits for the network to be idle by default (https://gotenberg.dev/docs/routes#performance-mode-chromium)
+  - Unfortunately I haven't found a way to reproduce this
+- Do more thorough testing and compare generated PDFs (especially for more complex page design templates)
+
 ## Architectural Improvements
 
 - Remove coupling between dtable-events and dtable-web
